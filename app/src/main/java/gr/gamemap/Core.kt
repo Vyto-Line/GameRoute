@@ -18,27 +18,37 @@ import kotlin.math.sin
 import kotlin.math.sinh
 import kotlin.math.sqrt
 
+/** How long each start-up step took (ms), for the crash log and tests. */
+object Startup {
+    val steps = java.util.Collections.synchronizedList(ArrayList<Pair<String, Long>>())
+    inline fun <T> step(name: String, f: () -> T): T {
+        val t = System.nanoTime()
+        try { return f() } finally { steps += name to (System.nanoTime() - t) / 1_000_000 }
+    }
+}
+
 class GameMapApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        CrashLog.init(this)
-        L.init(this)
-        MapState.init(this)
-        TileCache.init(this)
-        Places.init(this)
-        OpenPlaces.init(this)
-        Offline.init(this)
-        Convoy.init(this)
-        Fuel.init(this)
-        Parked.init(this)
-        Tolls.init(this)
-        Reviews.init(this)
-        NavEngine.init(this)
+        Startup.step("crash log") { CrashLog.init(this) }
+        Startup.step("language") { L.init(this) }
+        Startup.step("map state") { MapState.init(this) }
+        Startup.step("tile cache") { TileCache.init(this) }
+        Startup.step("places") { Places.init(this) }
+        Startup.step("open places") { OpenPlaces.init(this) }
+        Startup.step("offline") { Offline.init(this) }
+        Startup.step("convoy") { Convoy.init(this) }
+        Startup.step("fuel") { Fuel.init(this) }
+        Startup.step("parked") { Parked.init(this) }
+        Startup.step("tolls") { Tolls.init(this) }
+        Startup.step("reviews") { Reviews.init(this) }
+        Startup.step("nav engine") { NavEngine.init(this) }
         // GPS precision follows navigation (precise while navigating, battery-friendly otherwise)
         NavEngine.changed += { LocationTracker.updateMode() }
-        Voice.init(this)
-        Explorer.init(this)
-        Alerts.init(this)
+        Startup.step("voice") { Voice.init(this) }
+        Startup.step("explorer") { Explorer.init(this) }
+        Startup.step("alerts") { Alerts.init(this) }
+        CrashLog.note("start: " + Startup.steps.filter { it.second >= 5 }.joinToString { "${it.first} ${it.second} ms" })
     }
 }
 

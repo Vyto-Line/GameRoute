@@ -299,6 +299,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val started = System.nanoTime()
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
@@ -363,6 +364,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         root.isFocusableInTouchMode = true
         root.descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
         setContentView(root)
+        Startup.steps += "screen built" to (System.nanoTime() - started) / 1_000_000
         root.requestFocus()
         root.viewTreeObserver.addOnPreDrawListener { L.translateTree(root); true }
 
@@ -1246,7 +1248,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             })
             placeCard.addView(label("Takes you to where they are right now.", 12f).apply { setTextColor(dim()); setPadding(p / 3, p / 2, 0, 0) })
-            placeCard.visibility = View.VISIBLE
+            appear(placeCard)
             homeSheet.visibility = View.GONE
             return
         }
@@ -1261,7 +1263,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 26f)
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             })
-            placeCard.visibility = View.VISIBLE
+            appear(placeCard)
             homeSheet.visibility = View.GONE
             return
         }
@@ -1276,6 +1278,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             closePlace(); if (navigating) NavEngine.start(this, pl) else NavEngine.plan(this, pl)
         }.apply {
             setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 26f)
+            // one line, shrinking a little with big text or long words
+            maxLines = 1; setPadding(paddingLeft / 2, paddingTop, paddingRight / 2, paddingBottom)
+            setAutoSizeTextTypeUniformWithConfiguration(11, 16, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         placeCard.addView(row)
         // one row of labelled icons for everything else
@@ -1305,7 +1310,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             for ((icon, title, act) in actions) addView(iconAction(icon, title, on = title == "Saved", onClick = act),
                 LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         })
-        placeCard.visibility = View.VISIBLE
+        appear(placeCard)
         homeSheet.visibility = View.GONE
     }
 
@@ -1629,7 +1634,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         shareBtn.background = bg(Color.TRANSPARENT, accent, 1.5f, 14f)
 
         navCard.visibility = if (nav) View.VISIBLE else View.GONE
-        preview.visibility = if (planning) View.VISIBLE else View.GONE
+        if (planning) appear(preview) else preview.visibility = View.GONE
         searchCard.visibility = if (nav || planning) View.GONE else View.VISIBLE
         val chipsWas = chipsScroll.visibility; val homeWas = homeSheet.visibility
         chipsScroll.visibility = if (nav || planning || searching) View.GONE else View.VISIBLE
@@ -1715,9 +1720,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     etaTraffic.setTextColor(readable(Color.rgb(255, 140, 90)))
                     etaSmall.text = "${NavEngine.formatDuration(NavEngine.remainingSeconds)} · ${NavEngine.formatDistance(NavEngine.remainingDistance)} · ${NavEngine.destinationName}"
                     renderStops()
-                    // Share always stays; in a convoy it shrinks to its icon to make room for 👥
+                    // Share always stays; it shrinks to its icon in a convoy (room for 👥), with big text
+                    // or in Greek (longer words), so the arrival time keeps its room
                     convoyBtn.visibility = if (Convoy.active) View.VISIBLE else View.GONE
-                    if (Convoy.active) {
+                    if (Convoy.active || resources.configuration.fontScale > 1.1f || L.greek) {
                         shareBtn.text = if (LiveShare.active) "●" else ""
                         shareBtn.contentDescription = "Share your trip"
                         val ic = getDrawable(R.drawable.ic_act_share)?.mutate()?.apply {
@@ -1969,7 +1975,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (kind != sheetKind) settingsPage = null
         quickKey = ""
         sheetKind = kind
-        sheetOverlay.visibility = View.VISIBLE
+        if (sheetOverlay.visibility != View.VISIBLE) {
+            // the sheet slides up over a fading-in shade
+            sheetOverlay.alpha = 0f; sheetOverlay.visibility = View.VISIBLE
+            sheetOverlay.animate().alpha(1f).setDuration(160).start()
+            sheetHost.translationY = 60 * d
+            sheetHost.animate().translationY(0f).setDuration(240).setInterpolator(android.view.animation.DecelerateInterpolator(1.8f)).start()
+        }
         refreshChrome()
         if (kind == "fuelfilters") renderFuelFilters()
     }
@@ -1985,6 +1997,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         gravity = Gravity.CENTER_VERTICAL
         addView(label(title, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
+    }
+
+    /** Shows a card with a short slide up and fade in (only when it wasn't showing already). */
+    private fun appear(v: View, from: Float = 36f) {
+        if (v.visibility == View.VISIBLE) return
+        v.visibility = View.VISIBLE
+        v.alpha = 0f; v.translationY = from * d
+        v.animate().alpha(1f).translationY(0f).setDuration(200).setInterpolator(android.view.animation.DecelerateInterpolator(1.6f)).start()
     }
 
     internal fun showStylePicker() = openSheet("style")

@@ -42,6 +42,9 @@ object L {
     fun t(s: String): String {
         if (!greek || s.isEmpty()) return s
         words[s]?.let { return it }
+        // a value with an arrow or spaces around it ("Kilometres  ›", "You  "): the words inside
+        val core = s.trim().removeSuffix("›").trim()
+        if (core.isNotEmpty() && core != s) { val tc = t(core); if (tc != core) return s.replace(core, tc) }
         for ((re, out) in patterns) {
             val m = re.matchEntire(s) ?: continue
             var r = out
@@ -99,6 +102,8 @@ object L {
         "(.+) chose: (.+)" to "$1 διάλεξε: $2",
         "Saved as (.+)" to "Αποθηκεύτηκε ως $1",
         "(.+) removed the destination" to "$1 αφαίρεσε τον προορισμό",
+        "The others see you as \"(.+)\"  ·  Change name" to "Οι άλλοι σε βλέπουν ως «$1»  ·  Αλλαγή ονόματος",
+        "build (\\d+)" to "έκδοση $1",
         "Hold your finger on the map where it is, and save it as \"(.+)\"" to "Κράτα το δάχτυλο στον χάρτη εκεί που είναι, και αποθήκευσέ το ως «$1»",
         "(\\d+) drivers · until you leave" to "$1 οδηγοί · μέχρι να αποχωρήσεις",
         "Navigating to (.+)" to "Πλοήγηση προς $1",
@@ -126,6 +131,14 @@ object L {
     ).map { Regex(it.first) to it.second }
 
     private val pieces: List<Pair<Regex, String>> = listOf(
+        "\\bclear\\b" to "ελεύθερα",
+        "\\bchecking traffic\\b" to "έλεγχος κίνησης",
+        "^Fuel · " to "Καύσιμα · ",
+        "^Café · " to "Καφέ · ",
+        "^Food · " to "Φαγητό · ",
+        "^Car park · " to "Πάρκινγκ · ",
+        "^Pharmacy · " to "Φαρμακείο · ",
+        "^EV charger · " to "Φορτιστής · ",
         "\\+(\\d+) min traffic" to "+$1 λεπ. κίνηση",
         "(\\d+) min" to "$1 λεπ.",
         "\\barrive (\\d)" to "άφιξη $1",
@@ -311,6 +324,8 @@ object L {
         "Stay" to "Παραμονή", "Nobody else yet: send the code or the invite link." to "Κανείς άλλος ακόμα: στείλτε τον κωδικό ή τον σύνδεσμο.",
         "Connecting to the group…" to "Σύνδεση με την ομάδα…", "That isn't a convoy code or link" to "Αυτό δεν είναι κωδικός ή σύνδεσμος κομβόι",
         "No position from them yet" to "Δεν έχει στείλει θέση ακόμα",
+        "CODE" to "ΚΩΔΙΚΟΣ", "You" to "Εσύ", "EV charger" to "Φορτιστής ΗΟ", "Off: Reviews opens Google Maps" to "Ανενεργό: οι κριτικές ανοίγουν το Google Maps",
+        "Switches at sunrise and sunset" to "Αλλάζει με την ανατολή και τη δύση", "English" to "Αγγλικά",
         "Can't find it?" to "Δεν το βρίσκεις;", "Hold your finger on the map where it is" to "Κράτα το δάχτυλο στον χάρτη, στο σημείο που βρίσκεται",
         "Sharing your location with the convoy" to "Κοινοποίηση θέσης στο κομβόι", "GameRoute: mission active" to "GameRoute: αποστολή σε εξέλιξη",
         "Save place" to "Αποθήκευση μέρους", "Saved place" to "Αποθηκευμένο μέρος", "LABEL (OPTIONAL)" to "ΕΤΙΚΕΤΑ (ΠΡΟΑΙΡΕΤΙΚΑ)",
@@ -330,7 +345,7 @@ object L {
         "🏁 I'm ready" to "🏁 Είμαι έτοιμος",
         "Change" to "Αλλαγή", "✓ Everyone's ready!" to "✓ Όλοι έτοιμοι!", "Everyone's ready!" to "Όλοι έτοιμοι!",
         "GO!" to "ΠΑΜΕ!", "✓ Ready (tap to undo)" to "✓ Έτοιμος (πάτα για αναίρεση)", "Waiting for " to "Περιμένουμε: ",
-        "waiting for " to "περιμένουμε: ", "Start without waiting" to "Ξεκίνα χωρίς αναμονή", "✕ Leave convoy" to "✕ Αποχώρηση από το κομβόι",
+        "waiting for " to "περιμένουμε: ", "Start without waiting" to "Ξεκίνα χωρίς αναμονή", "✕ Leave convoy" to "✕ Αποχώρηση",
         "ready ✓" to "έτοιμος ✓", "on your own route" to "σε δική σου διαδρομή", "on their own route" to "σε δική του διαδρομή", "not ready yet" to "όχι έτοιμος ακόμα",
         "When everyone has pressed it, a 3-2-1 countdown starts on every phone and the route starts by itself." to
             "Όταν το πατήσουν όλοι, ξεκινά αντίστροφη μέτρηση 3-2-1 σε κάθε κινητό και η διαδρομή ξεκινά μόνη της.",
