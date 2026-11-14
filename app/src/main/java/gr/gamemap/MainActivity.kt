@@ -365,6 +365,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         root.descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
         setContentView(root)
         Startup.steps += "screen built" to (System.nanoTime() - started) / 1_000_000
+        CrashLog.note("screen built in ${(System.nanoTime() - started) / 1_000_000} ms")
         root.requestFocus()
         root.viewTreeObserver.addOnPreDrawListener { L.translateTree(root); true }
 
