@@ -32,7 +32,7 @@ object CarParking {
  * the Android Auto surface). Also remembers the last camera so touch can be mapped back.
  */
 class MapRenderer(private val car: Boolean = false) {
-    private val pois = PoiLayer()
+    internal val pois = PoiLayer()
     /** The place whose card is open (gets a ring on the map). */
     @Volatile var selectedPlace: Place? = null
     /** The tappable place icon under a screen point, if any. */

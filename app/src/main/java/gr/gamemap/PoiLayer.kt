@@ -18,6 +18,7 @@ import kotlin.math.sin
 class PoiLayer {
     enum class Kind(val color: Int, val label: String, val amenity: String, val icon: String) {
         FUEL(Color.rgb(232, 89, 12), "Fuel", "fuel", "⛽"),
+        CHARGER(Color.rgb(0, 150, 136), "EV charger", "charging_station", "🔌"),
         PARKING(Color.rgb(31, 111, 235), "Car park", "parking", "🅿"),
         FOOD(Color.rgb(194, 37, 92), "Food", "restaurant", "🍽"),
         CAFE(Color.rgb(139, 94, 60), "Café", "cafe", "☕"),
@@ -33,11 +34,15 @@ class PoiLayer {
     companion object {
         const val MIN_ZOOM = 15.5
         private const val MAX = 28
+        /** At most this many car parks at once (unnamed street parking is everywhere in a city). */
+        private const val MAX_PARKING = 6
 
         /** Places of each data tile, picked out once ("z/x/y" → list). */
         private val perTile = object : LruCache<String, List<Poi>>(160) {}
 
         private fun kindOf(cls: String?, sub: String?): Kind? = when {
+            // (the map data files EV chargers under "fuel" too: they're often at shops and car parks)
+            cls == "fuel" && sub == "charging_station" -> Kind.CHARGER
             cls == "fuel" -> Kind.FUEL
             cls == "parking" && sub != "bicycle_parking" && sub != "motorcycle_parking" -> Kind.PARKING
             cls == "restaurant" || cls == "fast_food" -> Kind.FOOD
@@ -108,6 +113,10 @@ class PoiLayer {
                 path.lineTo(r + s * 0.35f, r + s * 0.6f); path.lineTo(r - s * 0.75f, r + s * 0.6f); path.close()
                 path.moveTo(r + s * 0.45f, r - s * 0.2f); path.quadTo(r + s * 1.05f, r - s * 0.15f, r + s * 0.4f, r + s * 0.3f)
             }
+            Kind.CHARGER -> { // lightning bolt
+                path.moveTo(r + s * 0.15f, r - s); path.lineTo(r - s * 0.55f, r + s * 0.1f); path.lineTo(r + s * 0.05f, r + s * 0.1f)
+                path.lineTo(r - s * 0.15f, r + s); path.lineTo(r + s * 0.55f, r - s * 0.1f); path.lineTo(r - s * 0.05f, r - s * 0.1f); path.close()
+            }
             Kind.PHARMACY -> { // cross
                 path.moveTo(r, r - s); path.lineTo(r, r + s); path.moveTo(r - s, r); path.lineTo(r + s, r)
             }
@@ -140,8 +149,20 @@ class PoiLayer {
         return best
     }
 
-    private var occupied = IntArray(0)
     private val icon = Paint().apply { isFilterBitmap = true }
+
+    /** What was on screen last frame (by position): kept first, so icons don't swap as the map moves. */
+    private var lastShown = HashSet<Long>()
+    private var nowShown = HashSet<Long>()
+    private class Cand(val poi: Poi, val sx: Float, val sy: Float, val key: Long, val prio: Int)
+    private val cands = ArrayList<Cand>()
+
+    private fun keyOf(p: LatLng) = ((p.lat * 1e5).toLong() shl 32) xor (p.lon * 1e5).toLong()
+
+    /** Which kind wins when two would overlap. */
+    private fun kindPrio(k: Kind) = when (k) {
+        Kind.FUEL -> 0; Kind.PHARMACY -> 1; Kind.CHARGER -> 2; Kind.SHOP -> 3; Kind.PARKING -> 4; Kind.CAFE -> 5; Kind.FOOD -> 6
+    }
 
     /**
      * Draws the icons on the (unrotated) screen. [only] limits the kinds (while navigating:
@@ -150,16 +171,10 @@ class PoiLayer {
     fun draw(c: Canvas, cam: MapRenderer.Camera, zoom: Double, w: Int, h: Int, d: Float, only: Set<Kind>?, selected: LatLng?) {
         val out = building
         out.n = 0
-        if (zoom < MIN_ZOOM) { publish(); return }
+        if (zoom < MIN_ZOOM) { lastShown.clear(); publish(); return }
         val size = (30 * d).toInt()
         val half = size / 2f
         hitRadius = 26 * d
-        // a coarse grid so icons never overlap
-        val cell = size * 1.15f
-        val gw = (w / cell).toInt() + 2; val gh = (h / cell).toInt() + 2
-        if (occupied.size < gw * gh) occupied = IntArray(gw * gh)
-        java.util.Arrays.fill(occupied, 0, gw * gh, 0)
-
         val dz = VectorSource.MAX_Z
         val nz = 1 shl dz
         // data tiles around the camera centre
@@ -172,34 +187,63 @@ class PoiLayer {
         if ((t1x - t0x + 1) * (t1y - t0y + 1) > 30) { publish(); return }
         val a = Math.toRadians(-cam.bearing.toDouble())
         val ca = cos(a); val sa = sin(a)
-        var ringX = Float.NaN; var ringY = 0f; var ringKind: Kind? = null
+        val chargers = Fuel.showChargers
+        val dest = if (NavEngine.active) NavEngine.destination else null
+        cands.clear()
         for (ty in t0y..t1y) for (tx in t0x..t1x) {
             val vt = VectorSource.peek(dz, tx.mod(nz), ty) ?: continue
             for (poi in of(dz, tx.mod(nz), ty, vt)) {
-                if (out.n >= MAX) break
                 if (only != null && poi.kind !in only) continue
-                // food, cafés and shops only close in: the busy centre stays readable
-                // busy kinds only up close (a city centre has a pharmacy on every corner)
-                if (zoom < 17.0 && (poi.kind == Kind.FOOD || poi.kind == Kind.CAFE || poi.kind == Kind.SHOP || poi.kind == Kind.PHARMACY)) continue
+                when (poi.kind) {
+                    // busy kinds only up close (a city centre has a café and a pharmacy on every corner)
+                    Kind.FOOD, Kind.CAFE, Kind.SHOP, Kind.PHARMACY -> if (zoom < 17.0) continue
+                    // car parks: up close, or near where you're going (the centre has one on every block)
+                    Kind.PARKING -> if (dest != null) { if (Geo.distance(dest, poi.pos) > 800) continue } else if (zoom < 17.0) continue
+                    Kind.CHARGER -> if (!chargers || zoom < 16.5) continue
+                    Kind.FUEL -> {}
+                }
                 val wx = (Geo.x(poi.pos.lon, cam.world) - cam.px) * cam.scale
                 val wy = (Geo.y(poi.pos.lat, cam.world) - cam.py) * cam.scale
                 val sx = (cam.cx + wx * ca - wy * sa).toFloat()
                 val sy = (cam.cy + wx * sa + wy * ca).toFloat()
                 if (sx < -half || sy < -half || sx > w + half || sy > h + half) continue
-                val gx = ((sx + cell) / cell).toInt(); val gy = ((sy + cell) / cell).toInt()
-                if (gx !in 0 until gw || gy !in 0 until gh || occupied[gy * gw + gx] != 0) continue
-                occupied[gy * gw + gx] = 1
-                c.drawBitmap(icon(poi.kind, size), sx - half, sy - half, icon)
-                out.x[out.n] = sx; out.y[out.n] = sy; out.poi[out.n] = poi; out.n++
-                if (selected != null && Geo.distance(selected, poi.pos) < 3) { ringX = sx; ringY = sy; ringKind = poi.kind }
+                val key = keyOf(poi.pos)
+                val prio = (if (key in lastShown) 0 else 100_000) + kindPrio(poi.kind) * 1000 + poi.rank.coerceIn(0, 999)
+                cands += Cand(poi, sx, sy, key, prio)
             }
         }
+        cands.sortBy { it.prio }
+        // placed best first; never on top of each other (a real distance, not a grid that moves with the map)
+        val minD = size * 1.1f
+        val minD2 = minD * minD
+        var parking = 0
+        nowShown.clear()
+        var ringX = Float.NaN; var ringY = 0f; var ringKind: Kind? = null
+        for (cd in cands) {
+            if (out.n >= MAX) break
+            if (cd.poi.kind == Kind.PARKING && parking >= MAX_PARKING) continue
+            var free = true
+            for (i in 0 until out.n) {
+                val dx = out.x[i] - cd.sx; val dy = out.y[i] - cd.sy
+                if (dx * dx + dy * dy < minD2) { free = false; break }
+            }
+            if (!free) continue
+            c.drawBitmap(icon(cd.poi.kind, size), cd.sx - half, cd.sy - half, icon)
+            out.x[out.n] = cd.sx; out.y[out.n] = cd.sy; out.poi[out.n] = cd.poi; out.n++
+            nowShown += cd.key
+            if (cd.poi.kind == Kind.PARKING) parking++
+            if (selected != null && Geo.distance(selected, cd.poi.pos) < 3) { ringX = cd.sx; ringY = cd.sy; ringKind = cd.poi.kind }
+        }
+        val t = lastShown; lastShown = nowShown; nowShown = t
         if (!ringX.isNaN()) {
             p.style = Paint.Style.STROKE; p.strokeWidth = 3 * d; p.color = ringKind!!.color
             c.drawCircle(ringX, ringY, half + 6 * d, p)
         }
         publish()
     }
+
+    /** What's on screen now (tests). */
+    fun shownNow(): List<Poi> { val h = shown; return (0 until h.n).mapNotNull { h.poi[it] } }
 
     private fun publish() {
         val done = building
