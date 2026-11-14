@@ -631,6 +631,12 @@ object Places {
             if (i >= 0) {
                 if (out[i].entry == null && c.p.entry != null) out[i] = out[i].copy(entry = c.p.entry)
                 if (c.p.town > out[i].town) out[i] = out[i].copy(town = c.p.town)
+                // the same town twice (its centre, its municipality's middle): keep the point
+                // where the other results are (shops, streets of that town), i.e. the real centre
+                if (c.p.town >= 2 && out[i].town >= 2) {
+                    fun support(at: LatLng) = all.count { Geo.distance(it.p.pos, at) < 3000 }
+                    if (support(c.p.pos) > support(out[i].pos)) out[i] = out[i].copy(pos = c.p.pos, entry = c.p.entry)
+                }
                 continue
             }
             out += c.p
