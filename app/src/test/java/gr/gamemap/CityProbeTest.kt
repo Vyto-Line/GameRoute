@@ -22,7 +22,7 @@ class CityProbeTest {
         val near = LatLng(37.9755, 23.7348)
         fun d(b: LatLng) = "%.0f km".format(Geo.distance(near, b) / 1000)
         fun get(url: String) = try { Http.get(url, timeout = 10000) } catch (e: Exception) { "ERR $e" }
-        for (q in listOf("ναυπλιο", "Ναύπλιο", "nafplio", "ναυπλ", "κορινθος", "patra", "λαμια", "τριπολη", "καλαματα", "βολος")) {
+        for (q in listOf("σουνιο", "sounio", "ναος ποσειδωνα", "δελφοι", "μετεωρα", "μυκηνες", "αραχωβα", "λιμνη βουλιαγμενης", "λαγονησι", "καλαβρυτα")) {
             log.append("\n=== \"$q\"\n")
             for (ta in listOf(true, false)) {
                 val j = get("https://api.tomtom.com/search/2/search/${enc(q)}.json?key=$key&limit=8&language=el-GR&typeahead=$ta&idxSet=POI,PAD,Addr,Str,Geo&lat=${near.lat}&lon=${near.lon}")
@@ -41,9 +41,10 @@ class CityProbeTest {
                     log.append(" photon '${pr.optString("name")}' ${pr.optString("osm_key")}=${pr.optString("osm_value")} type=${pr.optString("type")} ${pr.optString("city")} ${d(LatLng(c.getDouble(1), c.getDouble(0)))}\n")
                 }
             }
+            Thread.sleep(1200)
             for (full in listOf(false, true)) {
                 val r = try { Places.find(q, near, full) } catch (e: Exception) { null }
-                log.append(" APP${if (full) "-full" else ""}: " + r.orEmpty().take(6).joinToString(" | ") { "${it.icon} ${it.name} (${it.address.take(25)}) ${d(it.pos)}" } + "\n")
+                log.append(" APP${if (full) "-full" else ""}: " + r.orEmpty().take(8).joinToString(" | ") { "${it.icon} ${it.name} t${it.town} (${it.address.take(25)}) ${d(it.pos)}" } + "\n")
             }
         }
         File(out, "cityprobe.txt").writeText(log.toString())
