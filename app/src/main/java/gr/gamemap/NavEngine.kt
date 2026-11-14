@@ -321,7 +321,7 @@ object NavEngine {
         changed.fire()
         try {
             if (LocationTracker.hasPermission(appContext))
-                ContextCompat.startForegroundService(appContext, Intent(appContext, NavService::class.java))
+                NavService.update(appContext)
         } catch (_: Exception) {
         }
     }
@@ -390,7 +390,7 @@ object NavEngine {
         main.removeCallbacks(routeWatchdog); routeSeq++
         Voice.stop()
         if (::appContext.isInitialized) {
-            appContext.stopService(Intent(appContext, NavService::class.java))
+            NavService.update(appContext) // (still in a convoy: keeps sharing, with its own notice)
         }
         changed.fire()
     }

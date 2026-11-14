@@ -147,6 +147,7 @@ object Convoy {
             }
             code = c; destination = d; destAt = prefs().getLong("convoyDestAt", 0); joinedAt = prefs().getLong("convoyJoinedAt", 0)
             listen(c)
+            main.post { NavService.update(appContext) } // still in a convoy from before: keep sharing
         }
     }
 
@@ -304,7 +305,7 @@ object Convoy {
         else e.remove("convoyDest")
         e.apply()
         listen(c)
-        main.post { LocationTracker.updateMode() } // GPS every second while in a convoy
+        main.post { LocationTracker.updateMode(); NavService.update(appContext) } // GPS on, and kept on with the app closed
         changed.fire()
     }
 
@@ -316,7 +317,7 @@ object Convoy {
         prefs().edit().remove("convoyCode").remove("convoyDest").apply()
         listener?.interrupt(); listener = null
         ConvoyLink.stop(if (quiet) null else myId)
-        main.post { LocationTracker.updateMode() }
+        main.post { LocationTracker.updateMode(); NavService.update(appContext) }
         changed.fire()
     }
 

@@ -83,11 +83,27 @@ object LocationTracker : LocationListener {
      */
     @Volatile var precise = false
         private set
+
+    /**
+     * In a convoy without a route: parked or walking for a minute = GPS slows down to save the
+     * battery (the others still get an update every few seconds); driving again = every second.
+     */
+    @Volatile private var convoyIdle = false
+    private var movedAt = 0L
+
+    private fun checkConvoyPace(l: Location) {
+        if (!Convoy.active || NavEngine.active) { if (convoyIdle) { convoyIdle = false; updateMode() }; return }
+        val now = System.currentTimeMillis()
+        val moving = l.hasSpeed() && l.speed > 3f
+        if (moving || movedAt == 0L) movedAt = now
+        val idle = now - movedAt > 60_000
+        if (idle != convoyIdle) { convoyIdle = idle; updateMode() }
+    }
     private var appCtx: Context? = null
 
     /** Called when navigation starts/stops or the car connects/disconnects. */
     fun updateMode() {
-        val want = NavEngine.active || NavEngine.planning || "car" in users || "nav" in users || Convoy.active
+        val want = NavEngine.active || NavEngine.planning || "car" in users || "nav" in users || (Convoy.active && !convoyIdle)
         if (want == precise && started) return
         val ctx = appCtx ?: return
         if (started) {
@@ -193,6 +209,7 @@ object LocationTracker : LocationListener {
 
         last = location
         speed = if (location.hasSpeed()) location.speed else 0f
+        if (location.provider != ESTIMATE) checkConvoyPace(location)
         var p = LatLng(location.latitude, location.longitude)
         val snapped = if (speed > 1f) NavEngine.snap(p, if (location.hasBearing() && speed > 3f) location.bearing else null) else null
         if (snapped != null) {

@@ -99,6 +99,8 @@ object L {
         "(.+) chose: (.+)" to "$1 διάλεξε: $2",
         "Saved as (.+)" to "Αποθηκεύτηκε ως $1",
         "(.+) removed the destination" to "$1 αφαίρεσε τον προορισμό",
+        "(\\d+) drivers · until you leave" to "$1 οδηγοί · μέχρι να αποχωρήσεις",
+        "Navigating to (.+)" to "Πλοήγηση προς $1",
         "(.+) REMOVED THE DESTINATION" to "$1 ΑΦΑΙΡΕΣΕ ΤΟΝ ΠΡΟΟΡΙΣΜΟ",
         "You're driving to (.+): your route stays unless you end it." to "Πηγαίνεις στο $1: η διαδρομή σου μένει, εκτός αν τη σταματήσεις.",
         "In your convoy · (.+)" to "Στο κομβόι σου · $1",
@@ -308,6 +310,7 @@ object L {
         "Stay" to "Παραμονή", "Nobody else yet: send the code or the invite link." to "Κανείς άλλος ακόμα: στείλτε τον κωδικό ή τον σύνδεσμο.",
         "Connecting to the group…" to "Σύνδεση με την ομάδα…", "That isn't a convoy code or link" to "Αυτό δεν είναι κωδικός ή σύνδεσμος κομβόι",
         "No position from them yet" to "Δεν έχει στείλει θέση ακόμα",
+        "Sharing your location with the convoy" to "Κοινοποίηση θέσης στο κομβόι", "GameRoute: mission active" to "GameRoute: αποστολή σε εξέλιξη",
         "Save place" to "Αποθήκευση μέρους", "Saved place" to "Αποθηκευμένο μέρος", "LABEL (OPTIONAL)" to "ΕΤΙΚΕΤΑ (ΠΡΟΑΙΡΕΤΙΚΑ)",
         "e.g. Dad, Gym, Grandma" to "π.χ. Μπαμπάς, Γυμναστήριο, Γιαγιά", "Remove" to "Αφαίρεση", "Cancel" to "Άκυρο", "Save" to "Αποθήκευση",
         "With a label it gets its own button on the home screen and in the car, and typing it in search finds it first." to
