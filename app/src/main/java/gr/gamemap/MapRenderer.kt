@@ -1135,6 +1135,21 @@ class MapRenderer(private val car: Boolean = false) {
                 carHits += cr to k
                 cxp = cr.right + 10 * d
             }
+            // your labels ("Dad", "Gym") next to them, as many as fit (the rest are in Search)
+            for ((i, s) in Places.labelled().withIndex()) {
+                val pl = s.place()
+                val label = (s.label ?: continue) + (Places.cachedEta(pl)?.let { " · ${(it.seconds + 30) / 60} min" } ?: "")
+                val w = text.measureText(label) + 30 * d + (if (s.icon != null) 22 * d else 0f)
+                if (cxp + w > a.left + a.width() * 0.62f) break
+                val cr = RectF(cxp, r.bottom + 10 * d, cxp + w, r.bottom + 10 * d + 44 * d)
+                glassButton(c, cr, d, t)
+                var tx = cr.left + 15 * d
+                s.icon?.let { e -> text.textSize = 16 * d; c.drawText(e, tx, cr.centerY() + 6 * d, text); tx += 22 * d; text.textSize = 15 * d }
+                text.color = ink
+                c.drawText(label, tx, cr.centerY() + 5.5f * d, text)
+                carHits += cr to "fav:$i"
+                cxp = cr.right + 10 * d
+            }
         }
         text.typeface = t.typeface
     }

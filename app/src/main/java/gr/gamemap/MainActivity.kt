@@ -1151,10 +1151,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun dropPin(p: LatLng) {
         // the pin shows at once; its street address follows
-        showPlace(Place("Dropped pin", "Finding the address…", p, "📍"), dropped = true)
+        val name = pinName
+        pinName = null
+        showPlace(Place(name ?: "Dropped pin", "Finding the address…", p, "📍"), dropped = true)
         io.execute {
-            val a = try { Places.addressAt(p) } catch (e: Exception) { null } ?: return@execute
-            runOnUiThread { if (placeShown?.pos == p) showPlace(a, dropped = true) }
+            val a = try { Places.addressAt(p) } catch (e: Exception) { null }
+            runOnUiThread {
+                if (placeShown?.pos != p) return@runOnUiThread
+                // from "Can't find it?": the place under the name you searched for, ready to save
+                val pl = if (name != null) Place(name, a?.let { listOf(it.name, it.address).filter { s -> s.isNotBlank() }.joinToString(", ") } ?: "", p, "📍") else a ?: return@runOnUiThread
+                showPlace(pl, dropped = name == null)
+                if (name != null) showSaveDialog(pl) { showPlace(Places.savedAt(p)?.place() ?: pl, dropped = false) }
+            }
         }
     }
 
@@ -1812,12 +1820,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     merged.isNotEmpty() -> null
                     r == null -> "No connection: check mobile data"
                     else -> "Nothing found"
-                })
+                }, missing = if (r != null && pickFor == null) q.trim() else null)
             }
         }
     }
 
-    private fun renderResults(places: List<Place>, message: String?, header: String? = null, force: Boolean = false) {
+    /** Typed in search before "Can't find it?": the label for the pin you drop next. */
+    private var pinName: String? = null
+
+    private fun renderResults(places: List<Place>, message: String?, header: String? = null, force: Boolean = false, missing: String? = null) {
         if (!force && !search.hasFocus() && search.text.isEmpty() && places.isEmpty() && message == null) return
         val p = (12 * d).toInt()
         suggestList.removeAllViews()
@@ -1832,6 +1843,22 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         val near = LocationTracker.position
         for (pl in places) suggestList.addView(resultRow(pl, removable = header == "RECENT"))
+        // not there (or not the right one): put it on the map yourself, saved under that name
+        if (missing != null) suggestList.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(p, p, p + p / 2, p); isClickable = true
+            addView(label("📍", 20f).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams((40 * d).toInt(), WRAP_CONTENT))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label("Can't find it?", 15f, bold = true).apply { setTextColor(readable(accent)) })
+                addView(label("Hold your finger on the map where it is, and save it as \"$missing\"", 13f).apply { setTextColor(dim()) })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = p / 2 })
+            setOnClickListener {
+                pinName = missing
+                search.setText(""); search.clearFocus(); hideKeyboard(); suggestScroll.visibility = View.GONE; refreshChrome()
+                Toast.makeText(this@MainActivity, L.t("Hold your finger on the map where it is"), Toast.LENGTH_LONG).show()
+            }
+        })
         suggestScroll.visibility = View.VISIBLE
         refreshChrome()
         // keep the list from covering the whole screen

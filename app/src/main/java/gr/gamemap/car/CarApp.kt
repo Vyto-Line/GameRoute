@@ -422,6 +422,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             "menu" -> screenManager.push(CarMenuScreen(carContext))
             "search" -> screenManager.push(SearchScreen(carContext))
             "home", "work" -> Places.saved(id)?.let { NavEngine.plan(carContext, it) }
+            in (0 until 20).map { "fav:$it" } -> Places.labelled().getOrNull(id.removePrefix("fav:").toInt())?.let { NavEngine.plan(carContext, it.place()) }
             "done" -> { NavEngine.stop(); NavEngine.dismissTrip() }
             "parking" -> openParking()
             "parkclose" -> gr.gamemap.CarParking.list = null
@@ -662,7 +663,8 @@ fun carDistance(m: Double): Distance = when {
 /** Destination search on the car screen: recents first, live suggestions while typing. */
 /** Before typing in the car: saved places first, then recent ones. */
 private fun carStart(): List<Place> {
-    val fav = Places.savedPlaces()
+    val fav = listOfNotNull(Places.saved("home"), Places.saved("work")) + Places.labelled().map { it.place() } +
+        Places.savedList().filter { it.label.isNullOrBlank() }.map { it.place() }
     return (fav + Places.recents().filter { r -> fav.none { gr.gamemap.Geo.distance(it.pos, r.pos) < 25 } }).take(8)
 }
 
