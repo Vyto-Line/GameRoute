@@ -1988,7 +1988,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun openSheet(kind: String) {
         if (kind != sheetKind) settingsPage = null
-        quickKey = ""
+        // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
+        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""
         sheetKind = kind
         if (sheetOverlay.visibility != View.VISIBLE) {
             // the sheet slides up over a fading-in shade
@@ -2310,7 +2311,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             )
             "sharing" -> listOf(
                 settingRow("Your name in convoys", Convoy.myName.ifBlank { "Not set" }) { editConvoyName { showSettings() } },
-                settingRow("Convoy", if (Convoy.active) "On · ${Convoy.members.size + 1} drivers" else "Drive together") { openSheet("convoy") },
+                settingRow("Convoy", if (Convoy.active) "On · ${Convoy.members.size + 1} drivers" else "Start or join") { openSheet("convoy") },
             )
             "app" -> listOfNotNull(
                 settingRow("Trip history", "${Explorer.history().size} trips") { openSheet("trips") },

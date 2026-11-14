@@ -282,7 +282,7 @@ object L {
         "Delete all" to "Διαγραφή όλων", "Delete" to "Διαγραφή", "OK" to "OK", "Cancel" to "Άκυρο", "Close" to "Κλείσιμο", "Back" to "Πίσω",
         "Back to settings" to "Πίσω στις ρυθμίσεις",
         "Your name in convoys" to "Το όνομά σας στο κομβόι", "Not set" to "Δεν ορίστηκε", "Not set yet" to "Δεν ορίστηκε ακόμα",
-        "Drive together" to "Οδηγήστε μαζί", "Trip history" to "Ιστορικό διαδρομών", "Explorer profile" to "Προφίλ εξερευνητή",
+        "Drive together" to "Οδηγήστε μαζί", "Start or join" to "Ξεκίνα ή μπες", "Trip history" to "Ιστορικό διαδρομών", "Explorer profile" to "Προφίλ εξερευνητή",
         "Check for updates" to "Έλεγχος ενημερώσεων", "Privacy policy" to "Πολιτική απορρήτου", "About & map credits" to "Σχετικά & χάρτες",
         "Star ratings & reviews" to "Βαθμολογίες & κριτικές", "Google key set" to "Ορίστηκε κλειδί Google",
         "Off: Reviews opens Google Maps" to "Ανενεργό: οι Κριτικές ανοίγουν τους Χάρτες Google",
