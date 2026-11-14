@@ -35,6 +35,7 @@ class PoiStabilityTest {
             MapState.phone.pan(start, 0f); MapState.phone.zoomBy(zoom - MapState.phone.targetZoom)
             repeat(20) { MapState.tick(); r.draw(c, w, h, Rect(0, 0, w, h), 3f, true); looper.idleFor(java.time.Duration.ofMillis(30)) }
             var prev: Set<String>? = null
+            var prevAll: List<PoiLayer.Poi> = emptyList()
             var swaps = 0; var frames = 0; var maxParking = 0
             val kinds = HashMap<String, Int>()
             for (step in 0 until 120) { // pan slowly east (about 2 px a frame)
@@ -45,7 +46,12 @@ class PoiStabilityTest {
                 now.forEach { kinds[it.kind.name] = (kinds[it.kind.name] ?: 0) + 1 }
                 // icons in the middle of the screen that vanish while the map barely moved = flicker
                 val mid = now.filter { p -> Geo.distance(p.pos, Geo.offset(start, 90f, step * 1.5)) < 250 }.map { "${it.pos.lat},${it.pos.lon}" }.toSet()
-                prev?.let { pr -> swaps += pr.count { it !in mid && Geo.distance(LatLng(it.substringBefore(',').toDouble(), it.substringAfter(',').toDouble()), Geo.offset(start, 90f, step * 1.5)) < 200 } }
+                prev?.let { pr ->
+                    val gone = pr.filter { it !in mid && Geo.distance(LatLng(it.substringBefore(',').toDouble(), it.substringAfter(',').toDouble()), Geo.offset(start, 90f, step * 1.5)) < 200 }
+                    swaps += gone.size
+                    if (gone.isNotEmpty() && swaps < 8) log.append("  frame $step: gone $gone (shown now ${now.size}, prev frame had ${prevAll.size})\n")
+                }
+                prevAll = now
                 prev = mid; frames++
             }
             log.append("$label: $frames frames, icons vanishing in the middle: $swaps, most car parks at once: $maxParking, kinds seen: $kinds\n")
