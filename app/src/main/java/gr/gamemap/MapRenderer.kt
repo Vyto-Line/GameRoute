@@ -1431,7 +1431,7 @@ class MapRenderer(private val car: Boolean = false) {
     /** The convoy friend under a screen point (their arrow or name tag), if any. */
     fun friendAt(x: Float, y: Float): Convoy.Member? = friendHits.lastOrNull { it.first.contains(x, y) }?.second
 
-    /** Phone: a slim strip under the turn card: everyone on a line to the flag, with speeds. */
+    /** Phone: a slim strip under the turn card: everyone on a line to the flag, with how far along (%). */
     private fun drawConvoyStrip(c: Canvas, a: Rect, d: Float, t: Theme) {
         val rows = Convoy.rows(t.route)
         val r = RectF(a.left + 12 * d, bannerBottom + 8 * d, a.right - 12 * d, bannerBottom + 8 * d + 54 * d)
@@ -1447,9 +1447,12 @@ class MapRenderer(private val car: Boolean = false) {
             stroke.color = Ui.panel(t); stroke.strokeWidth = 2 * d; c.drawCircle(x, ly, 11 * d, stroke)
             text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 11 * d; text.color = Color.rgb(17, 20, 24)
             c.drawText(if (row.me) "★" else row.name.take(1).uppercase(), x, ly + 4 * d, text)
+            // how much of the race each has done (their speed stays on their tag on the map)
             text.textSize = 10 * d
-            text.color = if (row.kmh == 0 && row.state == "driving") Color.rgb(255, 120, 120) else Ui.dim(t, 220)
-            c.drawText(if (row.state == "arrived") "✓" else "${row.kmh}", x, ly + 25 * d, text)
+            text.color = Ui.dim(t, 220)
+            val known = row.me || row.left >= 0
+            val pct = (row.progress * 100).toInt().coerceIn(0, 99) // 100 is the ✓
+            c.drawText(when { row.state == "arrived" -> "✓"; row.state == "own" || !known -> "–"; else -> "$pct%" }, x, ly + 25 * d, text)
         }
         text.textSize = 15 * d; text.color = Ui.onPanel(t, t.route, 3.0)
         c.drawText("▾", r.right - 16 * d, ly + 5 * d, text)
