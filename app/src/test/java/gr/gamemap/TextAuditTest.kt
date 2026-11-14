@@ -107,6 +107,7 @@ class TextAuditTest {
         cut.forEach { (k, v) -> log.append("  $k: ${v.joinToString(" | ")}\n") }
         log.append("\nSTILL IN ENGLISH in Greek mode\n")
         english.forEach { (k, v) -> log.append("  $k: ${v.joinToString(" | ")}\n") }
+        log.append("\nSTART-UP (ms, on the test machine)\n  " + Startup.steps.joinToString { "${it.first} ${it.second}" } + "\n")
         File(out, "textaudit.txt").writeText(log.toString())
     }
 }
