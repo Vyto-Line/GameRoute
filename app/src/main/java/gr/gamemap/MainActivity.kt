@@ -367,7 +367,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Startup.steps += "screen built" to (System.nanoTime() - started) / 1_000_000
         CrashLog.note("screen built in ${(System.nanoTime() - started) / 1_000_000} ms")
         root.requestFocus()
-        root.viewTreeObserver.addOnPreDrawListener { L.translateTree(root); true }
+        root.viewTreeObserver.addOnPreDrawListener { L.translateTree(root); Icons.applyTree(root); true }
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, wi ->
             val bars = wi.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -1344,7 +1344,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** Shows a dialog with its texts (title, message, buttons, list) in the app's language. */
     private fun AlertDialog.Builder.showT(): AlertDialog = show().also { dlg ->
-        dlg.window?.decorView?.let { dv -> L.translateTree(dv); dv.viewTreeObserver.addOnPreDrawListener { L.translateTree(dv); true } }
+        dlg.window?.decorView?.let { dv -> L.translateTree(dv); Icons.applyTree(dv); dv.viewTreeObserver.addOnPreDrawListener { L.translateTree(dv); Icons.applyTree(dv); true } }
     }
 
     private fun sharePlace(pl: Place) {
@@ -2532,11 +2532,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         })
         val iconRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun paintIcons() { for (i in 0 until iconRow.childCount) (iconRow.getChildAt(i) as TextView).let { v ->
-            val on = v.text == icon
+            val on = v.contentDescription == icon
             v.background = if (on) bg(Color.argb(60, Color.red(accent), Color.green(accent), Color.blue(accent)), accent, 2f, 20f) else null
         } }
         for (e in icons) iconRow.addView(TextView(this).apply {
-            text = e; textSize = 20f; gravity = Gravity.CENTER
+            text = e; textSize = 20f; gravity = Gravity.CENTER; contentDescription = e; setTextColor(ink)
             setOnClickListener { icon = e; paintIcons() }
         }, LinearLayout.LayoutParams(0, (42 * d).toInt(), 1f))
         paintIcons()
@@ -2584,7 +2584,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(View(context).apply { setBackgroundColor(dim(50)) }, LinearLayout.LayoutParams(MATCH_PARENT, maxOf(1, d.toInt())).apply { marginStart = p; marginEnd = p })
             addView(item("🚫", "None", "Just share where we all are") { Convoy.clearDestination(); convoyKey = ""; refreshChrome() })
         }
-        L.translateTree(box)
+        L.translateTree(box); Icons.applyTree(box)
         pop = android.widget.PopupWindow(box, (280 * d).toInt(), WRAP_CONTENT, true).apply { elevation = 16 * d; isOutsideTouchable = true }
         pop.showAsDropDown(anchor, -(200 * d).toInt(), 0, Gravity.END)
     }

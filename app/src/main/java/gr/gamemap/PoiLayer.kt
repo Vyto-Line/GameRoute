@@ -84,10 +84,11 @@ class PoiLayer {
         val r = sizePx / 2f
         p.style = Paint.Style.FILL; p.color = Color.argb(70, 0, 0, 0)
         c.drawCircle(r, r + sizePx * 0.03f, r * 0.94f, p)
+        // line style: a white disc with a coloured ring and a coloured symbol
         p.color = Color.WHITE; c.drawCircle(r, r, r * 0.92f, p)
-        p.color = kind.color; c.drawCircle(r, r, r * 0.76f, p)
-        p.style = Paint.Style.STROKE; p.color = Color.WHITE
-        p.strokeWidth = sizePx * 0.075f; p.strokeCap = Paint.Cap.ROUND; p.strokeJoin = Paint.Join.ROUND
+        p.style = Paint.Style.STROKE; p.color = kind.color; p.strokeWidth = sizePx * 0.075f
+        c.drawCircle(r, r, r * 0.84f, p)
+        p.strokeWidth = sizePx * 0.07f; p.strokeCap = Paint.Cap.ROUND; p.strokeJoin = Paint.Join.ROUND
         val s = r * 0.42f // glyph half size
         path.reset()
         when (kind) {
