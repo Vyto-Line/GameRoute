@@ -560,6 +560,18 @@ object Places {
         return sc.coerceAtMost(1.0)
     }
 
+    /** A name as words by sound, in Greek letters ("Cape Sounio" → καπε, σουνιο). */
+    private fun nameWords(name: String): List<String> =
+        sound(greeklish(name)).split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }.ifEmpty { listOf("") }
+
+    /** Words in front of a sight's name that aren't what people type. */
+    private val genericWords: Set<String> by lazy {
+        listOf("αρχαιολογικός", "χώρος", "archaeological", "site", "ακρωτήριο", "cape", "παραλία", "beach", "λίμνη", "lake",
+            "ναός", "temple", "κάστρο", "castle", "ιερά", "μονή", "monastery", "όρος", "mount", "φαράγγι", "gorge", "σπήλαιο", "cave",
+            "αρχαίο", "αρχαία", "ancient", "θέατρο", "μουσείο", "museum", "το", "τα", "ο", "η", "οι", "the", "of", "του", "της", "των")
+            .map { sound(greeklish(it)) }.toSet()
+    }
+
     /** The same place from two sources: the same name (by sound, spaces aside) within 250 m. */
     private fun samePlace(a: Place, b: Place): Boolean {
         val d = Geo.distance(a.pos, b.pos)
@@ -584,6 +596,7 @@ object Places {
         class C(val p: Place, val score: Double, val fit: Double)
         val all = ArrayList<C>()
         val whole = sound(greeklish(q.words.joinToString(""))).filter { it.isLetterOrDigit() }
+        val qWords = q.forms
         for ((list, src) in lists) for (p in list) {
             val fit = nameScore(q, p.name, p.address)
             val isAddr = p.icon == "🏠" || p.icon == "🛣" || p.icon == "🏙"
@@ -592,15 +605,23 @@ object Places {
             val d = focus?.let { Geo.distance(it, p.pos) } ?: 0.0
             // towns are where people drive far to: "ναυπλιο" is Nafplio 140 km away, not the Ναυπλίου
             // street round the corner (Greek streets are named after towns), which still comes next
-            val far = when (p.town) { 3 -> 0.3; 2 -> 0.6; 1 -> 0.85; else -> 1.0 }
+            // sights people drive far to (an ancient site, a museum, a beach) count like a village
+            val big = maxOf(p.town, if (p.icon == "🏛" || p.icon == "🏖") 2 else 0)
+            val far = when (big) { 3 -> 0.3; 2 -> 0.6; 1 -> 0.85; else -> 1.0 }
             s -= far * 14 * Math.log10(1 + d / 1000) // 1 km −4, 10 km −15, 100 km −28 (a town: −8)
-            if (fit >= 0.99) s += when (p.town) { 3 -> 10; 2 -> 4; 1 -> 1; else -> 0 }
-            // the whole name, exactly as typed (by sound): "Ναύπλιο" over "Ναύπλιο - Τολό"
-            if (p.town > 0 && whole.isNotEmpty() && sound(greeklish(p.name)).filter { it.isLetterOrDigit() } == whole) s += 6
+            // the name's words, "Αρχαιολογικός Χώρος", "Cape", "Το"… in front left aside
+            val words = nameWords(p.name)
+            val core = words.dropWhile { it in genericWords }.ifEmpty { words }
+            val startsCore = qWords.firstOrNull()?.let { fs -> val w = core.first(); fs.any { w.startsWith(it) } } == true
+            if (startsCore) s += 5 // "lidl" → the shop "Lidl …" before "Parking Lidl"
+            // whole words, not just their start: "σουνιο" is Σούνιο more than the Σουνίου street
+            if (qWords.isNotEmpty() && qWords.all { fs -> fs.any { it in words } }) s += 4
+            // a town: only when it's named first ("Άργος-Μυκήνες" is Argos, not Mycenae)
+            if (fit >= 0.99 && startsCore) s += when (big) { 3 -> 10; 2 -> 4; 1 -> 1; else -> 0 }
+            // the whole name exactly as typed (by sound): "Ναύπλιο" over "Ναύπλιο - Τολό"
+            if (big > 0 && whole.isNotEmpty() && (words.joinToString("") == whole || core.joinToString("") == whole)) s += 6
             if (area != null && d < 5000) s += 8
             if (src == SRC_TOMTOM || src == SRC_OPEN) s += 1 // richer data (address, entrance)
-            // "lidl" → the shop "Lidl …" before "Parking Lidl"
-            q.forms.firstOrNull()?.let { fs -> val t = OpenPlaces.searchText(p.name); if (fs.any { t.startsWith(" $it") }) s += 5 }
             all += C(p, s, if (isAddr && q.number != null) 1.0 else fit)
         }
         all.sortByDescending { it.score }
@@ -709,6 +730,9 @@ object Places {
         val q = Query(core)
         val fTom = finders.submit(java.util.concurrent.Callable { tryTomtom(query, focus, !full) }) // the whole text: TomTom knows the areas
         val fPho = finders.submit(java.util.concurrent.Callable { tryPhoton(core, focus) })
+        // typed in Greek: TomTom also in Latin letters ("σουνιο" finds nothing there, "sounio" the temple)
+        val greek = query.any { it in 'Α'..'ω' || it in 'ά'..'ώ' } && q.number == null && q.words.joinToString("").length >= 4
+        val fLat = if (!greek) null else finders.submit(java.util.concurrent.Callable { tryTomtom(Voice.latin(query), focus, !full) })
         val fTown = if (q.number != null || q.words.size > 3) null
             else finders.submit(java.util.concurrent.Callable { try { photon(core, focus, townsOnly = true) } catch (e: Exception) { null } })
         val fAddr = finders.submit(java.util.concurrent.Callable { try { address(query, near) } catch (e: Exception) { null } })
@@ -718,7 +742,7 @@ object Places {
         val tiles = if (area == null) local else try { local(core, focus) } catch (e: Exception) { local }
         fun <T> get(f: java.util.concurrent.Future<T>, ms: Long): T? =
             try { f.get(ms, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (e: Exception) { f.cancel(true); null }
-        val tom = get(fTom, 7000)
+        val tom = get(fTom, 7000)?.let { t -> t + fLat?.let { get(it, 1500) }.orEmpty() } ?: fLat?.let { get(it, 3000) }
         val pho = get(fPho, if (tom.isNullOrEmpty()) 4000 else 1500)
         val addr = get(fAddr, 5000)
         val towns = fTown?.let { get(it, 1200) }.orEmpty()

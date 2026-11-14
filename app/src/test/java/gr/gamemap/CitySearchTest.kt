@@ -20,14 +20,16 @@ class CitySearchTest {
         // query → the town and roughly how far it is from Athens (km)
         val cases = listOf("ναυπλιο" to 90..100, "Ναύπλιο" to 85..100, "nafplio" to 85..100, "ναυπλ" to 85..100,
             "πατρα" to 170..185, "patra" to 170..185, "λαμια" to 145..160, "τριπολη" to 125..135,
-            "καλαματα" to 170..185, "βολος" to 160..175, "κορινθος" to 65..80)
+            "καλαματα" to 170..185, "βολος" to 160..175, "κορινθος" to 65..80,
+            // sights: the place itself, not the roads named after it
+            "σουνιο" to 38..48, "sounio" to 38..48, "Σούνιο" to 38..48, "μυκηνες" to 85..95, "αραχωβα" to 105..120)
         for ((q, km) in cases) {
             val t0 = System.currentTimeMillis()
             val r = Places.find(q, athens, full = false).orEmpty()
             val ms = System.currentTimeMillis() - t0
             log.append("\"$q\" (${ms} ms): " + r.take(5).joinToString(" | ") { "${it.icon} ${it.name} t${it.town} ${d(it.pos)}" } + "\n")
             val first = r.firstOrNull()
-            if (first == null || (Geo.distance(athens, first.pos) / 1000).toInt() !in km) bad += q
+            if (first == null || (Geo.distance(athens, first.pos) / 1000).toInt() !in km || first.icon == "🛣") bad += q
             Thread.sleep(1500) // TomTom allows a few requests a second
         }
         // still: a shop near me by name, a street with a number
