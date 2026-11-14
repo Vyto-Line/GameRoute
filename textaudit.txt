@@ -1,0 +1,36 @@
+TEXT CUT OFF at 1.3× (screen: text)
+  el/convoy_lobby: National Archaeological Museum
+  el/convoy_none: National Archaeological Museum
+  el/drive: 4 λεπ. · 2.6 km · National Archaeological Museum
+  el/fuelfilters: National Archaeological Museum
+  el/home: National Archaeological Museum
+  el/quick: National Archaeological Museum
+  el/routes: National Archaeological Museum · ζωντανή κίνηση
+  el/settings: National Archaeological Museum
+  el/settings_advanced: National Archaeological Museum
+  el/settings_alerts: National Archaeological Museum
+  el/settings_app: National Archaeological Museum
+  el/settings_map: National Archaeological Museum
+  el/settings_nav: National Archaeological Museum
+  el/settings_sharing: National Archaeological Museum
+  el/style: National Archaeological Museum
+  en/convoy_lobby: National Archaeological Museum
+  en/drive: 4 min · 2.6 km · National Archaeological Museum
+  en/routes: National Archaeological Museum · live traffic
+
+STILL IN ENGLISH in Greek mode
+  convoy_none: Work  +
+  fuelfilters: Cyclon | Jet Oil | Silkoil | Work  +
+  home: Work  +
+  quick: Work  +
+  settings: Work  +
+  settings_advanced: Work  + | Ανενεργό: οι κριτικές ανοίγουν το Google Maps  ›
+  settings_alerts: Work  +
+  settings_app: Work  +
+  settings_map: Work  +
+  settings_nav: Work  +
+  settings_sharing: Work  +
+  style: 8-Bit | Work  +
+
+START-UP (ms, on the test machine)
+  crash log 41, language 27, map state 9, tile cache 12, places 2, open places 0, offline 0, convoy 3, fuel 1, parked 0, tolls 2, reviews 0, nav engine 1, voice 0, explorer 1, alerts 1, screen built 1822
