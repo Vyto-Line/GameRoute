@@ -569,7 +569,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
             chips.addView(v, LinearLayout.LayoutParams(WRAP_CONTENT, (40 * d).toInt()).apply { marginEnd = (8 * d).toInt() })
         }
-        // in a convoy: it comes first, with a quick way out
+        // in a convoy: it comes first, with a quick way out (and the way in to its route)
+        if (Convoy.active && !Convoy.onConvoyRoute) Convoy.destination?.let { d0 ->
+            chip("➤ Join route · ${d0.name}") { NavEngine.start(this, d0); MapState.recenter() }
+        }
         if (Convoy.active) {
             chip("👥 Convoy · ${Convoy.members.size + 1}") { openSheet("convoy") }
             chip("✕ Leave convoy") { confirmLeaveConvoy() }
@@ -1235,14 +1238,25 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (pl.icon == "👥") {
             // a friend in the convoy: drive to where they are now
             val navigating = NavEngine.active && !NavEngine.arrived
+            val friend = Convoy.members.values.firstOrNull { it.name == pl.name }
+            // where they're going: the convoy's destination, or a route of their own
+            val theirs = friend?.ownDest ?: Convoy.destination?.takeIf { friend?.state == "driving" }
+            if (theirs != null && (!NavEngine.active || Geo.distance(theirs.pos, NavEngine.destination ?: LatLng(0.0, 0.0)) > 250))
+                placeCard.addView(pill("➤  Join their route · ${theirs.name}") {
+                    closePlace(); NavEngine.start(this@MainActivity, theirs); MapState.recenter()
+                }.apply {
+                    setTextColor(onAccent(accent)); background = bg(accent, radius = 26f); maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p })
             placeCard.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
-                addView(pill("➤  Drive to ${pl.name}") {
+                addView(pill(if (theirs != null) "Drive to them now" else "➤  Drive to ${pl.name}") {
                     closePlace()
                     val m = Convoy.members.values.firstOrNull { it.name == pl.name }
                     NavEngine.start(this@MainActivity, (m?.let { Convoy.placeOf(it) } ?: pl)); MapState.recenter()
                 }.apply {
-                    setTextColor(onAccent(accent)); background = bg(accent, radius = 26f); maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                    if (theirs != null) { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 26f) }
+                    else { setTextColor(onAccent(accent)); background = bg(accent, radius = 26f) }
+                    maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.6f).apply { marginEnd = if (navigating) p else 0 })
                 if (navigating) addView(pill("＋  Stop") { closePlace(); NavEngine.addStop(pl) }.apply {
                     setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 26f)
@@ -1671,7 +1685,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         controls.visibility = if (planning || searching) View.GONE else View.VISIBLE
         val homeKey = "${t.name}|${MapState.dark}|${MapState.imperial}|$etaVersion|${Explorer.version}|${Explorer.xp}|${Places.recents().joinToString { it.name }}|" +
-            "${Places.saved("home")?.name}|${Places.saved("work")?.name}|${LocationTracker.position != null}|${Parked.get()?.at}|${Convoy.active}|${Convoy.members.size}|${Places.labelled().joinToString { it.label + it.icon }}"
+            "${Places.saved("home")?.name}|${Places.saved("work")?.name}|${LocationTracker.position != null}|${Parked.get()?.at}|${Convoy.active}|${Convoy.members.size}|${Convoy.destination?.name}|${Convoy.onConvoyRoute}|${Places.labelled().joinToString { it.label + it.icon }}"
         if (homeKey != lastHomeKey) {
             lastHomeKey = homeKey
             if (chipsScroll.visibility == View.VISIBLE) renderChips()
@@ -2770,12 +2784,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         buttons.addView(pill("Leave") { confirmLeaveConvoy() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 22f) },
             LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p })
         val lobby = Convoy.lobby()
-        val race = !NavEngine.active && dest != null && lobby.isNotEmpty()
-        if (!NavEngine.active && dest != null && !race) buttons.addView(pill("Start") { closeSheet(); NavEngine.start(this, dest); MapState.recenter() }.apply {
+        // the others already on their way: no countdown to wait for, just join them
+        val underway = Convoy.members.values.any { it.state == "driving" && !it.stale }
+        val race = !NavEngine.active && dest != null && lobby.isNotEmpty() && !underway
+        if (!NavEngine.active && dest != null && !race && !underway) buttons.addView(pill("Start") { closeSheet(); NavEngine.start(this, dest); MapState.recenter() }.apply {
             setTextColor(onAccent(accent)); background = bg(accent, radius = 22f)
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.3f))
-        // on a route of my own: one tap to join the others' route instead
-        if (NavEngine.active && dest != null && !Convoy.onConvoyRoute) sheetHost.addView(pill("➤  Join the convoy's route") {
+        // not on the convoy's route (not driving yet, or on a route of my own): one tap to join it
+        if (dest != null && !Convoy.onConvoyRoute && (NavEngine.active || underway)) sheetHost.addView(pill("➤  Join the convoy's route") {
             closeSheet(); NavEngine.start(this, dest); MapState.recenter()
         }.apply {
             setTextColor(onAccent(accent)); background = bg(accent, radius = 22f); maxLines = 1; ellipsize = TextUtils.TruncateAt.END

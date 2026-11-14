@@ -33,6 +33,8 @@ object Convoy {
         var arrivedAt: Long = 0,
         var seen: Long = 0,
     ) {
+        /** On a route of their own: where to (so the others can join them). */
+        @Volatile var ownDest: Place? = null
         /** Pressed "I'm ready" at the start (and when: the race starts 4 s after the last one). */
         @Volatile var ready = false
         @Volatile var readyAt = 0L
@@ -335,6 +337,10 @@ object Convoy {
         LocationTracker.position?.let { o.put("lat", it.lat).put("lon", it.lon).put("h", LocationTracker.heading.toDouble()) }
         o.put("s", Math.round(LocationTracker.speedMps * 3.6f))
         if (meReady && state == "ready") o.put("rd", true).put("ra", meReadyAt)
+        // a route of my own: where to, so the others can join me
+        if (NavEngine.active && !onConvoyRoute) NavEngine.destination?.let {
+            o.put("on", NavEngine.destinationName).put("olat", it.lat).put("olon", it.lon)
+        }
         if (onConvoyRoute) { // (a route of my own: only where I am and my speed)
             val left = NavEngine.remainingDistance
             if (routeTotal < left) routeTotal = left
@@ -478,6 +484,7 @@ object Convoy {
         val st = o.optString("st", m.state)
         if (st == "arrived" && m.state != "arrived") m.arrivedAt = o.optLong("at", o.optLong("ts"))
         m.state = st
+        m.ownDest = if (st == "own" && o.has("olat")) Place(o.optString("on", "Their destination"), "", LatLng(o.getDouble("olat"), o.getDouble("olon"))) else null
         m.ready = st == "ready" && o.optBoolean("rd", false)
         m.readyAt = if (m.ready) o.optLong("ra", ts) else 0
         m.seen = o.optLong("ts", System.currentTimeMillis()).coerceAtMost(System.currentTimeMillis())

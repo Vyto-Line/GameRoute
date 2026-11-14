@@ -64,17 +64,23 @@ object Icons {
                 val mine = tv.getTag(drawnKey)
                 val rel = tv.compoundDrawablesRelative; val abs = tv.compoundDrawables
                 if (mine != null && (rel[0] === mine || abs[1] === mine)) tv.setCompoundDrawablesRelative(null, null, null, null)
+                if (mine != null && tv.foreground === mine) tv.foreground = null
             }
             tv.setTag(doneKey, cur); return
         }
         val inner = ContextCompat.getDrawable(tv.context, res(e)!!)?.mutate() ?: return
         val dr = InkOf(tv, inner)
         if (rest.isEmpty()) {
-            // an icon on its own (a list's icon column, a ✕ or ☆ button): centred
+            // an icon on its own (a round map button, a list's icon column, a ✕ or ☆): in the middle
             val size = (tv.textSize * 1.2f).toInt()
-            dr.setBounds(0, 0, size, size)
+            val ld = android.graphics.drawable.LayerDrawable(arrayOf(dr)).apply {
+                setLayerGravity(0, android.view.Gravity.CENTER); setLayerSize(0, size, size)
+            }
             tv.text = ""
-            tv.setCompoundDrawables(null, dr, null, null)
+            tv.foreground = ld
+            tv.setTag(doneKey, MARK)
+            tv.setTag(drawnKey, ld)
+            return
         } else {
             val size = (tv.textSize * 1.15f).toInt()
             dr.setBounds(0, 0, size, size)
