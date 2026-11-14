@@ -42,6 +42,9 @@ object TileCache {
         tilePx = if (ctx.resources.displayMetrics.density >= 1.5f) 512 else 256
     }
 
+    /** Keeps only [fraction] of the drawn squares (most recently used). */
+    fun trim(fraction: Double) = mem.trimToSize((mem.maxSize() * fraction).toInt())
+
     fun clear() {
         mem.evictAll()
         failed.clear()

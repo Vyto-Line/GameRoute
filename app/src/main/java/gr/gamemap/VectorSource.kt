@@ -75,6 +75,9 @@ object VectorSource {
     /** Every parsed tile in memory, keyed "z/x/y" (for searching names offline). */
     fun parsedTiles(): Map<String, VectorTile> = parsed.snapshot()
 
+    /** Keeps only [fraction] of the parsed map data in memory (it's on disk too). */
+    fun trim(fraction: Double) = parsed.trimToSize((parsed.maxSize() * fraction).toInt())
+
     /** Already-parsed data only (never downloads; safe on the UI thread). */
     fun peek(z: Int, x: Int, y: Int): VectorTile? = parsed.get("$z/$x/$y")
 

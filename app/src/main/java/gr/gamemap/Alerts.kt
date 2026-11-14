@@ -416,9 +416,16 @@ object Alerts {
         }
         var best: Ahead? = null
         val route = NavEngine.current
+        // only the next ~1 km of the route matters (alerts count from 900 m): search that stretch,
+        // not the whole trip for every camera, every second
+        var lo = 0; var span = route?.points?.size ?: 0
+        if (route != null && NavEngine.active) {
+            fun at(m: Double): Int { var a = 0; var b = route.cum.size - 1; while (a < b) { val k = (a + b) / 2; if (route.cum[k] < m) a = k + 1 else b = k }; return a }
+            lo = maxOf(0, at(NavEngine.along - 60) - 1); span = at(NavEngine.along + 1000) - lo + 2
+        }
         for ((key, p, lg) in items) {
             val dist: Double = if (route != null && NavEngine.active) {
-                val (a, idx) = route.alongOf(p, 0, route.points.size)
+                val (a, idx) = route.alongOf(p, lo + 20, span)
                 val off = Geo.distanceToSegment(p, route.points[idx], route.points[minOf(idx + 1, route.points.size - 1)])
                 if (off > 40) continue
                 a - NavEngine.along

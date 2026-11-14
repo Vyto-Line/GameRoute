@@ -28,6 +28,21 @@ object Startup {
 }
 
 class GameMapApp : Application() {
+    /**
+     * Hidden or short of memory: give back the drawn map squares (they're redrawn in a moment
+     * when needed). A lean app in the background (navigating with the screen off) is far less
+     * likely to be killed, and a kill means a cold start: slow and battery hungry.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        @Suppress("DEPRECATION")
+        when {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> { TileCache.trim(0.0); VectorSource.trim(0.25) }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> { TileCache.trim(0.3); VectorSource.trim(0.6) }
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> { TileCache.trim(0.5); VectorSource.trim(0.7) }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         Startup.step("crash log") { CrashLog.init(this) }
