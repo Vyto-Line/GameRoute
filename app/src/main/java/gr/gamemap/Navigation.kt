@@ -254,6 +254,8 @@ data class Place(
     val brand: String = "", val plugs: Set<String> = emptySet(), val kw: Int = 0,
     /** Where to drive to: the entrance on the street, when known (else the place itself). */
     val entry: LatLng? = null,
+    /** A city or town (3), a village (2), a neighbourhood or area (1); 0 = not a settlement. */
+    val town: Int = 0,
 ) {
     val goal: LatLng get() = entry ?: pos
 }
@@ -354,8 +356,13 @@ object Places {
             val entry = ep?.let { LatLng(it.getDouble("lat"), it.getDouble("lon")) }
             val cats = poi?.optJSONArray("categories")?.let { a -> (0 until a.length()).joinToString(" ") { a.optString(it) } }.orEmpty()
             val at = LatLng(pos.getDouble("lat"), pos.getDouble("lon"))
+            val town = if (r.optString("type") != "Geography") 0 else when (r.optString("entityType")) {
+                "Municipality" -> 3
+                "Country", "CountrySubdivision", "CountrySecondarySubdivision", "CountryTertiarySubdivision" -> 2
+                else -> 1 // MunicipalitySubdivision, Neighbourhood, PostalCodeArea
+            }
             out += Place(name, address, at, tomtomIcon(code, r.optString("type"), cats),
-                brand = brand, plugs = plugs, kw = kw, entry = entry?.takeIf { Geo.distance(it, at) in 3.0..400.0 })
+                brand = brand, plugs = plugs, kw = kw, entry = entry?.takeIf { Geo.distance(it, at) in 3.0..400.0 }, town = town)
         }
         return out.distinctBy { it.name + "|" + it.address }
     }
@@ -434,7 +441,7 @@ object Places {
     fun sound(s: String): String {
         var t = norm(s)
         // single letters first, so "kallirois" (οι) and Καλλιρόης (οη) end up the same
-        t = t.replace("αυ", "αβ").replace("ευ", "εβ").replace("ου", "\u0001")
+        t = t.replace("αυ", "αβ").replace("ευ", "εβ").replace("αφ", "αβ").replace("εφ", "εβ").replace("ου", "\u0001")
             .replace('η', 'ι').replace('υ', 'ι').replace('ω', 'ο')
             .replace("ει", "ι").replace("οι", "ι").replace("αι", "ε").replace("\u0001", "ου")
             // sounds Greeklish spells loosely: μπ/β (b), ντ/δ (d), γκ/γγ/νγ (g), ξ/χ (x), κσ (ks)
@@ -520,7 +527,7 @@ object Places {
     /** Instant results, offline: names in the map data and the places squares on the phone, best first. */
     fun local(query: String, near: LatLng?): List<Place> {
         val q = Query(query)
-        val tiles = localNamed(q, near).map { e -> Place(e.name, when (e.kind) { 0 -> "Area"; 2 -> "Street"; else -> "" }, e.pos, e.icon) }
+        val tiles = localNamed(q, near).map { e -> Place(e.name, when (e.kind) { 0 -> "Area"; 2 -> "Street"; else -> "" }, e.pos, e.icon, town = if (e.kind == 0) 1 else 0) }
         val open = try { OpenPlaces.search(q, near) } catch (e: Exception) { emptyList() }
         val mine = savedMatches(query)
         return (mine + rank(q, near, null, listOf(open to SRC_OPEN, tiles to SRC_TILES)).filter { p -> mine.none { samePlace(it, p) || Geo.distance(it.pos, p.pos) < 25 } }).take(8)
@@ -555,9 +562,13 @@ object Places {
 
     /** The same place from two sources: the same name (by sound, spaces aside) within 250 m. */
     private fun samePlace(a: Place, b: Place): Boolean {
-        if (Geo.distance(a.pos, b.pos) > 250) return false
+        val d = Geo.distance(a.pos, b.pos)
+        // a town: each service puts its point somewhere else in it (the centre, the town hall…)
+        val townLike = a.town >= 2 || b.town >= 2
+        if (d > (if (townLike) 8000.0 else 250.0)) return false
         val x = sound(greeklish(a.name)).filter { it.isLetterOrDigit() }
         val y = sound(greeklish(b.name)).filter { it.isLetterOrDigit() }
+        if (townLike && d > 250) return x.isNotEmpty() && x == y
         if (x.isEmpty() || y.isEmpty()) return false
         if (x == y) return true
         return minOf(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x)) && Geo.distance(a.pos, b.pos) < 150
@@ -570,13 +581,20 @@ object Places {
     private fun rank(q: Query, focus: LatLng?, area: Named?, lists: List<Pair<List<Place>, Int>>): List<Place> {
         class C(val p: Place, val score: Double, val fit: Double)
         val all = ArrayList<C>()
+        val whole = sound(greeklish(q.words.joinToString(""))).filter { it.isLetterOrDigit() }
         for ((list, src) in lists) for (p in list) {
             val fit = nameScore(q, p.name, p.address)
             val isAddr = p.icon == "🏠" || p.icon == "🛣" || p.icon == "🏙"
             var s = fit * 100
             if (isAddr && q.number != null) s = maxOf(s, 75.0)
             val d = focus?.let { Geo.distance(it, p.pos) } ?: 0.0
-            s -= 14 * Math.log10(1 + d / 1000) // 1 km −4, 10 km −15, 100 km −28
+            // towns are where people drive far to: "ναυπλιο" is Nafplio 140 km away, not the Ναυπλίου
+            // street round the corner (Greek streets are named after towns), which still comes next
+            val far = when (p.town) { 3 -> 0.3; 2 -> 0.6; 1 -> 0.85; else -> 1.0 }
+            s -= far * 14 * Math.log10(1 + d / 1000) // 1 km −4, 10 km −15, 100 km −28 (a town: −8)
+            if (fit >= 0.99) s += when (p.town) { 3 -> 10; 2 -> 4; 1 -> 1; else -> 0 }
+            // the whole name, exactly as typed (by sound): "Ναύπλιο" over "Ναύπλιο - Τολό"
+            if (whole.isNotEmpty() && sound(greeklish(p.name)).filter { it.isLetterOrDigit() } == whole) s += 6
             if (area != null && d < 5000) s += 8
             if (src == SRC_TOMTOM || src == SRC_OPEN) s += 1 // richer data (address, entrance)
             // "lidl" → the shop "Lidl …" before "Parking Lidl"
@@ -587,7 +605,11 @@ object Places {
         val out = ArrayList<Place>()
         for (c in all) {
             val i = out.indexOfFirst { samePlace(it, c.p) }
-            if (i >= 0) { if (out[i].entry == null && c.p.entry != null) out[i] = out[i].copy(entry = c.p.entry); continue }
+            if (i >= 0) {
+                if (out[i].entry == null && c.p.entry != null) out[i] = out[i].copy(entry = c.p.entry)
+                if (c.p.town > out[i].town) out[i] = out[i].copy(town = c.p.town)
+                continue
+            }
             out += c.p
         }
         // the ones that fit; if none do, the best guesses still show
@@ -685,6 +707,8 @@ object Places {
         val q = Query(core)
         val fTom = finders.submit(java.util.concurrent.Callable { tryTomtom(query, focus, !full) }) // the whole text: TomTom knows the areas
         val fPho = finders.submit(java.util.concurrent.Callable { tryPhoton(core, focus) })
+        val fTown = if (q.number != null || q.words.size > 3) null
+            else finders.submit(java.util.concurrent.Callable { try { photon(core, focus, townsOnly = true) } catch (e: Exception) { null } })
         val fAddr = finders.submit(java.util.concurrent.Callable { try { address(query, near) } catch (e: Exception) { null } })
         // the places squares there (downloaded the first time a far area is searched)
         if (area != null && OpenPlaces.ready) try { OpenPlaces.prepare(area.pos) } catch (_: Exception) {}
@@ -695,7 +719,8 @@ object Places {
         val tom = get(fTom, 7000)
         val pho = get(fPho, if (tom.isNullOrEmpty()) 4000 else 1500)
         val addr = get(fAddr, 5000)
-        var osm = pho.orEmpty()
+        val towns = fTown?.let { get(it, 1200) }.orEmpty()
+        var osm = pho.orEmpty() + towns
         if (tom.isNullOrEmpty() && osm.isEmpty() && open.isEmpty() && tiles.isEmpty() && addr == null) {
             osm = try { nominatim(core, focus) } catch (e: Exception) { return if (tom == null && pho == null) null else emptyList() }
         }
@@ -821,9 +846,10 @@ object Places {
     }
 
     /** Photon (OpenStreetMap data); short timeout, it's only a fallback now. */
-    fun photon(query: String, near: LatLng?): List<Place> {
+    fun photon(query: String, near: LatLng?, townsOnly: Boolean = false): List<Place> {
         val q = URLEncoder.encode(query.trim(), "UTF-8")
-        var url = "https://photon.komoot.io/api/?q=$q&limit=8"
+        // lang=default: the names as on the map (Ναύπλιο, not Nafplio)
+        var url = "https://photon.komoot.io/api/?q=$q&lang=default&limit=" + if (townsOnly) "4&osm_tag=place" else "8"
         if (near != null) url += "&lat=${near.lat}&lon=${near.lon}&zoom=12&location_bias_scale=0.3"
         val features = JSONObject(Http.get(url, timeout = 3000)).getJSONArray("features")
         val out = mutableListOf<Place>()
@@ -841,7 +867,12 @@ object Places {
                 s("state").takeIf { s("city") == null },
                 s("country"),
             ).distinct().joinToString(", ")
-            out += Place(name, address, LatLng(c.getDouble(1), c.getDouble(0)), icon(s("osm_key"), s("osm_value")))
+            val town = if (s("osm_key") != "place") 0 else when (s("osm_value")) {
+                "city", "town" -> 3
+                "village", "island" -> 2
+                else -> 1 // suburb, quarter, neighbourhood, hamlet, locality
+            }
+            out += Place(name, address, LatLng(c.getDouble(1), c.getDouble(0)), icon(s("osm_key"), s("osm_value")), town = town)
         }
         return out.distinctBy { it.name + "|" + it.address }
     }
@@ -1203,12 +1234,12 @@ object Http {
         c.readTimeout = timeout
         c.setRequestProperty("User-Agent", "GameRoute/1.0 (Android; personal use)")
         c.setRequestProperty("Accept-Language", java.util.Locale.getDefault().language)
+        // read to the end and closed (not disconnected): the connection goes back to the pool, so
+        // the next request to the same server skips the TCP + TLS handshake (≈0.3–0.8 s on mobile data)
         try {
             if (c.responseCode != 200) throw RuntimeException("HTTP ${c.responseCode}")
             return c.inputStream.bufferedReader().use { it.readText() }
-        } finally {
-            c.disconnect()
-        }
+        } catch (e: Exception) { c.disconnect(); throw e }
     }
 
     fun post(url: String, body: String, contentType: String = "application/json", timeout: Int = 20000): String {
@@ -1223,9 +1254,7 @@ object Http {
             c.outputStream.use { it.write(body.toByteArray()) }
             if (c.responseCode != 200) throw RuntimeException("HTTP ${c.responseCode}")
             return c.inputStream.bufferedReader().use { it.readText() }
-        } finally {
-            c.disconnect()
-        }
+        } catch (e: Exception) { c.disconnect(); throw e }
     }
 }
 

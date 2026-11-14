@@ -186,6 +186,36 @@ object Router {
     @Volatile var lastSource = "OSRM"
         private set
 
+    private val racers = java.util.concurrent.Executors.newCachedThreadPool(Bg.factory("route"))
+
+    /**
+     * A reroute, as fast as possible: OSRM, and if it hasn't answered in [headStart] ms TomTom too;
+     * the first good answer wins (no more waiting out OSRM's 8 s timeout when it's having a slow moment).
+     */
+    fun quick(from: LatLng, to: LatLng, heading: Float?, via: List<LatLng>, headStart: Long = 1200): List<RouteOption> {
+        if (!Traffic.active) return routes(from, to, false, heading, reroute = true, via = via)
+        val done = java.util.concurrent.ExecutorCompletionService<Pair<String, List<RouteOption>?>>(racers)
+        done.submit { "OSRM" to try { Osrm.routes(from, to, false, heading, true, via).takeIf { it.isNotEmpty() } } catch (e: Exception) { null } }
+        var running = 1
+        var tomtomAsked = false
+        fun askTomTom() {
+            tomtomAsked = true; running++
+            done.submit { "TomTom" to try { TomTomRoute.routes(from, to, false, heading, via).takeIf { it.isNotEmpty() } } catch (e: Exception) { null } }
+        }
+        val until = System.currentTimeMillis() + 12_000
+        while (running > 0) {
+            val wait = if (!tomtomAsked) headStart else until - System.currentTimeMillis()
+            if (wait <= 0) break
+            val f = done.poll(wait, java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (f == null) { if (!tomtomAsked) { askTomTom(); continue } else break }
+            running--
+            val (src, list) = try { f.get() } catch (e: Exception) { "" to null }
+            if (list != null) { lastSource = src; return list }
+            if (!tomtomAsked) askTomTom() // OSRM failed fast: TomTom now
+        }
+        throw RuntimeException("No route")
+    }
+
     fun routes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float? = null, reroute: Boolean = false, via: List<LatLng> = emptyList()): List<RouteOption> {
         val first = try { Osrm.routes(from, to, alternatives, heading, reroute, via).takeIf { it.isNotEmpty() } } catch (e: Exception) { null }
         if (first != null) { lastSource = "OSRM"; return first }

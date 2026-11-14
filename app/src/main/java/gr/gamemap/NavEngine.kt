@@ -404,6 +404,24 @@ object NavEngine {
      * After leaving the route, pick the option that carries on the way the driver went:
      * no early turn-back, and as little of the abandoned route as possible.
      */
+    /** A new route that starts by pointing back, or rejoins the old route behind the car. */
+    private fun pullsBack(r: RouteOption, heading: Float?, old: RouteOption?): Boolean {
+        val p = r.points
+        if (p.size < 2) return false
+        if (heading != null) {
+            val i = r.cum.indexOfFirst { it > 150 }.let { if (it < 1) p.size - 1 else it }
+            val diff = Math.abs(((Geo.bearing(p[0], p[i]) - heading + 540) % 360) - 180)
+            if (diff > 100) return true
+        }
+        if (old != null) {
+            val end = (nearest + 1).coerceAtMost(old.points.size)
+            val behind = old.points.subList(maxOf(0, end - 400), end)
+            val sample = p.filterIndexed { k, _ -> k % 8 == 0 }.take(40)
+            if (sample.count { q -> behind.any { Geo.distance(it, q) < 25 } } >= 4) return true
+        }
+        return false
+    }
+
     private fun pickForward(list: List<RouteOption>, heading: Float?, old: RouteOption?): RouteOption? {
         if (list.size <= 1) return list.firstOrNull()
         val best = list.first()
@@ -486,9 +504,18 @@ object NavEngine {
             // from where the car is now (the request may have waited a moment)
             val here = LocationTracker.position ?: from
             val h = heading()
+            val via = stops.map { it.pos }
             val r = try {
-                val list = preferAllowed(Router.routes(here, dest, alternatives = reroute || wantsAlternatives, heading = h, reroute = reroute, via = stops.map { it.pos }).also { Tolls.annotate(it) })
-                if (reroute) pickForward(list, h, current) else list.firstOrNull()
+                if (reroute && !wantsAlternatives) {
+                    // one route, raced (OSRM / TomTom): ~3–6× quicker than asking for alternatives.
+                    // Only if it would send the car back the way it came, ask again for the choices.
+                    val q = Router.quick(here, dest, h, via).also { Tolls.annotate(it) }.firstOrNull()
+                    if (q != null && !pullsBack(q, h, current)) q
+                    else pickForward(preferAllowed(Router.routes(here, dest, alternatives = true, heading = h, reroute = true, via = via).also { Tolls.annotate(it) }), h, current) ?: q
+                } else {
+                    val list = preferAllowed(Router.routes(here, dest, alternatives = reroute || wantsAlternatives, heading = h, reroute = reroute, via = via).also { Tolls.annotate(it) })
+                    if (reroute) pickForward(list, h, current) else list.firstOrNull()
+                }
             } catch (e: Exception) { null }
             main.post {
                 if (destination != dest || seq != routeSeq) return@post
@@ -646,7 +673,9 @@ object NavEngine {
         val turnedOff = moving && bestD > maxOf(12.0, accuracy * 0.8) &&
             kotlin.math.abs(Geo.angleDiff(l.bearing, segBearing)) > 50 && !nearRouteTurn(best, l.bearing)
         val wrongWay = moving && bestD < 30 && kotlin.math.abs(Geo.angleDiff(l.bearing, segBearing)) > 120
-        offRouteCount = if (far || turnedOff || wrongWay) offRouteCount + (if (bestD > 100) 2 else 1) else 0
+        // clearly off (100 m, or 50 m with a sharp fix): straight away, without waiting for a second fix
+        val clearly = bestD > 100 || (bestD > 50 && accuracy < 20)
+        offRouteCount = if (far || turnedOff || wrongWay) offRouteCount + (if (clearly) 2 else 1) else 0
         if (offRouteCount >= 2 && !loading && System.currentTimeMillis() - lastRouteAt > 4_000) {
             offRouteCount = 0
             offer = null
