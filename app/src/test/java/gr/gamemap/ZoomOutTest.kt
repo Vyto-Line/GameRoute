@@ -26,9 +26,9 @@ class ZoomOutTest {
         val looper = shadowOf(Looper.getMainLooper())
         val athens = LatLng(37.9755, 23.7348)
         LocationTracker.onLocationChanged(Location("gps").apply { latitude = athens.lat; longitude = athens.lon; accuracy = 5f; time = System.currentTimeMillis() })
-        for ((style, dark) in listOf(Theme.values().first() to false, Theme.NEON_NOIR to true)) {
+        for ((style, dark) in listOf(Theme.values().first() to false, Theme.NEON_NOIR to true, Theme.BLOCKY to false, Theme.RETRO to true)) {
             MapState.setTheme(style); MapState.setLightMode(if (dark) MapState.LightMode.DARK else MapState.LightMode.LIGHT)
-            for (z in listOf(MapState.MIN_ZOOM, 3.5, 5.5)) {
+            for (z in listOf(MapState.MIN_ZOOM, 3.5, 5.5, 7.2)) {
                 MapState.zoomBy(z - MapState.targetZoom)
                 repeat(120) { looper.idleFor(java.time.Duration.ofMillis(60)); val b = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888); root.draw(Canvas(b)); Thread.sleep(60) }
                 val bmp = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888); root.draw(Canvas(bmp))

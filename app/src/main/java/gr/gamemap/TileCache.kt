@@ -37,6 +37,7 @@ object TileCache {
 
     fun init(ctx: Context) {
         VectorSource.init(ctx)
+        Countries.init(ctx)
         Traffic.init(ctx)
         tilePx = if (ctx.resources.displayMetrics.density >= 1.5f) 512 else 256
     }

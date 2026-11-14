@@ -81,7 +81,10 @@ class Labels {
 
     fun draw(c: Canvas, cam: MapRenderer.Camera, z: Int, area: Rect, d: Float, theme: Theme) {
         val st = theme.style
-        if (!st.labels || theme.pixel > 1) return
+        // zoomed out to countries: names in every style (also those that hide street names)
+        val overview = z <= 7
+        val plain = !st.labels || theme.pixel > 1 || st.label == 0
+        if (plain && !overview) return
         val tilePx = TileCache.tilePx
         val dz = VectorSource.dataZoom(z)
 
@@ -91,19 +94,19 @@ class Labels {
         val ax0 = ((cam.px - reach) / dataPx).toInt(); val ax1 = ((cam.px + reach) / dataPx).toInt()
         val ay0 = ((cam.py - reach) / dataPx).toInt(); val ay1 = ((cam.py + reach) / dataPx).toInt()
         val tiles = ArrayList<Triple<Int, Int, VectorTile>>()
-        val keyB = StringBuilder("$z/")
+        val keyB = StringBuilder("$z/${gr.gamemap.L.greek}/")
         for (ay in ay0..ay1) for (ax in ax0..ax1) {
             val vt = VectorSource.peek(dz, ax, ay) ?: continue
             tiles += Triple(ax, ay, vt); keyB.append(ax).append(',').append(ay).append(';')
         }
         val key = keyB.toString()
-        if (key != cacheKey) { cacheKey = key; cands = collect(tiles, z, dz, dataPx) }
+        if (key != cacheKey) { cacheKey = key; cands = (if (overview) countries(z, cam.world) else emptyList()) + collect(tiles, z, dz, dataPx) }
 
         text.typeface = if (theme.serif) Typeface.create(Typeface.SERIF, Typeface.BOLD_ITALIC)
         else Typeface.create("sans-serif-condensed", Typeface.BOLD)
-        text.color = st.label
+        text.color = if (plain) (if (MapState.dark) android.graphics.Color.WHITE else android.graphics.Color.rgb(28, 28, 32)) else st.label
         halo.typeface = text.typeface
-        halo.color = st.labelHalo
+        halo.color = if (plain) (if (MapState.dark) android.graphics.Color.argb(220, 0, 0, 0) else android.graphics.Color.argb(230, 255, 255, 255)) else st.labelHalo
         halo.strokeWidth = 3.5f * d
 
         placed.clear(); placedNames.clear(); boxUsed = 0
@@ -119,7 +122,7 @@ class Labels {
         nowShown.clear()
 
         for (cd in order) {
-            if (count >= 32) break
+            if (count >= (if (overview) 44 else 32)) break
             if (cd.maxX < vMinX || cd.minX > vMaxX || cd.maxY < vMinY || cd.minY > vMaxY) continue
             val n = minOf(cd.pts.size, screen.size)
             var i = 0
@@ -224,7 +227,7 @@ class Labels {
                 }
                 if (f.layer == "place" && f.type == 1) {
                     val (rank, size, minZ, maxZ) = when (f["class"]) {
-                        "country" -> Quad(-1, 16f, 2, 7)
+                        "country" -> continue // from the built-in list (every country, at every zoom out)
                         "city" -> Quad(0, 17f, 4, 15)
                         "town" -> Quad(1, 15f, 9, 16)
                         "village" -> Quad(2, 13.5f, 12, 17)
@@ -266,5 +269,41 @@ class Labels {
         return out.sortedWith(compareBy<Cand> { it.rank }.thenByDescending { (it.maxX - it.minX) + (it.maxY - it.minY) })
     }
 
+    /**
+     * Every country's name at its label point (Natural Earth), big ones first: the map data
+     * zoomed out only carries a few, depending on what's loaded. Three copies, for the world's wrap.
+     */
+    private fun countries(z: Int, world: Double): List<Cand> {
+        val out = ArrayList<Cand>()
+        for (k in Countries.list) {
+            if (z + 1.3 < k.minLabel) continue
+            val name = (if (gr.gamemap.L.greek) k.el else k.en).uppercase()
+            val size = when { k.rank <= 2 -> 15f; k.rank == 3 -> 14f; k.rank == 4 -> 13f; else -> 12f }
+            val y = Geo.y(k.lat, world)
+            for (wrap in -1..1) {
+                val x = Geo.x(k.lon, world) + wrap * world
+                out += Cand(name, doubleArrayOf(x, y), -10 + k.rank, true, size, x, y, x, y)
+            }
+        }
+        return out
+    }
+
     private data class Quad(val a: Int, val b: Float, val c: Int, val d: Int)
+}
+
+/** Country names and label points, from the app's assets (Natural Earth, public domain). */
+object Countries {
+    class C(val minLabel: Double, val rank: Int, val en: String, val el: String, val lon: Double, val lat: Double)
+    @Volatile var list: List<C> = emptyList()
+        private set
+
+    fun init(ctx: android.content.Context) {
+        if (list.isNotEmpty()) return
+        list = try {
+            ctx.assets.open("countries.tsv").bufferedReader().readLines().mapNotNull { line ->
+                val f = line.split('\t')
+                if (f.size < 6) null else C(f[0].toDouble(), f[1].toInt(), f[2], f[3], f[4].toDouble(), f[5].toDouble())
+            }
+        } catch (e: Exception) { emptyList() }
+    }
 }
