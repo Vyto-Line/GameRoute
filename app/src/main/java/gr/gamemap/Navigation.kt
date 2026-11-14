@@ -565,7 +565,8 @@ object Places {
         val d = Geo.distance(a.pos, b.pos)
         // a town: each service puts its point somewhere else in it (the centre, the town hall…)
         val townLike = a.town >= 2 || b.town >= 2
-        if (d > (if (townLike) 15_000.0 else 250.0)) return false
+        // (a municipality's middle can be 20 km from its town)
+        if (d > (if (townLike) 25_000.0 else 250.0)) return false
         val x = sound(greeklish(a.name)).filter { it.isLetterOrDigit() }
         val y = sound(greeklish(b.name)).filter { it.isLetterOrDigit() }
         // Patra / Patras, Ναύπλιο / Nafplio
