@@ -619,7 +619,11 @@ object Convoy {
     fun relative(r: Row): String {
         if (r.state == "arrived") return "arrived"
         if (r.stale) return "no signal"
-        if (r.state == "ready") return if (r.ready) "ready ✓" else "not ready yet"
+        if (r.state == "ready") return when {
+            r.ready -> "ready ✓"
+            members.values.any { it.state == "driving" && !it.stale } -> "not started" // the others are on their way
+            else -> "not ready yet"
+        }
         if (r.state == "own") return if (r.me) "on your own route" else "on their own route"
         if (r.me) return "you"
         val mine = if (onConvoyRoute) NavEngine.remainingDistance else return NavEngine.formatDistance(r.left.coerceAtLeast(0.0)) + " to go"
