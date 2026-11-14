@@ -144,7 +144,9 @@ object VectorRenderer {
             "rail", "transit" -> s.rail
             else -> s.path
         }
-        fun width(kind: RoadKind) = max(kind.minPx, kind.meters * 0.85f / mpp)
+        // zoomed out (regions, countries) the motorways are thin threads, not neon spaghetti
+        val thin = when { z <= 5 -> 0.4f; z == 6 -> 0.5f; z == 7 -> 0.65f; z == 8 -> 0.8f; else -> 1f }
+        fun width(kind: RoadKind) = max(kind.minPx * thin, kind.meters * 0.85f / mpp)
         val visible = drawOrder.mapNotNull { cls -> kinds[cls]?.takeIf { z >= it.minZoom }?.let { cls to it } }
 
         // glow or casing underneath everything, so junctions stay clean
@@ -153,7 +155,7 @@ object VectorRenderer {
             for ((alpha, extra) in listOf(40 to 9f, 70 to 4f)) for ((cls, kind) in visible) {
                 if (cls == "path" || cls == "track" || cls == "service") continue
                 line.color = roadColor(cls); line.alpha = alpha
-                line.strokeWidth = px(width(kind) + extra)
+                line.strokeWidth = px(width(kind) + extra * thin)
                 for (f in roads) if (f["class"] == cls) c.drawPath(pathOf(f), line)
             }
             line.alpha = 255
@@ -162,7 +164,7 @@ object VectorRenderer {
             line.color = cas
             for ((cls, kind) in visible) {
                 if (cls == "rail" || cls == "transit" || cls == "path" || cls == "track") continue
-                line.strokeWidth = px(width(kind) + 2.2f)
+                line.strokeWidth = px(width(kind) + 2.2f * thin)
                 for (f in roads) if (f["class"] == cls) c.drawPath(pathOf(f), line)
             }
         }

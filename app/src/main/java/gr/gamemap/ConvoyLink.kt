@@ -48,7 +48,7 @@ object ConvoyLink {
                     })
                     c.connect(MqttConnectOptions().apply {
                         isCleanSession = true; isAutomaticReconnect = true
-                        connectionTimeout = 10; keepAliveInterval = 30; maxReconnectDelay = 15_000
+                        connectionTimeout = 10; keepAliveInterval = 60; maxReconnectDelay = 15_000
                     })
                     c.subscribe("$topicBase/+", 0)
                     list += c

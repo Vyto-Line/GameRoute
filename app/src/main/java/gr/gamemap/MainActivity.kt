@@ -3020,6 +3020,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Parked.changed += stateListener
         Alerts.changed += stateListener
         Convoy.changed += stateListener
+        LocationTracker.changed += compassCheck
+        NavEngine.changed += compassCheck
         refreshChrome()
     }
 
@@ -3031,6 +3033,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Parked.changed -= stateListener
         Alerts.changed -= stateListener
         Convoy.changed -= stateListener
+        LocationTracker.changed -= compassCheck
+        NavEngine.changed -= compassCheck
         main.removeCallbacks(ticker)
         // in the background and not navigating: let the GPS rest
         LocationTracker.release(this, "phone")
@@ -3040,15 +3044,32 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        val sm = getSystemService(SensorManager::class.java)
-        sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL, 200_000) }
+        resumed = true
+        updateCompass()
     }
 
     override fun onPause() {
-        getSystemService(SensorManager::class.java).unregisterListener(this)
-        LocationTracker.setCompass(null)
+        resumed = false
+        updateCompass()
         super.onPause()
     }
+
+    private var resumed = false
+    private var compassOn = false
+
+    /**
+     * The compass turns the arrow only when standing still and not navigating; while driving the
+     * heading comes from the GPS. So the sensor (gyro + magnetometer) runs only then: battery.
+     */
+    private fun updateCompass() {
+        val want = resumed && !NavEngine.active && LocationTracker.speedMps < 1.5f
+        if (want == compassOn) return
+        compassOn = want
+        val sm = getSystemService(SensorManager::class.java) ?: return
+        if (want) sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL, 200_000) }
+        else { sm.unregisterListener(this); LocationTracker.setCompass(null); lastCompass = -999f }
+    }
+    private val compassCheck: () -> Unit = { updateCompass() }
 
     private val rot = FloatArray(9)
     private val remap = FloatArray(9)
@@ -3068,7 +3089,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         SensorManager.remapCoordinateSystem(rot, ax, ay, remap)
         SensorManager.getOrientation(remap, orient)
         val deg = ((Math.toDegrees(orient[0].toDouble()) + 360) % 360).toFloat()
-        if (abs(Geo.angleDiff(lastCompass, deg)) > 2f) {
+        if (abs(Geo.angleDiff(lastCompass, deg)) > 3f) { // hand tremor isn't worth a redraw
             lastCompass = deg
             LocationTracker.setCompass(deg)
         }
@@ -3212,9 +3233,10 @@ class GameMapView(ctx: Context) : View(ctx) {
         // full frame rate under the fingers; 30 fps is plenty for the gliding arrow and zooms
         // (a 120 Hz phone would otherwise draw the whole map 120 times a second while driving)
         if (renderer.animating) {
-            // slow or standing: 20 fps is enough and saves battery; 30 fps when really moving
-            if (MapState.gesture) postInvalidateOnAnimation()
-            else postInvalidateDelayed(if (LocationTracker.speedMps > 8f) 33 else 50)
+            // fingers on the map or a zoom gliding: full rate. Otherwise the arrow gliding between
+            // GPS fixes looks the same at 25 fps (fast) / 16 fps (slow): far fewer frames, less battery
+            if (MapState.gesture || renderer.interacting) postInvalidateOnAnimation()
+            else postInvalidateDelayed(if (LocationTracker.speedMps > 8f) 40 else 62)
         }
     }
 }

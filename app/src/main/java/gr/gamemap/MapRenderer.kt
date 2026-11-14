@@ -203,7 +203,8 @@ class MapRenderer(private val car: Boolean = false) {
         if (!Convoy.active) friendHits = emptyList()
         if (Convoy.active) {
             drawConvoyMembers(c, camera!!, area, d, bearing)
-            if (Convoy.anyMoving) animating = true // friends glide between their updates
+            // friends on screen glide between their updates (off screen: their next update redraws)
+            if (friendGliding) animating = true
         }
         prof("places", tp0); tp0 = System.nanoTime()
         if (theme == Theme.TRAILBLAZER && zoom >= 13.5) drawLandmarks(c, camera!!, center, area, d)
@@ -627,8 +628,9 @@ class MapRenderer(private val car: Boolean = false) {
         val times = HashMap<String, Long>()
     }
 
-    /** True while zooming or touching: draw what's cached, render new detail once it settles. */
-    private var interacting = false
+    /** A zoom gliding or fingers on the map: frames at full rate. */
+    var interacting = false
+        private set
     private var wasInteracting = false
     private var snapSeen = -1
     private var snapEpoch = 0
@@ -1386,14 +1388,18 @@ class MapRenderer(private val car: Boolean = false) {
     val convoyStrip = RectF()
 
     /** The others in the convoy: an arrow in their colour, name and speed. */
+    private var friendGliding = false
+
     private fun drawConvoyMembers(c: Canvas, cam: Camera, a: Rect, d: Float, bearing: Float) {
         val now = System.currentTimeMillis()
         val hits = ArrayList<Pair<RectF, Convoy.Member>>()
+        friendGliding = false
         for (m in Convoy.members.values) {
             if (m.state == "left") continue
             val p = m.display(now) ?: continue
             val (x, y) = toScreen(p, cam)
             if (x < -40 * d || y < -40 * d || x > a.right + 40 * d || y > a.bottom + 40 * d) continue
+            if (m.moving) friendGliding = true
             c.save(); c.translate(x, y); c.rotate(m.shownHeading - bearing)
             val s = 12 * d
             path.reset()

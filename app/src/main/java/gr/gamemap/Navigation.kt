@@ -120,12 +120,15 @@ object LocationTracker : LocationListener {
         appCtx = ctx.applicationContext
         val lm = ctx.applicationContext.getSystemService(LocationManager::class.java) ?: return
         val looper = Looper.getMainLooper()
-        precise = NavEngine.active || NavEngine.planning || "car" in users || "nav" in users || Convoy.active
+        // the same rule as updateMode(): a convoy parked for a minute doesn't need GPS every second
+        precise = NavEngine.active || NavEngine.planning || "car" in users || "nav" in users || (Convoy.active && !convoyIdle)
         val fused = if (Build.VERSION.SDK_INT >= 31 && lm.allProviders.contains(LocationManager.FUSED_PROVIDER))
             LocationManager.FUSED_PROVIDER else null
         val plan: List<Triple<String, Long, Float>> = when {
+            // GPS every second; the fused/network one only as a backup (indoors, a cold start):
+            // its fixes are dropped anyway while GPS ones come, so asking every second was waste
             precise -> listOfNotNull(Triple(LocationManager.GPS_PROVIDER, 1000L, 0f),
-                (fused ?: LocationManager.NETWORK_PROVIDER).let { Triple(it, 1000L, 0f) })
+                (fused ?: LocationManager.NETWORK_PROVIDER).let { Triple(it, 5000L, 0f) })
             fused != null -> listOf(Triple(fused, 3000L, 5f))
             else -> listOf(Triple(LocationManager.GPS_PROVIDER, 3000L, 5f), Triple(LocationManager.NETWORK_PROVIDER, 5000L, 10f))
         }
