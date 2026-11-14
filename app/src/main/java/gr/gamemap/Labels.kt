@@ -61,7 +61,7 @@ class Labels {
     }
 
     private fun image(name: String): android.graphics.Bitmap {
-        val key = "$name|${text.textSize}|${text.color}|${halo.color}|${text.typeface.hashCode()}"
+        val key = "$name|${text.textSize}|${text.color}|${halo.color}|${text.letterSpacing}|${text.typeface.hashCode()}"
         images.get(key)?.let { return it }
         val pad = halo.strokeWidth + 2
         text.textAlign = Paint.Align.LEFT; halo.textAlign = Paint.Align.LEFT
@@ -75,6 +75,8 @@ class Labels {
         images.put(key, b)
         return b
     }
+    private var ink = 0
+    private var countryInk = 0
     private val pos = FloatArray(2)
     private val tan = FloatArray(2)
     private val screen = FloatArray(512)
@@ -107,6 +109,8 @@ class Labels {
         text.color = if (plain) (if (MapState.dark) android.graphics.Color.WHITE else android.graphics.Color.rgb(28, 28, 32)) else st.label
         halo.typeface = text.typeface
         halo.color = if (plain) (if (MapState.dark) android.graphics.Color.argb(220, 0, 0, 0) else android.graphics.Color.argb(230, 255, 255, 255)) else st.labelHalo
+        ink = text.color
+        countryInk = androidx.core.graphics.ColorUtils.blendARGB(ink, halo.color or (0xFF shl 24), 0.28f)
         halo.strokeWidth = 3.5f * d
 
         placed.clear(); placedNames.clear(); boxUsed = 0
@@ -133,10 +137,15 @@ class Labels {
                 i += 2
             }
             text.textSize = cd.textSize * d; halo.textSize = text.textSize
+            // countries in spaced capitals, a shade softer; cities and streets as written
+            val country = cd.rank < 0
+            text.letterSpacing = if (country) 0.14f else 0f; halo.letterSpacing = text.letterSpacing
+            text.color = if (country) countryInk else ink
             val ok = if (cd.place) placePoint(c, cd, area, d) else placeStreet(c, cd, n, area, d)
             if (ok) { count++; nowShown[cd.id] = shownAt[cd.id] ?: frameNow }
         }
         val t = shownAt; shownAt = nowShown; nowShown = t
+        text.letterSpacing = 0f; halo.letterSpacing = 0f
         if (flipped.size > 600) flipped.clear()
         bmpPaint.alpha = 255
     }
@@ -244,8 +253,8 @@ class Labels {
                         if (gr.gamemap.L.greek) f["name:el"] ?: f["name"] ?: name
                         else f["name:en"] ?: f["name_en"] ?: f["name:latin"] ?: name
                     } else name
-                    val upper = if (rank <= 1) shown.uppercase() else shown
-                    out += Cand(upper, w, rank, true, size, w[0], w[1], w[0], w[1])
+                    // capitals are for countries; towns read as written ("Larissa", not "LARISSA")
+                    out += Cand(shown, w, rank, true, size, w[0], w[1], w[0], w[1])
                 } else if (f.layer == "transportation_name" && f.type == 2 && z >= 15) {
                     val rank = when (f["class"]) {
                         "motorway", "trunk" -> 4; "primary" -> 5; "secondary" -> 6; "tertiary" -> 7

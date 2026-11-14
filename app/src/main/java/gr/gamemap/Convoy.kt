@@ -625,7 +625,7 @@ object Convoy {
             else -> "not ready yet"
         }
         if (r.state == "own") return if (r.me) "on your own route" else "on their own route"
-        if (r.me) return "you"
+        if (r.me) return if (onConvoyRoute) NavEngine.formatDistance(NavEngine.remainingDistance) + " to go" else "" // the name says "You" already
         val mine = if (onConvoyRoute) NavEngine.remainingDistance else return NavEngine.formatDistance(r.left.coerceAtLeast(0.0)) + " to go"
         val d = mine - r.left
         if (r.kmh == 0) return "stopped"
