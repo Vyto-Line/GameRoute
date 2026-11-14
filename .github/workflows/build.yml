@@ -18,6 +18,11 @@ jobs:
     steps:
       - name: Get code
         run: git clone --depth 1 --branch "${{ github.ref_name }}" "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" src
+      - name: Java 17 (the runners' default moved to 25, which Gradle 8.14 can't run)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
       - name: Set up Gradle 8.14 (the Android plugin doesn't work with Gradle 9.6+ yet)
         uses: gradle/actions/setup-gradle@v4
         with:
