@@ -102,6 +102,8 @@ object NavEngine {
         private set
     private var tripStart = 0L
     private var tripMeters = 0.0
+    /** The first route's length (the trip as asked for). */
+    private var tripPlanned = -1.0
     private var tripSaved = 0
     private var tripBonus = 0
     private var lastPos: LatLng? = null
@@ -112,10 +114,15 @@ object NavEngine {
         changed.fire()
     }
 
+    /** Trips shorter than this earn no XP (else a few quick 100 m "trips" would farm levels). */
+    const val MIN_XP_METERS = 200.0
+
     private fun finishTrip() {
         val secs = ((System.currentTimeMillis() - tripStart) / 1000).toInt()
         val levelBefore = Explorer.level
-        val xp = 10 + (tripMeters / 1000 * 5).toInt() + tripBonus
+        // short by the route asked for, or by what was really driven (GPS wobble while parked adds a little)
+        val tooShort = tripMeters < MIN_XP_METERS || (tripPlanned >= 0 && tripPlanned < MIN_XP_METERS)
+        val xp = if (tooShort) 0 else 10 + (tripMeters / 1000 * 5).toInt() + tripBonus
         Explorer.addXp(xp)
         lastTrip = Explorer.Trip(
             destinationName, System.currentTimeMillis(), secs, tripMeters, tripSaved,
@@ -303,7 +310,7 @@ object NavEngine {
         stops.clear()
         Places.addRecent(place)
         lastTrip = null
-        tripStart = System.currentTimeMillis(); tripMeters = 0.0; tripSaved = 0; tripBonus = 0; lastPos = null
+        tripStart = System.currentTimeMillis(); tripMeters = 0.0; tripSaved = 0; tripBonus = 0; lastPos = null; tripPlanned = -1.0
         Explorer.tripFound = 0
         parkingReady = false
         destination = place.goal // the entrance on the street, when known
@@ -535,6 +542,7 @@ object NavEngine {
 
     private fun apply(r: RouteOption, announce: Boolean) {
         current = r
+        if (tripPlanned < 0) tripPlanned = r.distance
         secondsPerMeter = if (r.distance > 0) r.duration / r.distance else 0.08
         trafficRatio = r.trafficSeconds?.let { (it / maxOf(r.duration, 1.0)).coerceIn(0.6, 4.0) } ?: trafficRatio
         trafficDelaySeconds = r.delaySeconds

@@ -226,7 +226,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     /** "Police reported here: still there?" as a car alert. */
     private val onProposal: () -> Unit = {
         gr.gamemap.Convoy.proposal?.let { p ->
-            CarToast.makeText(carContext, gr.gamemap.L.t(if (p.place == null) "${p.from} removed the destination" else "${p.from} chose: ${p.place.name}"), CarToast.LENGTH_LONG).show()
+            CarToast.makeText(carContext, gr.gamemap.L.t(if (p.place == null) "${p.from} removed the destination" else "${p.from} suggests: ${p.place.name}"), CarToast.LENGTH_LONG).show()
         }
     }
 

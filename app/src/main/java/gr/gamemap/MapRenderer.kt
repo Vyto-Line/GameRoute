@@ -1175,7 +1175,7 @@ class MapRenderer(private val car: Boolean = false) {
         val stats = listOf(
             NavEngine.formatDuration(trip.seconds.toDouble()) to "journey",
             NavEngine.formatDistance(trip.meters) to "travelled",
-            "+${trip.xp} XP" to "level ${Explorer.level}",
+            (if (trip.xp == 0) "No XP" else "+${trip.xp} XP") to (if (trip.xp == 0) "under 200 m" else "level ${Explorer.level}"),
         )
         val col = (w - 36 * d) / 3
         stats.forEachIndexed { i, (big, small) ->

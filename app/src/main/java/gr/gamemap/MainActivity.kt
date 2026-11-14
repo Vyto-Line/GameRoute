@@ -1317,7 +1317,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (!NavEngine.active && pl.icon != "👥") actions += Triple<Int, String, () -> Unit>(R.drawable.ic_act_convoy, "Convoy") {
             closePlace()
             // in a convoy already: this becomes where it goes; otherwise a new convoy there
-            if (Convoy.active) { Convoy.setDestination(pl); openSheet("convoy") }
+            if (Convoy.active) suggestToConvoy(pl)
             else withConvoyName { Convoy.create(pl); openSheet("convoy") }
         }
         placeCard.addView(LinearLayout(this).apply {
@@ -1550,7 +1550,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             NavEngine.formatDuration(trip.seconds.toDouble()) to "journey",
             NavEngine.formatDistance(trip.meters) to "travelled",
             (if (trip.savedSeconds >= 60) "${trip.savedSeconds / 60} min" else speed) to (if (trip.savedSeconds >= 60) "saved dodging traffic" else "average speed"),
-            "+${trip.xp} XP" to (if (trip.landmarks > 0) "${trip.landmarks} new landmark" + (if (trip.landmarks > 1) "s" else "") else "experience"),
+            if (trip.xp == 0) "No XP" to "trips under 200 m"
+            else "+${trip.xp} XP" to (if (trip.landmarks > 0) "${trip.landmarks} new landmark" + (if (trip.landmarks > 1) "s" else "") else "experience"),
         )
         for (rowIdx in 0..1) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -2497,10 +2498,23 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun startConvoyFromPreview() {
         val dest = NavEngine.planPlace ?: return
+        if (Convoy.active) { suggestToConvoy(dest); return }
         withConvoyName {
             Convoy.create(dest)
             openSheet("convoy") // (Invite is there; no share sheet popping up by itself)
         }
+    }
+
+    /**
+     * Already in a convoy: the place goes to the others as a suggestion (each gets a notification
+     * to confirm or cancel); never a second convoy.
+     */
+    private fun suggestToConvoy(pl: Place) {
+        Convoy.setDestination(pl)
+        val msg = if (Convoy.members.isEmpty()) L.t("Convoy's destination: ${pl.name}")
+            else L.t("Suggested to the convoy: ${pl.name}") + "\n" + L.t("The others are asked to confirm.")
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        openSheet("convoy")
     }
 
     private fun inviteToConvoy() {
@@ -2626,11 +2640,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("${p.from} chose where the convoy goes")
+            .setTitle("${p.from} suggests a place")
             .setMessage(place.name + (if (place.address.isNotBlank()) "\n" + place.address else "") +
                 (if (driving) "\n\n" + L.t("Your route will change to it.") else ""))
-            .setPositiveButton(if (driving) "Go there" else "Accept") { _, _ -> Convoy.accept(); refreshChrome() }
-            .setNegativeButton("Not now") { _, _ -> Convoy.decline() }
+            .setPositiveButton(if (driving) "Confirm · go there" else "Confirm") { _, _ -> Convoy.accept(); refreshChrome() }
+            .setNegativeButton("Cancel") { _, _ -> Convoy.decline() }
             .setCancelable(false)
             .showT()
     }
@@ -2943,7 +2957,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             .setTitle("Explorer · level ${Explorer.level}")
             .setMessage("${Explorer.xp} XP in total ($have / $of to the next level)\n" +
                 "${Explorer.foundCount} landmarks discovered\n\n" +
-                "Every trip earns XP (more for longer drives and for taking faster routes). " +
+                "Every trip of 200 m or more earns XP (more for longer drives and for taking faster routes). " +
                 "Pass close to museums, monuments, viewpoints and other landmarks to discover them: " +
                 "+25 XP each. In the Catch 'Em Trail style they show on the map as blue ? markers.")
             .setPositiveButton("OK", null).showT()
