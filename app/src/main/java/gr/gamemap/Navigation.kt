@@ -565,10 +565,11 @@ object Places {
         val d = Geo.distance(a.pos, b.pos)
         // a town: each service puts its point somewhere else in it (the centre, the town hall…)
         val townLike = a.town >= 2 || b.town >= 2
-        if (d > (if (townLike) 8000.0 else 250.0)) return false
+        if (d > (if (townLike) 15_000.0 else 250.0)) return false
         val x = sound(greeklish(a.name)).filter { it.isLetterOrDigit() }
         val y = sound(greeklish(b.name)).filter { it.isLetterOrDigit() }
-        if (townLike && d > 250) return x.isNotEmpty() && x == y
+        // Patra / Patras, Ναύπλιο / Nafplio
+        if (townLike && d > 250) return x.length >= 4 && y.length >= 4 && (x == y || ((x.startsWith(y) || y.startsWith(x)) && Math.abs(x.length - y.length) <= 2))
         if (x.isEmpty() || y.isEmpty()) return false
         if (x == y) return true
         return minOf(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x)) && Geo.distance(a.pos, b.pos) < 150
@@ -594,7 +595,7 @@ object Places {
             s -= far * 14 * Math.log10(1 + d / 1000) // 1 km −4, 10 km −15, 100 km −28 (a town: −8)
             if (fit >= 0.99) s += when (p.town) { 3 -> 10; 2 -> 4; 1 -> 1; else -> 0 }
             // the whole name, exactly as typed (by sound): "Ναύπλιο" over "Ναύπλιο - Τολό"
-            if (whole.isNotEmpty() && sound(greeklish(p.name)).filter { it.isLetterOrDigit() } == whole) s += 6
+            if (p.town > 0 && whole.isNotEmpty() && sound(greeklish(p.name)).filter { it.isLetterOrDigit() } == whole) s += 6
             if (area != null && d < 5000) s += 8
             if (src == SRC_TOMTOM || src == SRC_OPEN) s += 1 // richer data (address, entrance)
             // "lidl" → the shop "Lidl …" before "Parking Lidl"
