@@ -46,6 +46,7 @@ object Icons {
     }
 
     private val doneKey = R.id.ic_done
+    private val drawnKey = R.id.ic_drawn
 
     fun applyTree(v: View) {
         if (v.visibility == View.GONE) return
@@ -59,11 +60,15 @@ object Icons {
         if (done == cur || done == MARK + cur) return
         val (e, rest) = split(cur) ?: run {
             // new text without an emoji: take away the icon this put there before
-            if (done?.startsWith(MARK) == true) tv.setCompoundDrawablesRelative(null, null, null, null)
+            if (done?.startsWith(MARK) == true) {
+                val mine = tv.getTag(drawnKey)
+                val rel = tv.compoundDrawablesRelative; val abs = tv.compoundDrawables
+                if (mine != null && (rel[0] === mine || abs[1] === mine)) tv.setCompoundDrawablesRelative(null, null, null, null)
+            }
             tv.setTag(doneKey, cur); return
         }
-        val dr = ContextCompat.getDrawable(tv.context, res(e)!!)?.mutate() ?: return
-        dr.setTint(tv.currentTextColor)
+        val inner = ContextCompat.getDrawable(tv.context, res(e)!!)?.mutate() ?: return
+        val dr = InkOf(tv, inner)
         if (rest.isEmpty()) {
             // an icon on its own (a list's icon column, a ✕ or ☆ button): centred
             val size = (tv.textSize * 1.2f).toInt()
@@ -78,7 +83,19 @@ object Icons {
             tv.setCompoundDrawablesRelative(dr, null, null, null)
         }
         tv.setTag(doneKey, MARK + tv.text.toString())
+        tv.setTag(drawnKey, dr)
     }
 
     private const val MARK = "\u0001"
+
+    /** The icon in its text's colour at every draw (the colour may be set after, or change with the theme). */
+    private class InkOf(private val tv: TextView, private val inner: android.graphics.drawable.Drawable) : android.graphics.drawable.Drawable() {
+        override fun draw(c: android.graphics.Canvas) { inner.setTint(tv.currentTextColor); inner.bounds = bounds; inner.draw(c) }
+        override fun setAlpha(alpha: Int) { inner.alpha = alpha }
+        override fun setColorFilter(cf: android.graphics.ColorFilter?) { inner.colorFilter = cf }
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+        override fun getIntrinsicWidth() = inner.intrinsicWidth
+        override fun getIntrinsicHeight() = inner.intrinsicHeight
+    }
 }

@@ -2,4 +2,5 @@
 <resources>
     <item name="tr_done" type="id"/>
     <item name="ic_done" type="id"/>
+    <item name="ic_drawn" type="id"/>
 </resources>
