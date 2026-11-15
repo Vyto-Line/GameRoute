@@ -2841,8 +2841,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(p, p / 2, p / 2, p / 2); background = bg(dim(22), radius = 14f)
             addView(label("CODE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding(0, 0, p, 0) })
-            addView(label(Convoy.pretty() ?: "", 26f, bold = true).apply { setTextColor(ink); letterSpacing = 0.12f; typeface = Typeface.MONOSPACE },
-                LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(label(Convoy.pretty() ?: "", 26f, bold = true).apply {
+                setTextColor(ink); letterSpacing = 0.12f; typeface = Typeface.MONOSPACE; maxLines = 1
+                setOnClickListener { showConvoyQr() } // the code itself opens the QR too
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(pill("▦ QR") { showConvoyQr() }.apply {
+                textSize = 14f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 12f)
+                contentDescription = L.t("Show the QR code"); minHeight = (40 * d).toInt()
+                val q = (10 * d).toInt(); setPadding(q, 0, q, 0)
+            }, LinearLayout.LayoutParams(WRAP_CONTENT, (40 * d).toInt()).apply { marginEnd = (4 * d).toInt() })
             addView(pill("Copy") {
                 val cm = getSystemService(android.content.ClipboardManager::class.java)
                 cm?.setPrimaryClip(android.content.ClipData.newPlainText("Convoy code", Convoy.pretty()))
@@ -3336,11 +3343,55 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setPadding(0, p / 3, 0, p / 3)
             addView(item("👥", "Invite friends", sub) { openSheet("friends") })
             addView(View(context).apply { setBackgroundColor(dim(50)) }, LinearLayout.LayoutParams(MATCH_PARENT, maxOf(1, d.toInt())).apply { marginStart = p; marginEnd = p })
-            addView(item("🔗", "Share the link", "For people who aren't friends yet") { inviteToConvoy() })
+            addView(item("▦", "Show QR code", "For people right next to you") { showConvoyQr() })
+            addView(View(context).apply { setBackgroundColor(dim(50)) }, LinearLayout.LayoutParams(MATCH_PARENT, maxOf(1, d.toInt())).apply { marginStart = p; marginEnd = p })
+            addView(item("🔗", "Share the link", "Send it in a message") { inviteToConvoy() })
         }
         L.translateTree(box); Icons.applyTree(box)
         pop = android.widget.PopupWindow(box, (290 * d).toInt(), WRAP_CONTENT, true).apply { elevation = 16 * d; isOutsideTouchable = true }
         pop.showAsDropDown(anchor, 0, -(anchor.height + 140 * d).toInt())
+    }
+
+    /**
+     * The convoy's QR, big: scanned with any camera it opens GameRoute and joins (no app: the convoy
+     * opens in the browser). The screen goes to full brightness while it shows (dim screens scan badly).
+     */
+    internal fun showConvoyQr() {
+        val link = Convoy.link() ?: return
+        val p = (20 * d).toInt()
+        val dlg = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(p + p / 4, p, p + p / 4, p + p / 4); setBackgroundColor(panel)
+        }
+        box.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(label("Join the convoy", 24f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(pill("✕") { dlg.dismiss() }.apply { setTextColor(ink); contentDescription = L.t("Close") })
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        box.addView(label("Scan with the phone's camera: it opens GameRoute and joins. No app? The convoy opens in the browser.", 15f).apply {
+            setTextColor(dim()); setPadding(0, p / 3, 0, p)
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        val side = minOf(resources.displayMetrics.widthPixels - 3 * p, (320 * d).toInt())
+        box.addView(android.widget.ImageView(this).apply {
+            setImageBitmap(qr(link, side)); contentDescription = L.t("QR code for the convoy ${Convoy.pretty()}")
+            val q = (16 * d).toInt(); setPadding(q, q, q, q); background = bg(Color.WHITE, radius = 16f)
+        }, LinearLayout.LayoutParams(side + (32 * d).toInt(), side + (32 * d).toInt()))
+        box.addView(label("CODE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.12f; setPadding(0, p, 0, 0) })
+        box.addView(label(Convoy.pretty() ?: "", 40f, bold = true).apply { setTextColor(ink); letterSpacing = 0.16f; typeface = Typeface.MONOSPACE })
+        Convoy.destination?.let { box.addView(label("🏁  ${it.name}", 15f, bold = true).apply { setTextColor(ink); setPadding(0, p / 3, 0, 0); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }) }
+        box.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        box.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(pill("Share the link") { dlg.dismiss(); inviteToConvoy() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 16f) },
+                LinearLayout.LayoutParams(0, (52 * d).toInt(), 1f).apply { marginEnd = p / 2 })
+            addView(pill("Done") { dlg.dismiss() }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 16f) },
+                LinearLayout.LayoutParams(0, (52 * d).toInt(), 1f))
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        L.translateTree(box); Icons.applyTree(box)
+        dlg.setContentView(box)
+        dlg.window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = 1f } } // only while it shows
+        dlg.show()
     }
 
     /** In the convoy list: add someone as a friend (or that you are, or asked already). */

@@ -71,6 +71,13 @@ class FriendsUiTest {
             .put(JSONObject().put("fid", "f4kostas").put("iid", "c").put("cv", Convoy.code).put("at", now).put("st", "sent"))
         RuntimeEnvironment.getApplication().getSharedPreferences("friends", Context.MODE_PRIVATE).edit().putString("sent", sent.toString()).commit()
         activity.openSheetForTest("convoy"); shot("fr_en_convoy"); call("closeSheet")
+        // the convoy's QR: a full-screen dialog (drawn on its own)
+        activity.showConvoyQr()
+        repeat(10) { looper.idleFor(java.time.Duration.ofMillis(60)) }
+        val dv = org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView
+        val qb = Bitmap.createBitmap(dv.width.coerceAtLeast(1), dv.height.coerceAtLeast(1), Bitmap.Config.ARGB_8888); dv.draw(Canvas(qb))
+        File(out, "fr_en_convoy_qr.png").outputStream().use { qb.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        org.robolectric.shadows.ShadowDialog.getLatestDialog().dismiss()
         activity.openSheetForTest("friends"); shot("fr_en_list_convoy"); call("closeSheet")
         Convoy.leave(quiet = true)
     }

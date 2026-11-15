@@ -25,7 +25,7 @@ object Icons {
         "⛪" to R.drawable.ic_i_church, "🏋" to R.drawable.ic_i_gym, "🔧" to R.drawable.ic_i_wrench, "🏥" to R.drawable.ic_i_hospital,
         "🛍" to R.drawable.ic_i_shop, "🏛" to R.drawable.ic_i_museum, "✈" to R.drawable.ic_i_plane, "🚉" to R.drawable.ic_i_train,
         "🏖" to R.drawable.ic_i_beach, "🌳" to R.drawable.ic_i_tree, "👤" to R.drawable.ic_i_person, "🚶" to R.drawable.ic_i_person,
-        "🔗" to R.drawable.ic_i_link, "🕘" to R.drawable.ic_i_clock, "⛔" to R.drawable.ic_i_none, "🚫" to R.drawable.ic_i_none,
+        "🔗" to R.drawable.ic_i_link, "▦" to R.drawable.ic_i_qr, "🕘" to R.drawable.ic_i_clock, "⛔" to R.drawable.ic_i_none, "🚫" to R.drawable.ic_i_none,
         "🔊" to R.drawable.ic_volume_on, "🔇" to R.drawable.ic_volume_off, "🎮" to R.drawable.ic_theme, "🗺" to R.drawable.ic_set_map,
         "👑" to R.drawable.ic_i_trophy, "❤" to R.drawable.ic_i_heart, "👪" to R.drawable.ic_i_family, "⚽" to R.drawable.ic_i_ball,
         "💇" to R.drawable.ic_i_scissors, "🅿" to R.drawable.ic_i_parking, "✕" to R.drawable.ic_i_close, "＋" to R.drawable.ic_i_plus,

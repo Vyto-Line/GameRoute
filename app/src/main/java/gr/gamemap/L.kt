@@ -105,6 +105,7 @@ object L {
         "(.+) suggests a place" to "$1 προτείνει ένα μέρος",
         "(.+) wants to be friends" to "$1 θέλει να γίνετε φίλοι",
         "Convoy with (.+)" to "Κομβόι με $1",
+        "QR code for the convoy (.+)" to "Κωδικός QR για το κομβόι $1",
         "(\\d+) waiting" to "$1 σε αναμονή",
         "(.+) accepted your friend request" to "$1 αποδέχτηκε το αίτημα φιλίας",
         "(.+) invites you to a convoy" to "$1 σε προσκαλεί σε κομβόι",
@@ -346,6 +347,10 @@ object L {
         "City centre" to "Κέντρο πόλης", "Wider area" to "Ευρύτερη περιοχή",
         "Routes and search still need the internet." to "Οι διαδρομές και η αναζήτηση χρειάζονται ίντερνετ.",
         // convoy
+        "Join the convoy" to "Μπες στο κομβόι", "Show QR code" to "Εμφάνιση κωδικού QR", "Show the QR code" to "Εμφάνιση κωδικού QR",
+        "For people right next to you" to "Για όσους είναι δίπλα σου", "Send it in a message" to "Στείλ' το σε μήνυμα", "Done" to "Τέλος",
+        "Scan with the phone's camera: it opens GameRoute and joins. No app? The convoy opens in the browser." to "Σκανάρετε με την κάμερα του κινητού: ανοίγει το GameRoute και μπαίνετε. Χωρίς την εφαρμογή; Το κομβόι ανοίγει στον browser.",
+        "▦ QR" to "▦ QR", "CODE" to "ΚΩΔΙΚΟΣ",
         "Together" to "Μαζί", "friends online" to "φίλοι συνδεδεμένοι", "FRIENDS ONLINE" to "ΦΙΛΟΙ ΣΥΝΔΕΔΕΜΕΝΟΙ", "👥 Convoy" to "👥 Κομβόι",
         "Friends" to "Φίλοι", "YOUR CODE" to "Ο ΚΩΔΙΚΟΣ ΣΟΥ", "＋  Add a friend" to "＋  Προσθήκη φίλου", "Invites" to "Προσκλήσεις",
         "Join the convoy" to "Μπες στο κομβόι", "Requests" to "Αιτήματα", "wants to add you" to "θέλει να σε προσθέσει",
