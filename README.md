@@ -72,6 +72,8 @@ Live traffic · spoken directions in English and Greek · drive together in a co
 
 Positions are end-to-end encrypted with a key that comes from the code, so only people with the code can read them.
 
+**Friends.** Add the people you drive with by code, link or QR, or straight from the convoy list. See who's online and invite them to a convoy in one tap; they see your invite even with the app closed (within about 15 minutes) and you see when it's seen and accepted. Your location is never shared with friends: only inside a convoy you both join.
+
 ## 🚘 Android Auto
 
 <img src="docs/screenshots/car-drive.webp" alt="Driving on Android Auto" width="100%">

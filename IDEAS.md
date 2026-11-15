@@ -4,7 +4,7 @@ Mockups: the GameRoute mockups canvas, rows 18 (Friends) and 19 (Backup & restor
 
 ## Plan for 16 Nov 2026
 
-### Release 1: Friends
+### Release 1: Friends · done in build-79
 
 1. **Your ID and friend code** (e.g. VYTO-4821). The friendship is tied to a hidden permanent ID,
    not the code. "Make a new code": friends stay, old links/QR stop working.
