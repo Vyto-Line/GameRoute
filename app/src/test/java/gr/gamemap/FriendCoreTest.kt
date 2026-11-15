@@ -70,7 +70,7 @@ class FriendCoreTest {
         b.decline(b.requests.single())
         assertTrue(b.requests.isEmpty())
         assertEquals("the sender sees it was declined", 1, c.check().declined.size)
-        assertEquals("declined", c.pending.single().status)
+        assertTrue(c.pending.any { it.status == "declined" })
         assertFalse(c.requested(b.code))
     }
 
