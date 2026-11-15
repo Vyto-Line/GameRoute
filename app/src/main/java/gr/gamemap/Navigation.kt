@@ -529,6 +529,9 @@ object Places {
 
     /** Instant results, offline: names in the map data and the places squares on the phone, best first. */
     fun local(query: String, near: LatLng?): List<Place> {
+        // coordinates or a map link pasted in: that exact spot (the address comes with find())
+        SharedLocation.coordinates(query)?.let { return listOf(Place(SharedLocation.format(it), L.t("Coordinates"), it, "📍")) }
+        if (SharedLocation.hasLink(query)) return emptyList()
         val q = Query(query)
         val tiles = localNamed(q, near).map { e -> Place(e.name, when (e.kind) { 0 -> "Area"; 2 -> "Street"; else -> "" }, e.pos, e.icon, town = if (e.kind == 0) 1 else 0) }
         val open = try { OpenPlaces.search(q, near) } catch (e: Exception) { emptyList() }
@@ -732,6 +735,17 @@ object Places {
      * moves the search there. Used by the phone and the car. Null = no connection and nothing local.
      */
     fun find(query: String, near: LatLng?, full: Boolean, local: List<Place> = local(query, near)): List<Place>? {
+        // coordinates or a map link (short links too: followed online): the spot, with its address
+        if (SharedLocation.coordinates(query) != null || SharedLocation.hasLink(query)) {
+            val f = SharedLocation.find(query) ?: return emptyList()
+            f.pos?.let { pos ->
+                val a = try { addressAt(pos) } catch (e: Exception) { null }
+                val where = a?.let { listOf(it.name, it.address).filter { x -> x.isNotBlank() }.distinct().joinToString(", ") }.orEmpty()
+                return listOf(Place(f.label ?: SharedLocation.format(pos), where.ifBlank { L.t("Coordinates") }, pos, "📍"))
+            }
+            // a link that only names a place: search for that name
+            return f.query?.let { find(it, near, full) } ?: emptyList()
+        }
         val split = try { splitArea(query, near) } catch (e: Exception) { null }
         val core = split?.first ?: query
         val area = split?.second

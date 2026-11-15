@@ -18,6 +18,7 @@ object SharedLocation {
 
     /** Finds a location in [text]; follows short links (network: call off the main thread). */
     fun find(text: String): Found? {
+        coordinates(text)?.let { return Found(it, null, null) }
         val link = Regex("(geo:[^\\s]+|https?://[^\\s]+)").find(text)?.value
         if (link != null) {
             parse(link)?.let { return it }
@@ -58,6 +59,47 @@ object SharedLocation {
         if (name != null) return Found(null, null, name)
         return null
     }
+
+    /** A link or a geo: address somewhere in [text] (search box: worth asking [find], which may go online). */
+    fun hasLink(text: String): Boolean = Regex("(geo:|https?://)\\S+").containsMatchIn(text)
+
+    /**
+     * Coordinates typed or pasted on their own, no network: "37.9715, 23.7257", "37.9715 23.7257",
+     * 37°58'17.4"N 23°43'32.5"E (Google Maps' long-press), 37°58.29'N 23°43.54'E, 37.9715N 23.7257E,
+     * or a link / geo: address that has them inside.
+     */
+    fun coordinates(text: String): LatLng? {
+        val t = text.trim().trimEnd('.')
+        if (t.length > 2000) return null
+        Regex("^\\(?\\s*$num\\s*[,;\\s]\\s*$num\\s*\\)?$").find(t)?.let { m -> return ok(m.groupValues[1], m.groupValues[2]) }
+        // degrees (minutes (seconds)) and a letter for each
+        val one = "(\\d{1,3}(?:[.,]\\d+)?)\\s*°?\\s*(?:(\\d{1,2}(?:[.,]\\d+)?)\\s*['′’]\\s*)?(?:(\\d{1,2}(?:[.,]\\d+)?)\\s*(?:\"|″|”|'')\\s*)?([NSEWnsew])"
+        Regex("^$one\\s*[,;]?\\s*$one$").find(t)?.let { m ->
+            val g = m.groupValues
+            fun value(d: String, mi: String, se: String, h: String): Double {
+                fun n(x: String) = x.replace(',', '.').toDoubleOrNull() ?: 0.0
+                val v = n(d) + n(mi) / 60 + n(se) / 3600
+                return if (h.uppercase() == "S" || h.uppercase() == "W") -v else v
+            }
+            val a = value(g[1], g[2], g[3], g[4]); val ha = g[4].uppercase()
+            val b = value(g[5], g[6], g[7], g[8]); val hb = g[8].uppercase()
+            val (lat, lon) = when {
+                ha in setOf("N", "S") && hb in setOf("E", "W") -> a to b
+                ha in setOf("E", "W") && hb in setOf("N", "S") -> b to a
+                else -> return null
+            }
+            return if (lat in -90.0..90.0 && lon in -180.0..180.0) LatLng(lat, lon) else null
+        }
+        // a link that has them (no network: short links are left to find())
+        if (hasLink(t)) {
+            val link = Regex("(geo:|https?://)\\S+").find(t)!!.value
+            return try { parse(link)?.pos } catch (e: Exception) { null }
+        }
+        return null
+    }
+
+    /** "37.97150, 23.72570" */
+    fun format(p: LatLng): String = "%.5f, %.5f".format(java.util.Locale.US, p.lat, p.lon)
 
     private fun ok(a: String, b: String): LatLng? {
         val lat = a.toDoubleOrNull() ?: return null; val lon = b.toDoubleOrNull() ?: return null

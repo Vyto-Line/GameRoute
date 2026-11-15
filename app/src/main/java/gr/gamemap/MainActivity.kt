@@ -2394,6 +2394,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Explorer profile", "Level ${Explorer.level} · ${Explorer.xp} XP") { showProfile() },
                 if (Updater.ENABLED) settingRow("Check for updates", "build ${Updater.currentVersion(this)}") { checkForUpdates(manual = true) } else null,
                 settingRow("Language", L.label) { chooseLanguage() },
+                settingRow("Open map links in GameRoute", if (mapLinksOn()) "On" else "Off") { explainMapLinks() },
                 settingRow("Privacy policy", null) {
                     try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://vyto-line.github.io/GameRoute/privacy/"))) } catch (_: Exception) {}
                 },
@@ -2559,6 +2560,44 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 else NavEngine.plan(this, place)
             }
         }
+    }
+
+    /** Tapped Google Maps links open GameRoute (Android 12+: the person has to allow it in Android's settings). */
+    private fun mapLinksOn(): Boolean {
+        if (Build.VERSION.SDK_INT < 31) return true // older Android asks which app every time
+        return try {
+            val st = getSystemService(android.content.pm.verify.domain.DomainVerificationManager::class.java)
+                ?.getDomainVerificationUserState(packageName) ?: return false
+            st.isLinkHandlingAllowed && listOf("maps.google.com", "maps.app.goo.gl").any {
+                st.hostToStateMap[it] == android.content.pm.verify.domain.DomainVerificationUserState.DOMAIN_STATE_SELECTED
+            }
+        } catch (e: Exception) { false }
+    }
+
+    /** How to make tapped map links open here, with the two Android pages one tap away. */
+    private fun explainMapLinks() {
+        if (Build.VERSION.SDK_INT < 31) {
+            AlertDialog.Builder(this).setTitle("Open map links in GameRoute")
+                .setMessage("When you tap a Google Maps, Apple Maps, Waze or geo: link, Android asks which app to use: pick GameRoute (and \"Always\" if you like).\n\nYou can also share any link or coordinates to GameRoute, or paste them in the search box.")
+                .setPositiveButton("OK", null).showT()
+            return
+        }
+        val mapsApp = "com.google.android.apps.maps"
+        val hasMaps = try { packageManager.getPackageInfo(mapsApp, 0); true } catch (e: Exception) { false }
+        val steps = (if (hasMaps) "1. Google Maps › Open by default: turn off \"Open supported links\".\n2. " else "") +
+            "GameRoute › Open by default: turn on \"Open supported links\", tap \"Add link\" and tick the maps addresses.\n\n" +
+            "Android lets only one app open these links${if (hasMaps) ", which is why Google Maps goes first" else ""}. Without this, you can still share a link to GameRoute or paste it in the search box."
+        val b = AlertDialog.Builder(this).setTitle("Open map links in GameRoute").setMessage(L.t(steps))
+            .setPositiveButton("GameRoute settings") { _, _ ->
+                try { startActivity(Intent(android.provider.Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, android.net.Uri.parse("package:$packageName"))) }
+                catch (e: Exception) { try { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))) } catch (_: Exception) {} }
+            }
+            .setNegativeButton("Close", null)
+        if (hasMaps) b.setNeutralButton("Google Maps settings") { _, _ ->
+            try { startActivity(Intent(android.provider.Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, android.net.Uri.parse("package:$mapsApp"))) }
+            catch (e: Exception) { try { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$mapsApp"))) } catch (_: Exception) {} }
+        }
+        b.showT()
     }
 
     /** Change the name the convoy sees (Settings › Convoy, or the convoy screen). */
