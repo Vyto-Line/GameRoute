@@ -540,7 +540,10 @@ object Places {
     class Query(text: String) {
         private val raw = text.trim().split(Regex("[\\s,]+")).filter { it.isNotEmpty() }
         val number: String? = raw.firstOrNull { w -> w.any { it.isDigit() } && w.length <= 5 }
-        val words: List<String> = raw.filter { w -> w.none { it.isDigit() } }
+        /** The words to find ("του", "the"… left out unless that's all there is). */
+        val words: List<String> = raw.filter { w -> w.none { it.isDigit() } }.let { all ->
+            all.filter { sound(greeklish(it)) !in stopWords && sound(it) !in stopWords }.ifEmpty { all }
+        }
         /** Each word as typed and as Greek, by sound. */
         val forms: List<List<String>> = words.map { w ->
             (listOf(sound(w), sound(greeklish(w))) + (synonyms[sound(greeklish(w))] ?: emptyList())).filter { f -> f.isNotEmpty() }.distinct()
@@ -600,6 +603,25 @@ object Places {
             "ναός", "temple", "κάστρο", "castle", "ιερά", "μονή", "monastery", "όρος", "mount", "φαράγγι", "gorge", "σπήλαιο", "cave",
             "αρχαίο", "αρχαία", "ancient", "θέατρο", "μουσείο", "museum", "το", "τα", "ο", "η", "οι", "the", "of", "του", "της", "των")
             .map { sound(greeklish(it)) }.toSet()
+    }
+
+    /**
+     * A sight named after a town that is far from where it's placed, with no town of that name near
+     * it: the places data sometimes puts a famous sight at the middle of the big city ("Sounion At
+     * The Temple Of Poseidon", "Σούνιο" in central Athens). Streets aren't checked (Greek streets
+     * are named after towns).
+     */
+    private fun misplaced(p: Place): Boolean {
+        val towns = gazetteer
+        if (towns.isEmpty()) return false
+        val core = nameWords(p.name).filter { it.length >= 5 && it !in genericWords && it !in stopWords }
+        fun same(a: String, b: String) = a == b || (minOf(a.length, b.length) >= 5 && (a.startsWith(b) || b.startsWith(a)) && Math.abs(a.length - b.length) <= 2)
+        for (w in core) {
+            val named = towns.filter { t -> nameWords(t.name).any { same(it, w) } }
+            if (named.isEmpty()) continue
+            if (named.all { Geo.distance(it.pos, p.pos) > 15_000 }) return true
+        }
+        return false
     }
 
     /** The same place from two sources: the same name (by sound, spaces aside) within 250 m. */
@@ -662,6 +684,8 @@ object Places {
             }
             // far away (another country) and not the name typed: not what anyone wants
             if (d > 1_500_000 && fit < 0.99) continue
+            // a sight in the places squares placed in the wrong town (Sounio's temple "in Athens")
+            if (src == SRC_OPEN && p.icon == "🏛" && misplaced(p)) continue
             if (area != null && d < 5000) s += 8
             if (src == SRC_TOMTOM || src == SRC_OPEN) s += 1 // richer data (address, entrance)
             all += C(p, s, if (isAddr && q.number != null) 1.0 else fit)
