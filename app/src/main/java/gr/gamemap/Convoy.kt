@@ -33,6 +33,9 @@ object Convoy {
         var arrivedAt: Long = 0,
         var seen: Long = 0,
     ) {
+        /** Their friend id and code (to add them as a friend from the convoy); blank on old versions. */
+        @Volatile var fid = ""
+        @Volatile var fc = ""
         /** On a route of their own: where to (so the others can join them). */
         @Volatile var ownDest: Place? = null
         /** Pressed "I'm ready" at the start (and when: the race starts 4 s after the last one). */
@@ -202,6 +205,8 @@ object Convoy {
         leave(quiet = true)
         setCode(c, null)
         publish(hello("ready"))
+        // invited to it by friends: they see "Joined"
+        if (Friends.ready && Friends.core.invites.any { it.convoy == c }) Friends.answer(c, "joined")
         return true
     }
 
@@ -307,13 +312,14 @@ object Convoy {
         else e.remove("convoyDest")
         e.apply()
         listen(c)
-        main.post { LocationTracker.updateMode(); NavService.update(appContext) } // GPS on, and kept on with the app closed
+        main.post { LocationTracker.updateMode(); NavService.update(appContext); Friends.start() } // GPS on, and kept on with the app closed
         changed.fire()
     }
 
     fun leave(quiet: Boolean = false) {
         val c = code ?: return
         if (!quiet) publish(JSONObject().put("t", "bye").put("id", myId).put("ts", System.currentTimeMillis()), c)
+        if (Friends.ready) Friends.leftConvoy(c) // my invites to it disappear on my friends' phones
         code = null; destination = null; members.clear()
         meReady = false; goAt = 0; main.removeCallbacks(countdown); proposal = null
         prefs().edit().remove("convoyCode").remove("convoyDest").apply()
@@ -332,6 +338,8 @@ object Convoy {
     private fun hello(state: String): JSONObject {
         val o = JSONObject().put("t", "pos").put("id", myId).put("n", myName.ifBlank { "Driver" })
             .put("st", state).put("ts", System.currentTimeMillis())
+        // so the others can add me as a friend (inside the encrypted convoy only)
+        if (Friends.ready) o.put("fid", Friends.core.fid).put("fc", Friends.core.code)
         destination?.let { o.put("dn", it.name).put("da", it.address).put("dlat", it.pos.lat).put("dlon", it.pos.lon).put("dt", destAt) }
             ?: if (destAt > 0) o.put("dt", destAt).put("dx", true) else null // removed (and when)
         LocationTracker.position?.let { o.put("lat", it.lat).put("lon", it.lon).put("h", LocationTracker.heading.toDouble()) }
@@ -470,6 +478,13 @@ object Convoy {
         if (ts != 0L && ts <= m.lastTs) return
         if (ts != 0L) m.lastTs = ts
         m.name = o.optString("n", m.name)
+        val fc = o.optString("fc")
+        if (fc.isNotBlank() && fc != m.fc) {
+            m.fid = o.optString("fid"); m.fc = fc
+            // remembered for "Drove with you" (Add a friend), once per person
+            if (Friends.ready) Friends.core.droveWith(m.fid, m.name, fc, destination?.name.orEmpty())
+            main.post { changed.fire() }
+        }
         if (o.has("lat")) {
             val now = System.currentTimeMillis()
             m.pos = LatLng(o.getDouble("lat"), o.getDouble("lon"))

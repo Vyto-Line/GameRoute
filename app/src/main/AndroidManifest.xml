@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- friends: the 15-minute check for invites keeps running after a restart -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Android Auto navigation app: draws its own map on the car screen -->
     <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
@@ -41,6 +43,13 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="gamemap" android:host="convoy" />
+            </intent-filter>
+            <!-- friend links: gamemap://friend/<code> (opened from the friend web page or its QR) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="gamemap" android:host="friend" />
             </intent-filter>
             <!-- locations from other apps: geo: links, map links, shared messages -->
             <intent-filter>
@@ -88,6 +97,12 @@
             </intent-filter>
         </activity>
 
+        <!-- friends: checks for invites about every 15 min with the app closed; "Not now" on an invite -->
+        <service
+            android:name=".Friends$FriendJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <receiver android:name=".Friends$FriendAction" android:exported="false" />
         <service
             android:name=".car.GameMapCarAppService"
             android:exported="true">

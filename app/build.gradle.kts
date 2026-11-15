@@ -78,6 +78,8 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.1")
     // MQTT: real-time convoy positions through a public broker
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
+    // QR codes for friend links (drawing only; pure Java, no camera)
+    implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
 }

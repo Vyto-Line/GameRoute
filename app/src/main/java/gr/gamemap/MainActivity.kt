@@ -569,6 +569,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
             chips.addView(v, LinearLayout.LayoutParams(WRAP_CONTENT, (40 * d).toInt()).apply { marginEnd = (8 * d).toInt() })
         }
+        // a friend's convoy invite, or friend requests: first, one tap to see them
+        if (Friends.ready && Friends.core.started) {
+            val inv = Friends.core.invites.firstOrNull { it.convoy != Convoy.code }
+            val req = Friends.core.requests.size
+            if (inv != null) chip("👥 " + L.t("${inv.from} invites you")) { openSheet("friends") }
+            else if (req > 0) chip("👥 " + L.t(if (req == 1) "1 friend request" else "$req friend requests")) { openSheet("friends") }
+        }
         // in a convoy: it comes first, with a quick way out (and the way in to its route)
         if (Convoy.active && !Convoy.onConvoyRoute) Convoy.destination?.let { d0 ->
             chip("➤ Join route · ${d0.name}") { NavEngine.start(this, d0); MapState.recenter() }
@@ -1542,6 +1549,24 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             val nth = when (place) { 1 -> "1st 👑"; 2 -> "2nd"; 3 -> "3rd"; else -> "${place}th" }
             tripCard.addView(label("Convoy: $nth of $of", 15f, bold = true).apply { setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, (6 * d).toInt(), 0, 0) })
         }
+        // the people I drove with who aren't friends yet: one tap to add
+        if (Friends.ready && Convoy.active) {
+            val c = Friends.core
+            val others = Convoy.members.values.filter { it.fc.isNotBlank() && !c.isFriend(it.fid) && it.fid !in c.blocked }
+            if (others.isNotEmpty()) {
+                tripCard.addView(label("DROVE WITH YOU", 11.5f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.1f; setPadding(0, (14 * d).toInt(), 0, (4 * d).toInt()) })
+                for (m in others.take(4)) tripCard.addView(LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, (4 * d).toInt(), 0, (4 * d).toInt())
+                    addView(avatar(m.name, m.fid, false, 32), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() })
+                    addView(label(m.name, 15f, bold = true).apply { setTextColor(ink) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                    if (c.requested(m.fc)) addView(label("Request sent", 13.5f).apply { setTextColor(dim()) })
+                    else addView(pill("＋ Add") { }.apply {
+                        textSize = 14f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 12f)
+                        setOnClickListener { v -> sendFriendRequest(m.fc, m.name) { (v as TextView).text = L.t("Request sent"); v.background = null; v.isEnabled = false } }
+                    })
+                })
+            }
+        }
         tripCard.addView(View(this).apply { setBackgroundColor(dim(50)) }, LinearLayout.LayoutParams(MATCH_PARENT, 1).apply {
             topMargin = (14 * d).toInt(); bottomMargin = (10 * d).toInt()
         })
@@ -1686,7 +1711,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         controls.visibility = if (planning || searching) View.GONE else View.VISIBLE
         val homeKey = "${t.name}|${MapState.dark}|${MapState.imperial}|$etaVersion|${Explorer.version}|${Explorer.xp}|${Places.recents().joinToString { it.name }}|" +
-            "${Places.saved("home")?.name}|${Places.saved("work")?.name}|${LocationTracker.position != null}|${Parked.get()?.at}|${Convoy.active}|${Convoy.members.size}|${Convoy.destination?.name}|${Convoy.onConvoyRoute}|${Places.labelled().joinToString { it.label + it.icon }}"
+            "${Places.saved("home")?.name}|${Places.saved("work")?.name}|${LocationTracker.position != null}|${Parked.get()?.at}|${Convoy.active}|${Convoy.members.size}|${Convoy.destination?.name}|${Convoy.onConvoyRoute}|${Places.labelled().joinToString { it.label + it.icon }}|" +
+            (if (Friends.ready && Friends.core.started) "${Friends.core.invites.joinToString { it.convoy + it.count }}|${Friends.core.requests.size}" else "")
         if (homeKey != lastHomeKey) {
             lastHomeKey = homeKey
             if (chipsScroll.visibility == View.VISIBLE) renderChips()
@@ -1711,6 +1737,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             "offline" -> renderOffline()
             "convoy" -> if (Convoy.counting) closeSheet() else renderConvoy() // the countdown shows on the map
             "quick" -> renderQuick()
+            "friends" -> renderFriends()
+            "addfriend" -> renderAddFriend()
             "fuelfilters" -> {} // drawn once when opened, so its switches keep their scroll place
         }
         val trip = NavEngine.lastTrip
@@ -1990,7 +2018,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun openSheet(kind: String) {
         if (kind != sheetKind) settingsPage = null
         // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
-        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""
+        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""
         sheetKind = kind
         if (sheetOverlay.visibility != View.VISIBLE) {
             // the sheet slides up over a fading-in shade
@@ -2313,7 +2341,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             "sharing" -> listOf(
                 settingRow("Your name in convoys", Convoy.myName.ifBlank { "Not set" }) { editConvoyName { showSettings() } },
                 settingRow("Convoy", if (Convoy.active) "On · ${Convoy.members.size + 1} drivers" else "Start or join") { openSheet("convoy") },
-            )
+                settingRow("Friends", if (Friends.core.started) L.t("${Friends.core.friends.size} friends") else L.t("Add friends")) { openSheet("friends") },
+            ) + (if (!Friends.core.started) emptyList() else listOf(
+                switchRow("Show me as online", Friends.core.showOnline) { Friends.setShowOnline(it) },
+                switchRow("Friends can invite me to convoys", Friends.core.allowInvites) { Friends.setAllowInvites(it) },
+                settingRow("My friend code", Friends.core.code) {
+                    getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("Friend code", Friends.core.code))
+                    Toast.makeText(this, L.t("Code copied"), Toast.LENGTH_SHORT).show()
+                },
+                settingRow("Make a new friend code", null) {
+                    AlertDialog.Builder(this).setTitle("Make a new friend code?").setMessage("Your friends stay. Old links and QR codes stop working.")
+                        .setPositiveButton("Make a new code") { _, _ -> Friends.newCode(); main.postDelayed({ showSettings() }, 300) }
+                        .setNegativeButton("Cancel", null).showT()
+                },
+                settingRow("Blocked", "${Friends.core.blocked.size}") { showBlocked() },
+            ))
             "app" -> listOfNotNull(
                 settingRow("Trip history", "${Explorer.history().size} trips") { openSheet("trips") },
                 settingRow("Explorer profile", "Level ${Explorer.level} · ${Explorer.xp} XP") { showProfile() },
@@ -2431,7 +2473,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** gamemap://convoy/<code> (from the convoy web page) joins the group. */
     private fun handleLink(i: Intent?) {
         if (i == null) return
+        // from a friends notification: join the convoy they invited me to, or open Friends
+        i.getStringExtra("friend_join")?.let { cv ->
+            i.removeExtra("friend_join"); Friends.cancelNotification(cv); main.post { joinConvoy(cv) }; return
+        }
+        if (i.getStringExtra("friends") != null) { i.removeExtra("friends"); main.post { openSheet("friends") }; return }
         val u = i.data
+        if (u != null && u.scheme == "gamemap" && u.host == "friend") {
+            val code = u.lastPathSegment ?: u.fragment ?: return
+            i.data = null
+            main.post { addFriendFromLink(code) }
+            return
+        }
         if (u != null && u.scheme == "gamemap" && u.host == "convoy") {
             val code = u.lastPathSegment ?: u.fragment ?: return
             main.post { joinConvoy(code) }
@@ -2668,7 +2721,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun renderConvoy() {
         val rows = Convoy.rows(accent)
-        val key = "${Convoy.code}|${Convoy.myName}|${Convoy.destination?.name}|${rows.joinToString { "${it.name}${it.kmh}${it.state}${it.eta / 60000}${(it.progress * 50).toInt()}${it.ready}${it.stale}" }}|${NavEngine.active}|${theme.name}|${MapState.dark}"
+        val fk = if (!Friends.ready) "" else Convoy.members.values.joinToString { m -> m.fc + Friends.core.isFriend(m.fid) + Friends.core.requested(m.fc) }
+        val key = "${Convoy.code}|${Convoy.myName}|${Convoy.destination?.name}|${rows.joinToString { "${it.name}${it.kmh}${it.state}${it.eta / 60000}${(it.progress * 50).toInt()}${it.ready}${it.stale}" }}|${NavEngine.active}|${theme.name}|${MapState.dark}|$fk"
         if (key == convoyKey && sheetHost.childCount > 0) return
         convoyKey = key
         sheetHost.removeAllViews()
@@ -2785,6 +2839,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 setTextColor(if (r.kmh == 0 && r.state == "driving") readable(Color.rgb(230, 60, 60)) else ink); setPadding(p, 0, p, 0)
             })
             row.addView(label(if (r.eta > 0) NavEngine.clock(r.eta) else "–", 15f, bold = true).apply { setTextColor(readable(Color.rgb(47, 180, 100))) })
+            if (!r.me) friendMark(r.id)?.let { row.addView(it) } // add as a friend, any time
             row.isClickable = true
             row.setOnClickListener { showFriend(r.id) }
             sheetHost.addView(row)
@@ -2794,7 +2849,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setTextColor(readable(accent)); setPadding(0, p / 2, 0, 0); setOnClickListener { editConvoyName() }
         })
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0) }
-        buttons.addView(pill("🔗 Invite") { inviteToConvoy() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 22f) },
+        lateinit var inviteBtn: TextView
+        inviteBtn = pill("👥 Invite ▴") { showInviteMenu(inviteBtn) }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 22f) }
+        buttons.addView(inviteBtn,
             LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p })
         buttons.addView(pill("Leave") { confirmLeaveConvoy() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 22f) },
             LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p })
@@ -2838,6 +2895,387 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sheetHost.addView(label("Positions update every second while moving, end-to-end encrypted: only people with the code can see them.", 12f).apply {
             setTextColor(dim()); setPadding(0, p, 0, 0)
         })
+    }
+
+    // ------------------------------------------------------------------ friends
+
+    private var friendsKey = ""
+    private val friendsListener: () -> Unit = { runOnUiThread { friendsKey = ""; refreshChrome() } }
+    private val friendsArrived: () -> Unit = { runOnUiThread { maybeAskInvite() } }
+    private var inviteAsked = ""
+
+    private fun since(at: Long): String {
+        val m = ((System.currentTimeMillis() - at) / 60_000).coerceAtLeast(0)
+        return when { m < 1 -> "just now"; m < 60 -> "$m min ago"; else -> "${m / 60} h ago" }
+    }
+
+    /** A round badge with someone's initial (their colour from their id). */
+    private fun avatar(name: String, fid: String, online: Boolean, size: Int = 40) = android.widget.FrameLayout(this).apply {
+        val pal = intArrayOf(Color.rgb(255, 146, 43), Color.rgb(77, 171, 247), Color.rgb(247, 131, 172), Color.rgb(99, 230, 190),
+            Color.rgb(177, 151, 252), Color.rgb(255, 212, 59), Color.rgb(47, 210, 122))
+        val col = pal[Math.floorMod(fid.hashCode(), pal.size)]
+        addView(label(name.trim().take(1).uppercase().ifBlank { "?" }, size * 0.4f, bold = true).apply {
+            gravity = Gravity.CENTER; setTextColor(Color.rgb(17, 17, 17)); background = bg(col, radius = size / 2f)
+        }, android.widget.FrameLayout.LayoutParams((size * d).toInt(), (size * d).toInt()))
+        if (online) addView(View(context).apply { background = bg(Color.rgb(72, 199, 116), panel, 2f, 7f) },
+            android.widget.FrameLayout.LayoutParams((13 * d).toInt(), (13 * d).toInt(), Gravity.END or Gravity.BOTTOM))
+    }
+
+    private fun friendsBody(): LinearLayout {
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val maxH = (resources.displayMetrics.heightPixels * 0.72).toInt()
+        sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        body.post { (body.parent as? View)?.let { sv -> if (body.height > maxH) { sv.layoutParams.height = maxH; sv.requestLayout() } } }
+        return body
+    }
+
+    private fun friendsSection(body: LinearLayout, title: String) =
+        body.addView(label(title.uppercase(), 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding((4 * d).toInt(), (16 * d).toInt(), 0, (4 * d).toInt()) })
+
+    private fun shareFriendLink() {
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, Friends.shareText()) }, L.t("Send your friend link")))
+    }
+
+    /** Friends: my code, invites, requests, who's online, one tap to invite to a convoy. */
+    private fun renderFriends() {
+        Friends.start()
+        val c = Friends.core
+        val cv = Convoy.code
+        val fr = c.friends.sortedWith(compareBy({ !c.isOnline(it.fid) }, { it.name.lowercase() }))
+        val key = "${c.code}|${fr.joinToString { it.fid + it.name + c.isOnline(it.fid) + (cv?.let { x -> c.sentTo(it.fid, x)?.status }) }}|" +
+            "${c.requests.joinToString { it.fid }}|${c.invites.joinToString { it.convoy + it.count }}|${c.pending.size}|$cv|${theme.name}|${MapState.dark}"
+        if (key == friendsKey && sheetHost.childCount > 0) return
+        friendsKey = key
+        sheetHost.removeAllViews()
+        sheetHost.background = bg(panel, radius = 22f, topOnly = true)
+        sheetHost.addView(sheetHeader("Friends"))
+        val p = (12 * d).toInt()
+        val body = friendsBody()
+        // my code, to give to someone
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(p, p / 2, p / 2, p / 2); background = bg(dim(22), radius = 14f)
+            addView(label("YOUR CODE", 11f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding(0, 0, p, 0) })
+            addView(label(c.code, 20f, bold = true).apply { setTextColor(ink); letterSpacing = 0.06f; typeface = Typeface.MONOSPACE }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(pill("Share") { shareFriendLink() }.apply { textSize = 14f; setTextColor(readable(accent)) })
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 })
+        body.addView(pill("＋  Add a friend") { openSheet("addfriend") }.apply {
+            setTextColor(onAccent(accent)); background = bg(accent, radius = 22f)
+        }, LinearLayout.LayoutParams(MATCH_PARENT, (50 * d).toInt()).apply { topMargin = p })
+        // convoy invites (current ones only; several to the same convoy are one)
+        val inv = c.invites
+        if (inv.isNotEmpty()) {
+            friendsSection(body, "Invites")
+            for (i in inv) body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(p, p, p, p); background = bg(dim(22), accent, 1.5f, 14f)
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                    addView(avatar(i.from, i.fid, c.isOnline(i.fid)), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(label(i.from + (if (i.dest.isNotBlank()) " · " + L.t("convoy to ${i.dest}") else " · " + L.t("convoy")), 15f, bold = true).apply { setTextColor(ink) })
+                        addView(label((if (i.count > 1) L.t("${i.count} invites") + " · " + L.t("latest") + " " else "") + L.t(since(i.at)), 13f).apply { setTextColor(dim()) })
+                    }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
+                    addView(pill("Join the convoy") { closeSheet(); joinConvoy(i.convoy) }.apply { textSize = 15f; setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) },
+                        LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.3f).apply { marginEnd = p })
+                    addView(pill("Not now") { Friends.answer(i.convoy, "no") }.apply { textSize = 15f; setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 14f) },
+                        LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
+            Friends.markSeen(inv)
+        }
+        // requests to me
+        if (c.requests.isNotEmpty()) {
+            friendsSection(body, "Requests")
+            for (r in c.requests) body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, p / 2)
+                addView(avatar(r.name, r.fid, false), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(label(r.name, 15f, bold = true).apply { setTextColor(ink) })
+                    addView(label("wants to add you", 13f).apply { setTextColor(dim()) })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(pill("Accept") { Friends.accept(r) }.apply { textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 12f) })
+                addView(pill("✕") { Friends.decline(r) }.apply { textSize = 14f; setTextColor(ink); contentDescription = "Decline" })
+            })
+        }
+        // friends: online first; Invite (or how far my invite to this convoy got)
+        if (fr.isEmpty()) body.addView(label("No friends yet. Share your code, or add people you drove with in a convoy.", 14f).apply { setTextColor(dim()); setPadding(0, p, 0, 0) })
+        val on = fr.filter { c.isOnline(it.fid) }; val off = fr - on.toSet()
+        for ((title, list) in listOf("Online · ${on.size}" to on, "Offline" to off)) {
+            if (list.isEmpty()) continue
+            friendsSection(body, title)
+            for (f in list) body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, p / 2)
+                isClickable = true; setOnClickListener { showFriendCard(f) }
+                val online = c.isOnline(f.fid)
+                addView(avatar(f.name, f.fid, online), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(label(f.name, 15f, bold = true).apply { setTextColor(ink) })
+                    addView(label(if (online) "Online" else "Offline", 13f).apply { setTextColor(if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                val st = cv?.let { c.sentTo(f.fid, it)?.status }
+                if (st != null) addView(label(when (st) { "seen" -> "✓✓ Seen"; "joined" -> "✓ Joined"; "no" -> "Not now"; else -> "✓ Sent" }, 13.5f, bold = true).apply {
+                    setTextColor(when (st) { "joined" -> readable(Color.rgb(47, 180, 100)); "seen" -> readable(Color.rgb(77, 140, 230)); else -> dim() }); setPadding(p, 0, p / 2, 0)
+                    if (st == "no") setOnClickListener { inviteFriend(f) } // ask again
+                })
+                else addView(pill("👥 Invite") { inviteFriend(f) }.apply { textSize = 14f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 12f) })
+            })
+        }
+        if (c.pending.isNotEmpty()) {
+            friendsSection(body, "Requests you sent")
+            for (q in c.pending) body.addView(label("${q.name.ifBlank { q.code }} · ${L.t("waiting")}…", 13.5f).apply { setTextColor(dim()); setPadding((4 * d).toInt(), p / 3, 0, p / 3) })
+        }
+        body.addView(label("Your location is never shared with friends: only inside a convoy you join.", 12f).apply { setTextColor(dim()); setPadding(0, p, 0, 0) })
+    }
+
+    /** Add a friend: my QR and link, their code, or someone I drove with. */
+    private fun renderAddFriend() {
+        val c = Friends.core
+        val recent = c.recent.filter { !c.isFriend(it.fid) && it.fid !in c.blocked }.reversed()
+        val key = "add|${c.code}|${recent.joinToString { it.fid + c.requested(it.code) }}|${theme.name}|${MapState.dark}"
+        if (key == friendsKey && sheetHost.childCount > 0) return
+        friendsKey = key
+        sheetHost.removeAllViews()
+        sheetHost.background = bg(panel, radius = 22f, topOnly = true)
+        sheetHost.addView(sheetHeader("Add a friend"))
+        val p = (12 * d).toInt()
+        val body = friendsBody()
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(p, p, p, p); background = bg(dim(22), radius = 14f)
+            addView(android.widget.ImageView(context).apply {
+                setImageBitmap(qr(Friends.link(), (128 * d).toInt())); contentDescription = L.t("QR code for ${c.code}")
+                background = bg(Color.WHITE, radius = 8f); val q = (6 * d).toInt(); setPadding(q, q, q, q)
+            }, LinearLayout.LayoutParams((128 * d).toInt(), (128 * d).toInt()).apply { marginEnd = p })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(c.code, 19f, bold = true).apply { setTextColor(ink); typeface = Typeface.MONOSPACE; letterSpacing = 0.05f })
+                addView(label("Let a friend scan this with their camera, or send them the link.", 13f).apply { setTextColor(dim()); setPadding(0, p / 3, 0, p / 2) })
+                addView(pill("Send link") { shareFriendLink() }.apply { textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 12f) })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 })
+        friendsSection(body, "Or type their code")
+        lateinit var add: TextView
+        val input = EditText(this).apply {
+            hint = "KX7P-4821"; setSingleLine(); setTextColor(ink); setHintTextColor(dim(110))
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            textSize = 22f; letterSpacing = 0.1f; typeface = Typeface.MONOSPACE; gravity = Gravity.CENTER
+            background = bg(dim(22), dim(90), 1.5f, 14f); val q = (10 * d).toInt(); setPadding(q, q, q, q)
+            addTextChangedListener(object : android.text.TextWatcher {
+                private var busy = false
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, n: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, n: Int) {}
+                override fun afterTextChanged(e: android.text.Editable) {
+                    if (busy) return
+                    val raw = e.toString()
+                    if (!raw.contains("/")) {
+                        val k = raw.uppercase().filter { it.isLetterOrDigit() }.take(8)
+                        val pretty = if (k.length > 4) k.take(4) + "-" + k.drop(4) else k
+                        if (pretty != raw) { busy = true; e.replace(0, e.length, pretty); busy = false }
+                    }
+                    val ok = FriendCore.norm(e.toString()).length == 8
+                    add.alpha = if (ok) 1f else 0.45f; add.isEnabled = ok
+                }
+            })
+        }
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(input, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p })
+            add = pill("Add") { sendFriendRequest(input.text.toString(), "") { input.setText("") } }.apply {
+                setTextColor(onAccent(accent)); background = bg(accent, radius = 14f); alpha = 0.45f; isEnabled = false
+            }
+            addView(add)
+        })
+        if (recent.isNotEmpty()) {
+            friendsSection(body, "You drove with")
+            for (r in recent) body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, p / 2)
+                addView(avatar(r.name, r.fid, false), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(label(r.name, 15f, bold = true).apply { setTextColor(ink) })
+                    if (r.dest.isNotBlank()) addView(label(L.t("Convoy to ${r.dest}"), 13f).apply { setTextColor(dim()) })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                if (c.requested(r.code)) addView(label("Request sent", 13.5f).apply { setTextColor(dim()) })
+                else addView(pill("Add") { sendFriendRequest(r.code, r.name) {} }.apply { textSize = 14f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 12f) })
+            })
+        }
+        body.addView(label("They get a request and choose Accept or Decline. Nothing is shared until they accept.", 12.5f).apply { setTextColor(dim()); setPadding(0, p, 0, 0) })
+    }
+
+    /** A QR code (black on white, so every camera reads it, in every theme). */
+    private fun qr(text: String, size: Int): android.graphics.Bitmap {
+        val m = com.google.zxing.qrcode.QRCodeWriter().encode(text, com.google.zxing.BarcodeFormat.QR_CODE, size, size,
+            mapOf(com.google.zxing.EncodeHintType.MARGIN to 0))
+        val px = IntArray(m.width * m.height) { if (m.get(it % m.width, it / m.width)) Color.BLACK else Color.WHITE }
+        return android.graphics.Bitmap.createBitmap(px, m.width, m.height, android.graphics.Bitmap.Config.ARGB_8888)
+    }
+
+    private fun sendFriendRequest(code: String, name: String, then: () -> Unit) {
+        Friends.start()
+        val k = FriendCore.norm(code)
+        when {
+            k == FriendCore.norm(Friends.core.code) -> Toast.makeText(this, L.t("That's your own code"), Toast.LENGTH_SHORT).show()
+            Friends.core.friends.any { FriendCore.norm(it.code) == k } -> Toast.makeText(this, L.t("You're friends already"), Toast.LENGTH_SHORT).show()
+            else -> withConvoyName {
+                if (Friends.request(k, name)) {
+                    Toast.makeText(this, L.t("Friend request sent") + (if (name.isNotBlank()) " · $name" else ""), Toast.LENGTH_SHORT).show()
+                    then()
+                } else Toast.makeText(this, L.t("That isn't a friend code"), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** gamemap://friend/<code>, from a friend's link or QR. */
+    private fun addFriendFromLink(code: String) {
+        val k = FriendCore.norm(code)
+        if (k.length != 8) { Toast.makeText(this, L.t("That isn't a friend code"), Toast.LENGTH_SHORT).show(); return }
+        Friends.start()
+        if (k == FriendCore.norm(Friends.core.code)) { Toast.makeText(this, L.t("That's your own code"), Toast.LENGTH_SHORT).show(); return }
+        AlertDialog.Builder(this).setTitle("Add a friend?")
+            .setMessage(L.t("Send a friend request to ${FriendCore.pretty(k)}?") + "\n\n" + L.t("They choose Accept or Decline. Your location is never shared with friends."))
+            .setPositiveButton("Send request") { _, _ -> sendFriendRequest(k, "") { openSheet("friends") } }
+            .setNegativeButton("Cancel", null).showT()
+    }
+
+    /** Invites a friend to my convoy (starts one first if I'm not in one: going where I'm going). */
+    private fun inviteFriend(f: FriendCore.Friend) {
+        withConvoyName {
+            if (!Convoy.active) {
+                val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
+                Convoy.create(dest)
+            }
+            Friends.invite(f)
+            Toast.makeText(this, L.t("Invite sent to ${f.name}"), Toast.LENGTH_SHORT).show()
+            friendsKey = ""; refreshChrome()
+        }
+    }
+
+    /** Tap a friend: invite, remove or block (no location: friends only see each other in a convoy). */
+    private fun showFriendCard(f: FriendCore.Friend) {
+        val p = (16 * d).toInt()
+        lateinit var dlg: AlertDialog
+        val online = Friends.core.isOnline(f.fid)
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(p + p / 2, p, p + p / 2, p / 2) }
+        box.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(avatar(f.name, f.fid, online, 54), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(f.name, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+                addView(label(if (online) "Online" else "Offline", 14f, bold = online).apply { setTextColor(if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
+            })
+        })
+        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(f.since))
+        box.addView(label(L.t("Friends since") + " " + date, 13.5f).apply { setTextColor(dim()); setPadding(0, p, 0, p) })
+        box.addView(pill("👥 Invite to a convoy") { dlg.dismiss(); inviteFriend(f) }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 16f) },
+            LinearLayout.LayoutParams(MATCH_PARENT, (52 * d).toInt()))
+        box.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, p * 3 / 4, 0, 0)
+            addView(pill("Remove friend") {
+                dlg.dismiss()
+                AlertDialog.Builder(this@MainActivity).setTitle(L.t("Remove ${f.name}?")).setMessage("You can add each other again later.")
+                    .setPositiveButton("Remove") { _, _ -> Friends.remove(f) }.setNegativeButton("Cancel", null).showT()
+            }.apply { textSize = 14.5f; setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 14f) },
+                LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p / 2 })
+            addView(pill("Block") {
+                dlg.dismiss()
+                AlertDialog.Builder(this@MainActivity).setTitle(L.t("Block ${f.name}?")).setMessage("They're removed, and their requests and invites won't reach you. You can unblock them in Settings › Sharing.")
+                    .setPositiveButton("Block") { _, _ -> Friends.block(f.fid, f.name) }.setNegativeButton("Cancel", null).showT()
+            }.apply { textSize = 14.5f; setTextColor(readable(Color.rgb(230, 80, 80))); background = bg(Color.TRANSPARENT, Color.rgb(160, 70, 70), 1.5f, 14f) },
+                LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        })
+        dlg = AlertDialog.Builder(this).setView(box).showT()
+    }
+
+    /** A friend invited me to a convoy: ask (not while driving: then the chip on the map shows it). */
+    private fun maybeAskInvite() {
+        if (!Friends.ready || !Friends.core.allowInvites || isFinishing) return
+        if (NavEngine.active || LocationTracker.speedMps > 3f || Convoy.proposal != null) return
+        val i = Friends.core.invites.firstOrNull { it.convoy != Convoy.code } ?: return
+        val k = i.convoy + i.count
+        if (k == inviteAsked) return
+        inviteAsked = k
+        Friends.cancelNotification(i.convoy)
+        AlertDialog.Builder(this)
+            .setTitle(L.t("${i.from} invites you to a convoy"))
+            .setMessage((if (i.dest.isNotBlank()) i.dest else L.t("No destination yet")) +
+                (if (i.count > 1) "\n" + L.t("${i.count} invites") else "") +
+                (if (Convoy.active) "\n\n" + L.t("You'll leave the convoy you're in.") else ""))
+            .setPositiveButton("Join the convoy") { _, _ -> joinConvoy(i.convoy) }
+            .setNegativeButton("Not now") { _, _ -> Friends.answer(i.convoy, "no") }
+            .showT()
+        Friends.markSeen(listOf(i))
+    }
+
+    /** Invite in the convoy: friends first, or the link for anyone else. */
+    private fun showInviteMenu(anchor: View) {
+        val p = (14 * d).toInt()
+        lateinit var pop: android.widget.PopupWindow
+        fun item(icon: String, title: String, sub: String?, onClick: () -> Unit) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(p, p * 3 / 4, p * 3 / 2, p * 3 / 4); minimumHeight = (54 * d).toInt(); isClickable = true
+            background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(dim(60)), null, null)
+            addView(label(icon, 18f).apply { setPadding(0, 0, p, 0) })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(title, 15f, bold = true).apply { setTextColor(ink) })
+                if (sub != null) addView(label(sub, 12.5f).apply { setTextColor(dim()) })
+            })
+            setOnClickListener { pop.dismiss(); onClick() }
+        }
+        val c = Friends.core
+        val online = c.friends.filter { c.isOnline(it.fid) }.map { it.name }
+        val sub = when {
+            c.friends.isEmpty() -> L.t("No friends yet: add some")
+            online.isEmpty() -> L.t("${c.friends.size} friends, none online")
+            online.size <= 2 -> L.t("${online.joinToString(" and ")} online")
+            else -> L.t("${online.size} online")
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bg(panel, accent, 1.5f, 14f); elevation = 16 * d
+            setPadding(0, p / 3, 0, p / 3)
+            addView(item("👥", "Invite friends", sub) { openSheet("friends") })
+            addView(View(context).apply { setBackgroundColor(dim(50)) }, LinearLayout.LayoutParams(MATCH_PARENT, maxOf(1, d.toInt())).apply { marginStart = p; marginEnd = p })
+            addView(item("🔗", "Share the link", "For people who aren't friends yet") { inviteToConvoy() })
+        }
+        L.translateTree(box); Icons.applyTree(box)
+        pop = android.widget.PopupWindow(box, (290 * d).toInt(), WRAP_CONTENT, true).apply { elevation = 16 * d; isOutsideTouchable = true }
+        pop.showAsDropDown(anchor, 0, -(anchor.height + 140 * d).toInt())
+    }
+
+    /** In the convoy list: add someone as a friend (or that you are, or asked already). */
+    private fun friendMark(memberId: String): View? {
+        if (!Friends.ready) return null
+        val m = Convoy.members[memberId] ?: return null
+        if (m.fc.isBlank() || m.fid.isBlank()) return null
+        val c = Friends.core
+        val sz = (40 * d).toInt()
+        return when {
+            c.isFriend(m.fid) -> label("✓", 17f, bold = true).apply { setTextColor(readable(Color.rgb(47, 180, 100))); gravity = Gravity.CENTER; contentDescription = L.t("Friends") }
+            c.requested(m.fc) -> label("⏱", 16f).apply { setTextColor(dim()); gravity = Gravity.CENTER; contentDescription = L.t("Request sent") }
+            m.fid in c.blocked -> null
+            else -> label("＋", 20f, bold = true).apply {
+                setTextColor(readable(accent)); gravity = Gravity.CENTER; background = bg(Color.TRANSPARENT, accent, 1.5f, 10f)
+                contentDescription = L.t("Add ${m.name} as a friend")
+                setOnClickListener { sendFriendRequest(m.fc, m.name) { convoyKey = ""; refreshChrome() } }
+            }
+        }?.apply { layoutParams = LinearLayout.LayoutParams(sz, sz).apply { marginStart = (8 * d).toInt() } }
+    }
+
+    private var blockedDialog: AlertDialog? = null
+    private fun showBlocked() {
+        val list = Friends.core.blockedNames()
+        if (list.isEmpty()) { Toast.makeText(this, L.t("Nobody is blocked"), Toast.LENGTH_SHORT).show(); return }
+        AlertDialog.Builder(this).setTitle("Blocked")
+            .setItems(list.map { L.t("Unblock ${it.second}") }.toTypedArray()) { _, w -> Friends.unblock(list[w].first); showSettings() }
+            .setNegativeButton("Close", null).showT()
     }
 
     private var offlineKey = ""
@@ -3036,7 +3474,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Convoy.changed += stateListener
         LocationTracker.changed += compassCheck
         NavEngine.changed += compassCheck
+        Friends.changed += friendsListener
+        Friends.arrived += friendsArrived
+        Friends.setVisible(true)
         refreshChrome()
+        main.postDelayed({ maybeAskInvite() }, 800)
     }
 
     override fun onStop() {
@@ -3049,6 +3491,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Convoy.changed -= stateListener
         LocationTracker.changed -= compassCheck
         NavEngine.changed -= compassCheck
+        Friends.changed -= friendsListener
+        Friends.arrived -= friendsArrived
+        Friends.setVisible(false)
         main.removeCallbacks(ticker)
         // in the background and not navigating: let the GPS rest
         LocationTracker.release(this, "phone")

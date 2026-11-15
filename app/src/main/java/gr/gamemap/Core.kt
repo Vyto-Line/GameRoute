@@ -53,6 +53,7 @@ class GameMapApp : Application() {
         Startup.step("open places") { OpenPlaces.init(this) }
         Startup.step("offline") { Offline.init(this) }
         Startup.step("convoy") { Convoy.init(this) }
+        Startup.step("friends") { Friends.init(this) }
         Startup.step("fuel") { Fuel.init(this) }
         Startup.step("parked") { Parked.init(this) }
         Startup.step("tolls") { Tolls.init(this) }

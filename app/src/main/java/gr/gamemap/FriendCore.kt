@@ -49,6 +49,9 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     private val secret: String get() = store.get("secret") ?: Seal.b64(bytes(16)).also { store.put("secret", it) }
     var name: String = "Driver"
 
+    /** Friends used on this phone (a code was made): only then is anything checked, so no battery otherwise. */
+    val started: Boolean get() = store.get("code") != null
+
     /** My friend code, as people read it: "KX7P-4821". */
     val code: String get() = store.get("code") ?: newCodeText().also { store.put("code", it) }
 

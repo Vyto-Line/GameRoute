@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GameRoute · add a friend</title>
+<meta name="robots" content="noindex">
+<style>
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:#141824; background:#f3f1ec; }
+  main { max-width: 440px; margin: 0 auto; padding: 48px 22px; }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  p { color:#4a4f5c; line-height: 1.5; margin: 0 0 18px; }
+  .code { font: 700 30px ui-monospace, "SFMono-Regular", Menlo, monospace; letter-spacing: .08em; background:#fff; border:2px solid #141824;
+          border-radius: 14px; padding: 16px; text-align:center; margin: 0 0 18px; }
+  a.btn { display:block; text-align:center; background:#141824; color:#fff; text-decoration:none; font-weight:700; font-size:17px;
+          padding: 16px; border-radius: 14px; }
+  .note { font-size: 14px; color:#5a5f6b; margin-top: 18px; line-height:1.5; }
+  .note a { color:#141824; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Add a friend on GameRoute</h1>
+  <p>Open this in GameRoute to send a friend request. They choose to accept or decline, and your location is never shared with friends: only inside a convoy you both join.</p>
+  <div class="code" id="code">····-····</div>
+  <a class="btn" id="open" href="#">Open in GameRoute</a>
+  <div class="note">No GameRoute yet? <a href="https://github.com/Vyto-Line/GameRoute/releases/latest">Get it here</a>, then open this link again.<br>
+  Or in GameRoute: Settings › Sharing › Friends › Add a friend, and type the code.</div>
+</main>
+<script>
+  var code = decodeURIComponent((location.hash || "").slice(1)).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (code.length === 8) {
+    var pretty = code.slice(0, 4) + "-" + code.slice(4);
+    document.getElementById("code").textContent = pretty;
+    document.getElementById("open").href = "gamemap://friend/" + pretty;
+    // try once by itself (works when the app is installed)
+    setTimeout(function () { location.href = "gamemap://friend/" + pretty; }, 300);
+  } else {
+    document.getElementById("code").textContent = "No code in this link";
+  }
+</script>
+</body>
+</html>
