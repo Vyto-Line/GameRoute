@@ -34,6 +34,23 @@ class CaveRouteProbeTest {
                 log.append("Router(alt=$alt) ${Router.lastSource}: ${(r.length / 1000).toInt()} km, ends ${f(end)} = ${Geo.distance(end, cave).toInt()} m from the cave; last steps: ${r.steps.takeLast(4).joinToString(" | ") { it.road + " " + it.direction }}\n")
             }
         }
+        // the kind of road over the last 5 km (map data)
+        val r = Router.routes(from, cave, alternatives = false)[0]
+        val n = (1 shl 14).toDouble()
+        for (p in r.points.filterIndexed { i, _ -> r.cum[i] > r.length - 5000 }) {
+            val x = Math.floor((p.lon + 180) / 360 * n).toInt(); val la = p.lat * Math.PI / 180
+            val y = Math.floor((1 - Math.log(Math.tan(la) + 1 / Math.cos(la)) / Math.PI) / 2 * n).toInt()
+            try { VectorSource.get(14, x, y) } catch (_: Exception) {}
+        }
+        var m = r.length - 5000; var last = ""
+        while (m < r.length) {
+            // all classes near the point (paths and tracks too)
+            val k = RoadKind.along(r, m) ?: "?"
+            val raw = RoadKind.allNear(r, m)
+            val line = "$k / $raw"
+            if (line != last) log.append("  at ${"%.2f".format((r.length - m) / 1000)} km before the end: $line\n")
+            last = line; m += 50
+        }
         // what roads are near the cave (Nominatim reverse at the cave and the end)
         try { log.append("reverse at cave: " + Http.get("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${cave.lat}&lon=${cave.lon}&zoom=17", timeout = 8000).take(400) + "\n") } catch (e: Exception) { log.append("rev: $e\n") }
         File(out, "caveroute.txt").writeText(log.toString())

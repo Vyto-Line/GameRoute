@@ -71,6 +71,31 @@ object RoadKind {
         return at(p, brg)
     }
 
+    /** For tests: every road class within 25 m of the point [meters] along [r] (tracks and paths too, with surface). */
+    internal fun allNear(r: RouteOption, meters: Double): String {
+        val i = r.cum.indexOfFirst { it >= meters }.coerceAtLeast(0)
+        val p = r.points[i]
+        val z = VectorSource.MAX_Z; val n = (1 shl z).toDouble()
+        val wx = (p.lon + 180) / 360 * n; val latR = p.lat * PI / 180
+        val wy = (1 - ln(tan(latR) + 1 / cos(latR)) / PI) / 2 * n
+        val tx = floor(wx).toInt(); val ty = floor(wy).toInt()
+        val vt = VectorSource.peek(z, tx, ty) ?: return "no data"
+        val extent = vt.features.firstOrNull()?.extent ?: 4096
+        val px = ((wx - tx) * extent).toFloat(); val py = ((wy - ty) * extent).toFloat()
+        val maxD = (25 / (40_075_016.0 * cos(latR) / n / extent)).toFloat()
+        val found = LinkedHashSet<String>()
+        for (f in vt.features) {
+            if (f.layer != "transportation" || f.type != 2) continue
+            for (part in f.parts) { var j = 2; while (j < part.size) {
+                val x0 = part[j - 2]; val y0 = part[j - 1]; val x1 = part[j]; val y1 = part[j + 1]; j += 2
+                val sx = x1 - x0; val sy = y1 - y0; val sl2 = sx * sx + sy * sy
+                val t = if (sl2 == 0f) 0f else (((px - x0) * sx + (py - y0) * sy) / sl2).coerceIn(0f, 1f)
+                if (hypot(px - (x0 + sx * t), py - (y0 + sy * t)) < maxD) found += "${f["class"]}${f["subclass"]?.let { ":$it" } ?: ""}${f["surface"]?.let { "($it)" } ?: ""}${f["access"]?.let { "[access $it]" } ?: ""}"
+            } }
+        }
+        return found.joinToString(",")
+    }
+
     /** How far the camera zooms for this kind of road: out for highways (−), in for small streets (+). */
     fun zoomFor(kind: String?): Double = when (kind) {
         "motorway", "trunk" -> -0.9
