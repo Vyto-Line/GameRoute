@@ -78,7 +78,7 @@ class CarAutoTest {
         assertTrue("several routes for most trips", multi >= 3)
 
         // ---- 2) the car's route preview rows (time · toll price, distance · via)
-        val ctx = TestCarContext.createCarContext(app)
+        val ctx = TestCarContext.createCarContext(app).apply { setCarAppApiLevel(androidx.car.app.versioning.CarAppApiLevels.LEVEL_6) }
         val nafplio = Place("Nafplio", "Argolida", LatLng(37.5675, 22.8016))
         val opts = Router.routes(athens, nafplio.pos, alternatives = true).also { Tolls.annotate(it) }
         opts.forEach { it.timingFailed = true }
