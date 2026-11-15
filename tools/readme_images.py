@@ -90,6 +90,38 @@ def hero():
     bg.convert("RGB").save(os.path.join(OUT, "hero.jpg"), quality=86, optimize=True)
 
 
+def pair(a, b, out, width=520):
+    """Two phones side by side: big enough to read on a phone, where the page is one column wide."""
+    pa, pb = phone(shot(a), width), phone(shot(b), width)
+    gap = -width // 14  # the shadows overlap a little
+    canvas = Image.new("RGBA", (pa.width + pb.width + gap, max(pa.height, pb.height)), (0, 0, 0, 0))
+    canvas.alpha_composite(pa, (0, 0))
+    canvas.alpha_composite(pb, (pa.width + gap, 0))
+    canvas.save(os.path.join(OUT, out), "WEBP", quality=84, method=6)
+
+
+def hero3():
+    """The top picture: three phones, big enough to make out on a phone screen."""
+    W, H = 1600, 1260
+    bg = Image.new("RGB", (W, H))
+    d = ImageDraw.Draw(bg)
+    for y in range(H):  # deep navy to violet
+        t = y / H
+        d.line([(0, y), (W, y)], fill=(int(14 + 30 * t), int(16 + 6 * t), int(38 + 50 * t)))
+    for x in range(0, W, 80):
+        d.line([(x, 0), (x, H)], fill=(40, 44, 80))
+    for y in range(0, H, 80):
+        d.line([(0, y), (W, y)], fill=(40, 44, 80))
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse((W // 2 - 560, 120, W // 2 + 560, H + 260), fill=(140, 90, 255, 75))
+    bg = bg.convert("RGBA")
+    bg.alpha_composite(glow.filter(ImageFilter.GaussianBlur(140)))
+    for name, w, dx, dy in [("drive", 400, -470, 50), ("friends", 400, 470, 50), ("convoy", 460, 0, 0)]:
+        p = phone(shot(name), w)
+        bg.alpha_composite(p, (W // 2 + dx - p.width // 2, H // 2 - p.height // 2 + dy))
+    bg.convert("RGB").save(os.path.join(OUT, "hero.jpg"), quality=86, optimize=True)
+
+
 def themes(dark):
     tw, th = 330, 470
     gap, lab = 22, 54
@@ -118,12 +150,15 @@ def themes(dark):
 
 
 if __name__ == "__main__":
-    for f in os.listdir(OUT):  # the old pictures go; the page only uses these
-        os.remove(os.path.join(OUT, f))
-    hero()
-    for name in ["home", "search", "routes", "drive", "place", "fuel", "countries", "convoy", "convoy_list", "race",
-                 "arrival", "styles", "settings", "blocky"]:
-        save_phone(name, f"{name.replace('_', '-')}.webp")
+    for f in os.listdir(OUT):  # the old pictures go (the icon stays unless a new one is given)
+        if f != "icon.png" or ICON:
+            os.remove(os.path.join(OUT, f))
+    hero3()
+    # two phones per picture: one column on a phone, still readable
+    for a, b, out in [("search", "routes", "find.webp"), ("drive", "arrival", "drive.webp"), ("place", "fuel", "places.webp"),
+                      ("convoy", "convoy_list", "convoy.webp"), ("race", "convoy_qr", "race.webp"),
+                      ("friends", "together", "friends.webp"), ("countries", "styles", "map.webp")]:
+        pair(a, b, out)
     for name in ["drive", "convoy", "place"]:
         car(name, f"car-{name}.webp")
     themes(False)
