@@ -515,12 +515,36 @@ object Places {
 
     /** Names on the map data in memory that start with what was typed, nearest first. Instant, offline. */
     /** A search typed as words (numbers apart) and, if any, the house number in it. */
+    /** Place words people type in English or Greek: "Acropolis Museum" also finds "Μουσείο Ακρόπολης". */
+    private val synonyms: Map<String, List<String>> by lazy {
+        val pairs = listOf("museum" to "μουσειο", "cave" to "σπηλια", "cave" to "σπηλαιο", "beach" to "παραλια", "castle" to "καστρο",
+            "monastery" to "μονη", "church" to "εκκλησια", "temple" to "ναος", "lake" to "λιμνη", "airport" to "αεροδρομιο",
+            "port" to "λιμανι", "harbour" to "λιμανι", "station" to "σταθμος", "hospital" to "νοσοκομειο", "square" to "πλατεια",
+            "university" to "πανεπιστημιο", "park" to "παρκο", "stadium" to "σταδιο", "theatre" to "θεατρο", "theater" to "θεατρο",
+            "gorge" to "φαραγγι", "waterfall" to "καταρρακτης", "waterfalls" to "καταρρακτες", "bridge" to "γεφυρι", "market" to "αγορα",
+            "lighthouse" to "φαρος", "mountain" to "βουνο", "mount" to "ορος", "island" to "νησι", "old town" to "παλια πολη")
+        val m = HashMap<String, MutableList<String>>()
+        for ((en, el) in pairs) {
+            val a = sound(greeklish(en)); val b = sound(greeklish(el))
+            m.getOrPut(a) { ArrayList() } += listOf(b, sound(el)); m.getOrPut(b) { ArrayList() } += listOf(a, sound(en))
+        }
+        m
+    }
+
+    /** Small words a name can have or not ("Σπηλιά του Νταβέλη" is "Σπηλιά Νταβέλη"). */
+    private val stopWords: Set<String> by lazy {
+        listOf("το", "τα", "ο", "η", "οι", "του", "της", "των", "τον", "την", "και", "στο", "στη", "the", "of", "and", "de", "la", "at")
+            .flatMap { listOf(sound(greeklish(it)), sound(it)) }.toSet()
+    }
+
     class Query(text: String) {
         private val raw = text.trim().split(Regex("[\\s,]+")).filter { it.isNotEmpty() }
         val number: String? = raw.firstOrNull { w -> w.any { it.isDigit() } && w.length <= 5 }
         val words: List<String> = raw.filter { w -> w.none { it.isDigit() } }
         /** Each word as typed and as Greek, by sound. */
-        val forms: List<List<String>> = words.map { listOf(sound(it), sound(greeklish(it))).filter { f -> f.isNotEmpty() }.distinct() }
+        val forms: List<List<String>> = words.map { w ->
+            (listOf(sound(w), sound(greeklish(w))) + (synonyms[sound(greeklish(w))] ?: emptyList())).filter { f -> f.isNotEmpty() }.distinct()
+        }
         fun matches(e: List<String>, k: Int) = forms[k].any { f -> e.any { it.startsWith(f) } }
         /** All the words run together ("crepa land" also finds "Crepaland"). */
         val joined: List<String> = if (words.size < 2) emptyList() else
@@ -626,6 +650,18 @@ object Places {
             if (fit >= 0.99 && startsCore) s += when (big) { 3 -> 10; 2 -> 4; 1 -> 1; else -> 0 }
             // the whole name exactly as typed (by sound): "Ναύπλιο" over "Ναύπλιο - Τολό"
             if (big > 0 && whole.isNotEmpty() && (words.joinToString("") == whole || core.joinToString("") == whole)) s += 6
+            // the name is just what was typed (small words aside): "Σπηλιά Νταβέλη" (Penteli) over
+            // "Σπηλιά του Νταβέλη / Μπίμπεση" round the corner; each extra word costs a little
+            // ("Acropolis Museum" before "Acropolis Museum Restaurant")
+            val sig = words.filter { it !in stopWords && it.length > 1 }
+            if (qWords.isNotEmpty() && sig.isNotEmpty()) {
+                val extra = sig.count { w -> qWords.none { fs -> fs.any { w.startsWith(it) } } }
+                val allIn = qWords.withIndex().all { (k, fs) -> fs.any { f -> sig.any { it.startsWith(f) } } || sound(greeklish(q.words[k])) in stopWords }
+                if (allIn && extra == 0) s += 12 + far * 14 * Math.log10(1 + d / 1000) * 0.15 // and distance matters a bit less
+                else if (allIn) s -= minOf(extra, 3) * 2.5
+            }
+            // far away (another country) and not the name typed: not what anyone wants
+            if (d > 1_500_000 && fit < 0.99) continue
             if (area != null && d < 5000) s += 8
             if (src == SRC_TOMTOM || src == SRC_OPEN) s += 1 // richer data (address, entrance)
             all += C(p, s, if (isAddr && q.number != null) 1.0 else fit)
@@ -887,11 +923,52 @@ object Places {
 
     @Volatile private var photonDownUntil = 0L
 
+    @Volatile private var photonFails = 0
+
+    /**
+     * OpenStreetMap places (caves, sights, small places TomTom doesn't have): Photon, once more
+     * after a short wait if it fails (it often answers 503 for a moment), else Nominatim.
+     */
     private fun tryPhoton(query: String, near: LatLng?): List<Place>? {
-        if (System.currentTimeMillis() < photonDownUntil) return null
-        return try { photon(query, near) } catch (e: Exception) {
-            photonDownUntil = System.currentTimeMillis() + 5 * 60_000; null
+        if (System.currentTimeMillis() >= photonDownUntil) {
+            for (attempt in 0..1) {
+                try { return photon(query, near).also { photonFails = 0 } } catch (e: Exception) {
+                    if (attempt == 0) try { Thread.sleep(350) } catch (_: InterruptedException) { return null }
+                }
+            }
+            // down for a minute only after failing twice in a row
+            if (++photonFails >= 2) { photonDownUntil = System.currentTimeMillis() + 60_000; photonFails = 0 }
         }
+        return try { nominatim(query, near) } catch (e: Exception) { null }
+    }
+
+    /** Nominatim (the OpenStreetMap search): the backup when Photon is down. Few calls: only then. */
+    fun nominatim(query: String, near: LatLng?): List<Place> {
+        val q = URLEncoder.encode(query.trim(), "UTF-8")
+        val box = near?.let { "&viewbox=${it.lon - 1.5},${it.lat + 1.2},${it.lon + 1.5},${it.lat - 1.2}" } ?: ""
+        val lang = if (java.util.Locale.getDefault().language == "el") "el,en" else "en,el"
+        val a = org.json.JSONArray(Http.get("https://nominatim.openstreetmap.org/search?format=jsonv2&q=$q&limit=8&addressdetails=1&accept-language=$lang$box", timeout = 5000))
+        val out = ArrayList<Place>()
+        for (i in 0 until a.length()) {
+            val o = a.getJSONObject(i)
+            val pos = LatLng(o.getString("lat").toDouble(), o.getString("lon").toDouble())
+            val cat = o.optString("category"); val type = o.optString("type")
+            val name = o.optString("name").ifBlank { o.optString("display_name").substringBefore(",") }
+            if (name.isBlank()) continue
+            val ad = o.optJSONObject("address")
+            val where = listOfNotNull(ad?.optString("road")?.takeIf { it.isNotBlank() },
+                (ad?.optString("village")?.ifBlank { null } ?: ad?.optString("town")?.ifBlank { null } ?: ad?.optString("suburb")?.ifBlank { null } ?: ad?.optString("city")?.ifBlank { null })).joinToString(", ")
+            val town = if (cat == "place") when (type) { "city" -> 3; "town" -> 3; "village" -> 2; "suburb", "neighbourhood", "quarter", "hamlet" -> 1; else -> 0 } else 0
+            val icon = when {
+                town > 0 -> "🏙"
+                cat == "historic" || (cat == "tourism" && type in setOf("museum", "attraction", "viewpoint")) -> "🏛"
+                type == "beach" -> "🏖"
+                cat == "highway" -> "🛣"
+                else -> "📍"
+            }
+            out += Place(name, where, pos, icon, town = town)
+        }
+        return out
     }
 
     /** Photon (OpenStreetMap data); short timeout, it's only a fallback now. */

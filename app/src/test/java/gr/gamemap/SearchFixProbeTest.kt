@@ -20,10 +20,16 @@ class SearchFixProbeTest {
         Traffic.init(RuntimeEnvironment.getApplication()); Places.init(RuntimeEnvironment.getApplication())
         val key = Traffic.key
         val log = StringBuilder()
-        val near = LatLng(37.9755, 23.7348) // Athens centre
+        val near = LatLng(37.9310, 23.7560) // Ilioupoli
+        LocationTracker.onLocationChanged(android.location.Location("gps").apply { latitude = near.lat; longitude = near.lon; accuracy = 5f; time = System.currentTimeMillis() })
+        Places.warmUp(near, force = true)
+        val until = System.currentTimeMillis() + 60_000
+        while (System.currentTimeMillis() < until && !OpenPlaces.has(near)) Thread.sleep(500)
+        Thread.sleep(3000)
+        log.append("places squares ready: ${OpenPlaces.has(near)}\n")
         fun d(b: LatLng) = "%.1f km (%.4f,%.4f)".format(Geo.distance(near, b) / 1000, b.lat, b.lon)
         fun get(url: String) = try { Http.get(url, timeout = 10000) } catch (e: Exception) { "ERR $e" }
-        for (q in listOf("sounio", "Acropolis Museum", "σπηλια νταβελη")) {
+        for (q in listOf("σπηλια του νταβελη", "σπηλια νταβελη", "sounio", "Acropolis Museum")) {
             log.append("\n=== \"$q\"\n")
             for (ta in listOf(true, false)) {
                 val j = get("https://api.tomtom.com/search/2/search/${enc(q)}.json?key=$key&limit=8&language=el-GR&typeahead=$ta&idxSet=POI,PAD,Addr,Str,Geo&lat=${near.lat}&lon=${near.lon}")
@@ -44,6 +50,7 @@ class SearchFixProbeTest {
                     log.append(" photon '${pr.optString("name")}' ${pr.optString("osm_key")}=${pr.optString("osm_value")} type=${pr.optString("type")} ${pr.optString("city")} ${d(LatLng(c.getDouble(1), c.getDouble(0)))}\n")
                 }
             }
+            for (pr in OpenPlaces.search(Places.Query(q), near)) log.append(" OPEN '${pr.name}' ${pr.icon} (${pr.address.take(40)}) ${d(pr.pos)}\n")
             for (pr in Places.local(q, near)) log.append(" local '${pr.name}' t${pr.town} ${pr.icon} (${pr.address.take(30)}) ${d(pr.pos)}\n")
             Thread.sleep(1200)
             for (full in listOf(false, true)) {
