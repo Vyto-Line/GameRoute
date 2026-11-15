@@ -38,7 +38,8 @@ class CarAutoTest {
     private fun waitFor(ms: Long, done: () -> Boolean) {
         val until = System.currentTimeMillis() + ms
         while (System.currentTimeMillis() < until) {
-            ShadowLooper.idleMainLooper()
+            // (the fake clock moves on too: the 350 ms wait after typing runs)
+            ShadowLooper.idleMainLooper(100, java.util.concurrent.TimeUnit.MILLISECONDS)
             if (done()) return
             Thread.sleep(100)
         }
@@ -46,6 +47,10 @@ class CarAutoTest {
 
     @Test
     fun car() {
+        try { run() } finally { File(out, "car_auto.txt").writeText(log.toString()) }
+    }
+
+    private fun run() {
         val app = RuntimeEnvironment.getApplication()
         Traffic.init(app)
         Tolls.loadForTest(Http.get("https://raw.githubusercontent.com/Vyto-Line/GameRoute/data/tolls/GR.json", timeout = 20000))
@@ -142,7 +147,5 @@ class CarAutoTest {
         ScreenController(f).moveToState(Lifecycle.State.RESUMED)
         val ft = f.onGetTemplate() as ListTemplate
         log.append("\n== Car friends ==\n  ${ft.title?.toCharSequence()} · ${ft.singleList?.items?.size} rows · ${ft.singleList?.noItemsMessage?.toCharSequence()}\n")
-
-        File(out, "car_auto.txt").writeText(log.toString())
     }
 }
