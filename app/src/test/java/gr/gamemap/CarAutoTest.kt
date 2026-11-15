@@ -78,7 +78,10 @@ class CarAutoTest {
         assertTrue("several routes for most trips", multi >= 3)
 
         // ---- 2) the car's route preview rows (time · toll price, distance · via)
-        val ctx = TestCarContext.createCarContext(app).apply { setCarAppApiLevel(androidx.car.app.versioning.CarAppApiLevels.LEVEL_6) }
+        val ctx = TestCarContext.createCarContext(app)
+        // a car on Car App API 6 (the handshake a real car makes)
+        androidx.car.app.CarContext::class.java.getDeclaredMethod("updateHandshakeInfo", androidx.car.app.HandshakeInfo::class.java)
+            .apply { isAccessible = true }.invoke(ctx, androidx.car.app.HandshakeInfo("com.google.android.projection.gearhead", 6))
         val nafplio = Place("Nafplio", "Argolida", LatLng(37.5675, 22.8016))
         val opts = Router.routes(athens, nafplio.pos, alternatives = true).also { Tolls.annotate(it) }
         opts.forEach { it.timingFailed = true }
