@@ -210,7 +210,10 @@ class MapView(private val zoomKey: String) {
 
     private fun saveZoom() = MapState.saveZoom(zoomKey, targetZoom)
 
-    /** While driving: zoomed out a little at speed, in a little just before a turn (on top of your own zoom). */
+    /**
+     * While driving (on top of your own zoom): out on highways and at speed, in on small streets,
+     * and in a little just before a turn (earlier and more when turning onto a small street).
+     */
     private var autoTarget = 0.0
     /** When the map was last moved by hand; it comes back to the car 8 s later while navigating. */
     @Volatile var touchedAt = 0L
@@ -219,12 +222,27 @@ class MapView(private val zoomKey: String) {
         if (!NavEngine.active || NavEngine.arrived || !following || overview || gesture) return 0.0
         val kmh = LocationTracker.speedMps * 3.6
         val fast = -((kmh - 35) / 65).coerceIn(0.0, 1.0) * 1.1          // 35 km/h: 0, 100 km/h: -1.1
+        // the kind of road: out on a highway (even in a jam), in on a small street
+        NavEngine.updateRoadKinds()
+        val road = RoadKind.zoomFor(NavEngine.roadHere)
+        var v = when {
+            road < 0 -> minOf(road, fast)                  // a highway: whichever is further out
+            road > 0 -> road + maxOf(fast, -0.5) * 0.5     // a small street: in (a little less if fast)
+            else -> fast
+        }
         val step = NavEngine.currentStep
-        val turning = step != null && step.direction != "straight" && step.type !in setOf("continue", "new name") &&
-            NavEngine.distanceToNext < maxOf(120.0, LocationTracker.speedMps * 9.0)
-        val v = if (turning) maxOf(fast, -0.2) + 0.45 else fast
+        val turn = step != null && step.direction != "straight" && step.type !in setOf("continue", "new name")
+        // turning onto a small street: zoom in a bit earlier and a bit more, to see it coming
+        val intoSmall = turn && RoadKind.small(NavEngine.roadNext) && !RoadKind.small(NavEngine.roadHere)
+        val ahead = if (intoSmall) maxOf(220.0, LocationTracker.speedMps * 13.0) else maxOf(120.0, LocationTracker.speedMps * 9.0)
+        if (turn && NavEngine.distanceToNext < ahead) {
+            v = maxOf(v, -0.2) + 0.45 + (if (intoSmall) maxOf(0.0, RoadKind.zoomFor(NavEngine.roadNext) - 0.1) else 0.0)
+        }
+        v = v.coerceIn(-1.4, 1.0)
         return Math.round(v * 10) / 10.0 // steps of 0.1, so the zoom isn't always moving
     }
+
+    internal fun autoZoomForTest() = autoZoom()
 
     /** Advances the zoom animation. Returns true while animating. */
     fun tick(): Boolean {

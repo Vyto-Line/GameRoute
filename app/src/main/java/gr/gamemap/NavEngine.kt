@@ -82,6 +82,27 @@ object NavEngine {
             return b.takeIf { r.cum[it.routeIndex] - r.cum[a.routeIndex] < 400 }
         }
 
+    /** The kind of road we're on, and the one we turn onto next (from the map data; see RoadKind). */
+    @Volatile var roadHere: String? = null
+        private set
+    @Volatile var roadNext: String? = null
+        private set
+    private var roadAlong = -1e9
+    private var roadStepAt = -2
+    private var roadRoute: RouteOption? = null
+
+    /** Looks the road kinds up again once we've moved 40 m or passed a turn (cheap otherwise). */
+    fun updateRoadKinds() {
+        val r = current ?: run { roadHere = null; roadNext = null; return }
+        if (r === roadRoute && Math.abs(along - roadAlong) < 40 && nextStep == roadStepAt) return
+        roadRoute = r; roadAlong = along; roadStepAt = nextStep
+        roadHere = try { RoadKind.along(r, along + 15) } catch (e: Exception) { null }
+        roadNext = try {
+            steps.getOrNull(nextStep)?.takeIf { it.direction != "arrive" && it.routeIndex in r.cum.indices }
+                ?.let { RoadKind.along(r, r.cum[it.routeIndex] + 35) }
+        } catch (e: Exception) { null }
+    }
+
     /** The speed limit where we are now, km/h, if known. */
     val speedLimit: Int?
         get() = current?.limits?.firstOrNull { along >= it.start - 5 && along < it.end + 5 }?.value
