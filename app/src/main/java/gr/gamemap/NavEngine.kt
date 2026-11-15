@@ -87,6 +87,7 @@ object NavEngine {
         private set
     @Volatile var roadNext: String? = null
         private set
+    private var roadPending: String? = null
     private var roadAlong = -1e9
     private var roadStepAt = -2
     private var roadRoute: RouteOption? = null
@@ -96,7 +97,10 @@ object NavEngine {
         val r = current ?: run { roadHere = null; roadNext = null; return }
         if (r === roadRoute && Math.abs(along - roadAlong) < 40 && nextStep == roadStepAt) return
         roadRoute = r; roadAlong = along; roadStepAt = nextStep
-        roadHere = try { RoadKind.along(r, along + 15) } catch (e: Exception) { null }
+        // a new kind of road counts once it's seen twice in a row (~80 m): a side street or a
+        // slip road brushing past doesn't make the camera zoom in and out
+        val k = try { RoadKind.along(r, along + 15) } catch (e: Exception) { null }
+        if (k == roadHere || roadHere == null || k == roadPending) { roadHere = k; roadPending = null } else roadPending = k
         roadNext = try {
             steps.getOrNull(nextStep)?.takeIf { it.direction != "arrive" && it.routeIndex in r.cum.indices }
                 ?.let { RoadKind.along(r, r.cum[it.routeIndex] + 35) }

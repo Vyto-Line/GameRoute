@@ -75,6 +75,7 @@ class GameMapCarAppService : CarAppService() {
 class GameMapSession : Session() {
     override fun onCreateScreen(intent: Intent): Screen {
         gr.gamemap.CrashLog.note("Android Auto opened")
+        gr.gamemap.CrashLog.watchMainThread() // a freeze in the car leaves a report too
         gr.gamemap.Parked.clear() // driving off: the old parking spot is history
         // the car's night mode follows its headlights (or light sensor): dark map at night
         MapState.setCarNight(carContext.isDarkMode)
@@ -200,6 +201,10 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
                 renderer.draw(c, w, h, if (visible.isEmpty) Rect(0, 0, w, h) else Rect(visible), density, hud = true)
             } catch (e: Exception) {
                 // a frame drawn while the data changed under it: skip it, the next one is fine
+            } catch (e: OutOfMemoryError) {
+                // out of memory: give back the map caches and carry on (the next frame reloads)
+                gr.gamemap.CrashLog.note("car frame: out of memory, caches trimmed")
+                try { gr.gamemap.TileCache.trim(0.3); gr.gamemap.VectorSource.trim(0.5) } catch (_: Throwable) {}
             } finally {
                 try { s.unlockCanvasAndPost(c) } catch (_: Exception) {}
             }
@@ -207,7 +212,7 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
         // Keep animating (gliding arrow, smooth zoom) at ~30 fps while something moves.
         if (renderer.animating) {
             rh.removeCallbacks(draw)
-            rh.postDelayed(draw, when { renderer.interacting -> 16L; LocationTracker.speedMps > 8f -> 40L; else -> 62L }) // 25 fps moving, 16 slow
+            rh.postDelayed(draw, when { renderer.interacting -> 16L; LocationTracker.speedMps > 1f -> 33L; else -> 50L }) // 30 fps moving, 20 otherwise
         }
     }
 }

@@ -88,6 +88,7 @@ class MapRenderer(private val car: Boolean = false) {
      */
     @Volatile var lite = false
         private set
+    private var tileZ = -1
     var forceLite: Boolean? = null
     private var frameAvg = 0.0
     private var frames = 0
@@ -110,7 +111,7 @@ class MapRenderer(private val car: Boolean = false) {
     private fun drawFrame(c: Canvas, w: Int, h: Int, area: Rect, d: Float, hud: Boolean) {
         compassBounds.setEmpty()
         val zoomAnim = view.tick()
-        interacting = zoomAnim || view.gesture
+        interacting = view.gesture || (zoomAnim && view.userZooming)
         val moveAnim = LocationTracker.tick()
         animating = zoomAnim || moveAnim || (wasInteracting && !(zoomAnim || view.gesture))
         wasInteracting = zoomAnim || view.gesture
@@ -126,7 +127,11 @@ class MapRenderer(private val car: Boolean = false) {
         val bearing = if (following) view.userBearing ?: LocationTracker.heading else view.freeBearing
 
         val zoom = view.zoom
-        val z = floor(zoom).toInt().coerceIn(2, 19)
+        // the tiles' level: going out, the level above is kept (drawn a little smaller) until 0.35
+        // below it, so the automatic zoom hovering round a whole level doesn't redraw every tile
+        val zf = floor(zoom).toInt().coerceIn(2, 19)
+        val z = if (tileZ == zf + 1 && zoom >= tileZ - 0.35) tileZ else zf
+        tileZ = z
         val tilePx = TileCache.tilePx
         val scale = (2.0.pow(zoom - z) * (d / (tilePx / 256f)) * 1.15).toFloat()
         val world = tilePx * 2.0.pow(z)

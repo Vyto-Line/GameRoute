@@ -193,7 +193,14 @@ class MapView(private val zoomKey: String) {
     internal fun load(z: Double) { zoom = z.coerceIn(MapState.MIN_ZOOM, MapState.MAX_ZOOM); targetZoom = zoom }
 
     /** Button zoom: animates smoothly to the next level. */
+    /** When the person last zoomed (buttons, pinch): only then is a zoom animation drawn at full frame rate. */
+    @Volatile var userZoomAt = 0L
+
+    /** A zoom the person is doing or just did (not the automatic driving zoom). */
+    val userZooming: Boolean get() = SystemClock.uptimeMillis() - userZoomAt < 700
+
     fun zoomBy(delta: Double) {
+        userZoomAt = SystemClock.uptimeMillis()
         targetZoom = (targetZoom + delta).coerceIn(MapState.MIN_ZOOM, MapState.MAX_ZOOM)
         saveZoom()
         MapState.changed.fire()
@@ -202,6 +209,7 @@ class MapView(private val zoomKey: String) {
     /** Pinch zoom: follows the fingers directly. */
     fun zoomByFactor(factor: Float) {
         if (factor <= 0) return
+        userZoomAt = SystemClock.uptimeMillis()
         zoom = (zoom + log2(factor.toDouble())).coerceIn(MapState.MIN_ZOOM, MapState.MAX_ZOOM)
         targetZoom = (zoom - autoTarget).coerceIn(MapState.MIN_ZOOM, MapState.MAX_ZOOM)
         saveZoom()

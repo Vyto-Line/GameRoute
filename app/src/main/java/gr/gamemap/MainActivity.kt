@@ -4003,7 +4003,7 @@ class GameMapView(ctx: Context) : View(ctx) {
             // fingers on the map or a zoom gliding: full rate. Otherwise the arrow gliding between
             // GPS fixes looks the same at 25 fps (fast) / 16 fps (slow): far fewer frames, less battery
             if (MapState.gesture || renderer.interacting) postInvalidateOnAnimation()
-            else postInvalidateDelayed(if (LocationTracker.speedMps > 8f) 40 else 62)
+            else postInvalidateDelayed(if (LocationTracker.speedMps > 1f) 33 else 50)
         }
     }
 }
