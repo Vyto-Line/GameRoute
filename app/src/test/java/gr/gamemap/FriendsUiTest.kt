@@ -61,6 +61,24 @@ class FriendsUiTest {
             activity.openSheetForTest("settings"); page.set(activity, "sharing"); activity.openSheetForTest("settings"); shot("fr_${lang}_settings"); page.set(activity, null); call("closeSheet")
         }
         L.setMode("en")
+        // the keyboard up (330 dp, drawn grey here): the sheet sits above it, the box being typed in stays visible
+        fun keyboard(on: Boolean) {
+            val kb = if (on) (330 * activity.resources.displayMetrics.density).toInt() else 0
+            val wi = androidx.core.view.WindowInsetsCompat.Builder()
+                .setInsets(androidx.core.view.WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.of(0, 0, 0, kb))
+                .setVisible(androidx.core.view.WindowInsetsCompat.Type.ime(), on).build()
+            val content = activity.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0)
+            androidx.core.view.ViewCompat.dispatchApplyWindowInsets(content, wi)
+        }
+        fun kbShot(name: String) {
+            repeat(10) { looper.idleFor(java.time.Duration.ofMillis(60)) }
+            val bmp = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888); val cv = Canvas(bmp); root.draw(cv)
+            val kb = 330 * activity.resources.displayMetrics.density
+            cv.drawRect(0f, root.height - kb, root.width.toFloat(), root.height.toFloat(), android.graphics.Paint().apply { color = android.graphics.Color.rgb(90, 90, 96) })
+            File(out, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        activity.openSheetForTest("addfriend"); keyboard(true); kbShot("fr_en_kb_add"); keyboard(false); call("closeSheet")
+        activity.openSheetForTest("convoy"); keyboard(true); kbShot("fr_en_kb_convoy"); keyboard(false); call("closeSheet")
         // in a convoy: add buttons next to people, the invite statuses in Friends
         val r = Osrm.parseAll(File(File(System.getProperty("previewData") ?: "../previewdata"), "route.json").readText())[0]
         Convoy.myName = "Vyto"; Convoy.debugStart(Place("Acropolis Museum", "", r.points.last()))
