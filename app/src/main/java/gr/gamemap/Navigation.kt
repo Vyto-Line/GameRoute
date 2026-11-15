@@ -681,7 +681,9 @@ object Places {
                 val extra = sig.count { w -> qWords.none { fs -> fs.any { w.startsWith(it) } } }
                 val allIn = qWords.all { fs -> fs.any { f -> sig.any { it.startsWith(f) } } }
                 val exact = allIn && extra == 0 && sig.all { w -> qWords.any { fs -> w in fs } }
-                if (exact && !(p.icon == "🛣" && q.number == null)) s += 12 + far * 14 * Math.log10(1 + d / 1000) * 0.15 // and distance matters a bit less
+                // (a sight or a town: a lot; a shop or a café with the same name: a little, so
+                // "αραχωβα" is still the town, not the Αράχωβα restaurant round the corner)
+                if (exact && !(p.icon == "🛣" && q.number == null)) s += (if (big > 0) 12.0 else 4.0) + far * 14 * Math.log10(1 + d / 1000) * 0.15
                 else if (allIn) s -= minOf(extra, 3) * 2.5
             }
             // far away (another country) and not the name typed: not what anyone wants
@@ -1069,7 +1071,7 @@ object Places {
         value in setOf("supermarket", "convenience") -> "🛒"
         key == "shop" -> "🛍"
         value in setOf("hotel", "hostel", "guest_house", "motel") -> "🏨"
-        value in setOf("museum", "attraction", "monument", "castle", "ruins") -> "🏛"
+        value in setOf("museum", "attraction", "monument", "castle", "ruins", "cave_entrance", "archaeological_site", "viewpoint", "waterfall") -> "🏛"
         key == "aeroway" -> "✈"
         key == "railway" || value == "bus_station" -> "🚉"
         value in setOf("beach") -> "🏖"

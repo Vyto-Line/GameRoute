@@ -40,6 +40,6 @@ class CitySearchTest {
         }
         log.append("\nwrong first: $bad\n")
         File(out, "citysearch.txt").writeText(log.toString())
-        if (System.getProperty("softCity") == null) println("CITYBAD $bad") // assertTrue("town not first for $bad", bad.isEmpty())
+        assertTrue("town not first for $bad", bad.isEmpty())
     }
 }
