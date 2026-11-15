@@ -54,6 +54,7 @@ class FriendsUiTest {
             call("closeSheet"); shot("fr_${lang}_home")
             activity.openSheetForTest("friends"); shot("fr_${lang}_list"); call("closeSheet")
             activity.openSheetForTest("addfriend"); shot("fr_${lang}_add"); call("closeSheet")
+            activity.openSheetForTest("convoy"); shot("fr_${lang}_together_convoy"); call("closeSheet")
             activity.openSheetForTest("settings"); page.set(activity, "sharing"); activity.openSheetForTest("settings"); shot("fr_${lang}_settings"); page.set(activity, null); call("closeSheet")
         }
         L.setMode("en")

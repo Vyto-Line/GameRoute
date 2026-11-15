@@ -104,6 +104,8 @@ object L {
         "(.+): tap to confirm or cancel" to "$1: πάτα για επιβεβαίωση ή ακύρωση",
         "(.+) suggests a place" to "$1 προτείνει ένα μέρος",
         "(.+) wants to be friends" to "$1 θέλει να γίνετε φίλοι",
+        "Convoy with (.+)" to "Κομβόι με $1",
+        "(\\d+) waiting" to "$1 σε αναμονή",
         "(.+) accepted your friend request" to "$1 αποδέχτηκε το αίτημα φιλίας",
         "(.+) invites you to a convoy" to "$1 σε προσκαλεί σε κομβόι",
         "(.+) invites you" to "$1 σε προσκαλεί",
@@ -344,6 +346,7 @@ object L {
         "City centre" to "Κέντρο πόλης", "Wider area" to "Ευρύτερη περιοχή",
         "Routes and search still need the internet." to "Οι διαδρομές και η αναζήτηση χρειάζονται ίντερνετ.",
         // convoy
+        "Together" to "Μαζί", "friends online" to "φίλοι συνδεδεμένοι", "FRIENDS ONLINE" to "ΦΙΛΟΙ ΣΥΝΔΕΔΕΜΕΝΟΙ", "👥 Convoy" to "👥 Κομβόι",
         "Friends" to "Φίλοι", "YOUR CODE" to "Ο ΚΩΔΙΚΟΣ ΣΟΥ", "＋  Add a friend" to "＋  Προσθήκη φίλου", "Invites" to "Προσκλήσεις",
         "Join the convoy" to "Μπες στο κομβόι", "Requests" to "Αιτήματα", "wants to add you" to "θέλει να σε προσθέσει",
         "No friends yet. Share your code, or add people you drove with in a convoy." to "Δεν έχεις φίλους ακόμα. Στείλε τον κωδικό σου ή πρόσθεσε όσους οδήγησες μαζί σε κομβόι.",
