@@ -32,8 +32,8 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
 
     class Friend(val fid: String, var name: String, val secret: String, val since: Long, val code: String = "")
     class Request(val fid: String, val name: String, val secret: String, val at: Long, val nonce: String, val code: String)
-    /** A request I sent: by code, so I don't know who they are until they accept. */
-    class Pending(val nonce: String, val code: String, val name: String, val at: Long)
+    /** A request I sent: by code, so I don't know who they are until they answer. [status]: waiting, accepted, declined. */
+    class Pending(val nonce: String, val code: String, val name: String, val at: Long, val status: String = "waiting")
     /** A convoy invite I got (several for the same convoy count as one). */
     class Invite(val iid: String, val fid: String, val from: String, val convoy: String, val dest: String, val at: Long, val count: Int)
     /** A convoy invite I sent, and how far it got: sent, seen, joined, no. */
@@ -52,16 +52,22 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     /** Friends used on this phone (a code was made): only then is anything checked, so no battery otherwise. */
     val started: Boolean get() = store.get("code") != null
 
-    /** My friend code, as people read it: "KX7P-4821". */
-    val code: String get() = store.get("code") ?: newCodeText().also { store.put("code", it) }
+    /**
+     * My friend code, as people read it: my name and 4 digits, "VYTO-4821". (Codes from the first
+     * version, "KX7P-4821", are replaced once: friends stay, they know my inbox.)
+     */
+    val code: String get() {
+        val c = store.get("code")
+        if (c != null && store.get("codeV") == "2") return c
+        return newCodeText().also { store.put("code", it); store.put("codeV", "2") }
+    }
 
     /** A new code: requests to the old one stop coming; friends stay (they write to my inbox). */
-    fun newCode(): String { val c = newCodeText(); store.put("code", c); return c }
+    fun newCode(): String { val c = newCodeText(); store.put("code", c); store.put("codeV", "2"); return c }
 
     private fun newCodeText(): String {
-        val abc = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" // no 0/O, 1/I/L
-        val s = (1..8).map { abc[rnd.nextInt(abc.length)] }.joinToString("")
-        return s.take(4) + "-" + s.drop(4)
+        val letters = latin(name).uppercase().filter { it in 'A'..'Z' }.take(6).ifEmpty { "DRIVER" }
+        return letters + "-" + (1000 + rnd.nextInt(9000))
     }
 
     var showOnline: Boolean
@@ -75,7 +81,9 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
 
     val friends: List<Friend> get() = arr("friends").map { Friend(it.getString("fid"), it.optString("n", "Driver"), it.getString("s"), it.optLong("since"), it.optString("c")) }
     val requests: List<Request> get() = arr("requests").map { Request(it.getString("fid"), it.optString("n", "Driver"), it.getString("s"), it.optLong("at"), it.optString("nonce"), it.optString("c")) }
-    val pending: List<Pending> get() = arr("pending").map { Pending(it.getString("nonce"), it.optString("code"), it.optString("n"), it.optLong("at")) }
+    /** Requests I sent: waiting ones, and answered ones for a day (so I see "Accepted" / "Declined"). */
+    val pending: List<Pending> get() = arr("pending").map { Pending(it.getString("nonce"), it.optString("code"), it.optString("n"), it.optLong("at"), it.optString("st", "waiting")) }
+        .filter { it.status == "waiting" || clock() - it.at < 24 * 3600_000L }
     val blocked: Set<String> get() = arr("blocked").map { it.getString("fid") }.toSet()
     val recent: List<Recent> get() = arr("recent").map { Recent(it.getString("fid"), it.optString("n"), it.optString("c"), it.optString("d"), it.optLong("at")) }
 
@@ -90,7 +98,7 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
 
     fun friend(fid: String) = friends.firstOrNull { it.fid == fid }
     fun isFriend(fid: String) = friend(fid) != null
-    fun requested(code: String) = pending.any { norm(it.code) == norm(code) }
+    fun requested(code: String) = pending.any { it.status == "waiting" && norm(it.code) == norm(code) }
     fun sentTo(fid: String, convoy: String) = sent.lastOrNull { it.fid == fid && it.convoy == convoy }
 
     /** Online: their app was open in the last few minutes (and they let friends see it). */
@@ -103,8 +111,9 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     /** Asks the person with [code] to be friends ([name]: who I think they are, e.g. from a convoy). */
     fun request(code: String, name: String = ""): Boolean {
         val c = norm(code)
-        if (c.length != 8 || c == norm(this.code)) return false
+        if (!valid(c) || c == norm(this.code)) return false
         val nonce = hex(bytes(6))
+        removeWhere("pending") { norm(it.optString("code")) == c } // asked again: one entry
         edit("pending") { a -> a.put(JSONObject().put("nonce", nonce).put("code", pretty(c)).put("n", name).put("at", clock())) }
         val body = JSONObject().put("t", "req").put("fid", fid).put("n", name()).put("s", secret).put("c", code()).put("nonce", nonce).put("at", clock())
         wire.post(requestTopic(c), Seal.seal(requestKey(c), body.toString()))
@@ -117,7 +126,11 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
         send(r.secret, JSONObject().put("t", "acc").put("nonce", r.nonce).put("s", secret).put("c", code()))
     }
 
-    fun decline(r: Request) = removeWhere("requests") { it.getString("fid") == r.fid }
+    /** No: they see "Declined" (nothing else about me). */
+    fun decline(r: Request) {
+        removeWhere("requests") { it.getString("fid") == r.fid }
+        send(r.secret, JSONObject().put("t", "dec").put("nonce", r.nonce))
+    }
 
     /** Invites [f] to the convoy with [convoy] code (going to [dest]); returns the invite's id. */
     fun invite(f: Friend, convoy: String, dest: String): String {
@@ -177,7 +190,7 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     // ------------------------------------------------------------------ receiving
 
     /** What changed when checking: for notifications. */
-    class News(val requests: List<Request>, val invites: List<Invite>, val accepted: List<Friend>, val anyChange: Boolean)
+    class News(val requests: List<Request>, val invites: List<Invite>, val accepted: List<Friend>, val anyChange: Boolean, val declined: List<Declined> = emptyList())
 
     /** Fetches and handles everything new (requests to my code, my inbox). */
     fun check(): News {
@@ -185,15 +198,15 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
         val at = store.get("sinceAt")?.toLongOrNull() ?: 0L
         val since = store.get("since")?.takeIf { clock() - at < 11 * 3600_000L } ?: "12h"
         val list = wire.poll(listOf(inboxTopic(secret), requestTopic(norm(code))), since)
-        val reqs = ArrayList<Request>(); val invs = ArrayList<Invite>(); val acc = ArrayList<Friend>()
+        val reqs = ArrayList<Request>(); val invs = ArrayList<Invite>(); val acc = ArrayList<Friend>(); val dec = ArrayList<Declined>()
         var any = false
         for ((id, topic, body) in list) {
             store.put("since", id); store.put("sinceAt", clock().toString())
             val r = take(topic, body) ?: continue
             any = true
-            when (r) { is Request -> reqs += r; is Invite -> invs += r; is Friend -> acc += r }
+            when (r) { is Request -> reqs += r; is Invite -> invs += r; is Friend -> acc += r; is Declined -> dec += r }
         }
-        return News(reqs, invs, acc, any)
+        return News(reqs, invs, acc, any, dec)
     }
 
     /** One message: returns what's new for a notification (a request, an invite, a new friend), or Unit. */
@@ -217,10 +230,16 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
         when (o.optString("t")) {
             "acc" -> {
                 val nonce = o.optString("nonce")
-                if (pending.none { it.nonce == nonce }) return if (isFriend(from)) Unit else null
-                removeWhere("pending") { it.getString("nonce") == nonce }
+                if (pending.none { it.nonce == nonce && it.status == "waiting" }) return if (isFriend(from)) Unit else null
+                answered(nonce, "accepted", name)
                 if (isFriend(from)) return Unit
                 return addFriend(from, name, o.getString("s"), o.optString("c"))
+            }
+            "dec" -> {
+                val nonce = o.optString("nonce")
+                val p = pending.firstOrNull { it.nonce == nonce && it.status == "waiting" } ?: return null
+                answered(nonce, "declined", "")
+                return Declined(p.name.ifBlank { pretty(p.code) })
             }
         }
         val f = friend(from) ?: return null // everything else only from friends
@@ -254,6 +273,16 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
             }
         }
         return null
+    }
+
+    /** Someone said no to my request (for a note). */
+    class Declined(val who: String)
+
+    private fun answered(nonce: String, st: String, name: String) = edit("pending") { a ->
+        for (k in 0 until a.length()) {
+            val p = a.getJSONObject(k)
+            if (p.getString("nonce") == nonce) { p.put("st", st).put("at", clock()); if (name.isNotBlank()) p.put("n", name) }
+        }
     }
 
     private fun rank(st: String) = when (st) { "seen" -> 1; "joined", "no" -> 2; else -> 0 }
@@ -308,7 +337,19 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
         const val INVITE_TTL = 2 * 3600_000L
         const val ONLINE_FOR = 5 * 60_000L
         /** "kx7p 4821", "KX7P-4821" and a link with it all become "KX7P4821". */
-        fun norm(code: String) = code.substringAfterLast('#').substringAfterLast('/').uppercase().filter { it.isLetterOrDigit() }
-        fun pretty(c: String) = norm(c).let { if (it.length == 8) it.take(4) + "-" + it.drop(4) else it }
+        fun norm(code: String) = code.substringAfterLast('#').substringAfterLast('/').uppercase().filter { it in 'A'..'Z' || it in '0'..'9' }
+        /** A name (1–6 letters) and 4 digits: "VYTO4821". */
+        fun valid(c: String) = Regex("[A-Z]{1,6}[0-9]{4}").matches(norm(c))
+        /** "vyto 4821" → "VYTO-4821". */
+        fun pretty(c: String) = norm(c).let { n -> val i = n.indexOfFirst { it.isDigit() }; if (i > 0) n.take(i) + "-" + n.drop(i) else n }
+
+        /** Greek letters in Latin ones, for the code ("Βύτο" → "VYTO"). */
+        fun latin(s: String): String {
+            val m = mapOf('α' to "a", 'ά' to "a", 'β' to "v", 'γ' to "g", 'δ' to "d", 'ε' to "e", 'έ' to "e", 'ζ' to "z", 'η' to "i", 'ή' to "i",
+                'θ' to "th", 'ι' to "i", 'ί' to "i", 'ϊ' to "i", 'ΐ' to "i", 'κ' to "k", 'λ' to "l", 'μ' to "m", 'ν' to "n", 'ξ' to "x", 'ο' to "o", 'ό' to "o",
+                'π' to "p", 'ρ' to "r", 'σ' to "s", 'ς' to "s", 'τ' to "t", 'υ' to "y", 'ύ' to "y", 'ϋ' to "y", 'ΰ' to "y", 'φ' to "f", 'χ' to "ch",
+                'ψ' to "ps", 'ω' to "o", 'ώ' to "o")
+            return s.lowercase().map { m[it] ?: it.toString() }.joinToString("")
+        }
     }
 }

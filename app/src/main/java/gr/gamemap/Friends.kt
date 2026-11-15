@@ -53,7 +53,11 @@ object Friends {
             override fun put(key: String, value: String?) { prefs.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply() }
         }, Ntfy)
         core.name = Convoy.myName
-        Convoy.changed += { core.name = Convoy.myName }
+        Convoy.changed += {
+            core.name = Convoy.myName
+            // a code made before I had a name ("DRIVER-4821"): now it gets my name (friends stay)
+            if (core.started && Convoy.myName.isNotBlank() && core.code.startsWith("DRIVER-") && !FriendCore.latin(Convoy.myName).uppercase().startsWith("DRIVER")) bg { core.newCode() }
+        }
         if (core.started) schedule()
     }
 
@@ -74,8 +78,11 @@ object Friends {
     /** The app is on screen (or not): check often, and show me online. */
     fun setVisible(v: Boolean) {
         visible = v
-        if (v) { ensureLoop(); Presence.start() } else Presence.stop()
+        if (v) { ensureLoop(); kick(); Presence.start() } else Presence.stop()
     }
+
+    /** Check right now (the app came back, Friends opened, a request sent): no waiting for the next round. */
+    fun kick() { ensureLoop(); loop?.interrupt() }
 
     /** Checks again every ~20 s while the app is open, navigating or in a convoy. */
     fun ensureLoop() {
@@ -83,7 +90,9 @@ object Friends {
         loop = Thread {
             while (visible || Convoy.active || NavEngine.active) {
                 checkNow()
-                try { Thread.sleep(20_000) } catch (e: InterruptedException) { break }
+                // a request of mine waiting for an answer, and the app open: look more often
+                val waiting = visible && core.pending.any { it.status == "waiting" && System.currentTimeMillis() - it.at < 3600_000L }
+                try { Thread.sleep(if (waiting) 8_000 else 20_000) } catch (e: InterruptedException) { /* kicked: check now */ }
             }
             loop = null
         }.apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
@@ -98,7 +107,7 @@ object Friends {
         if (!news.anyChange) return false
         main.post {
             changed.fire()
-            if (news.requests.isNotEmpty() || news.invites.isNotEmpty() || news.accepted.isNotEmpty()) arrived.fire()
+            if (news.requests.isNotEmpty() || news.invites.isNotEmpty() || news.accepted.isNotEmpty() || news.declined.isNotEmpty()) arrived.fire()
             Presence.refresh()
         }
         // notifications: always from the background job; in the app only while it's not on screen
@@ -106,6 +115,7 @@ object Friends {
             for (r in news.requests) notifyRequest(r)
             for (i in news.invites) if (core.allowInvites) notifyInvite(i)
             for (f in news.accepted) notifyAccepted(f)
+            for (x in news.declined) post(x.who.hashCode(), L.t("${x.who} declined your friend request"), "", open("friends", "open", x.who.hashCode()))
         }
         return true
     }
@@ -116,8 +126,9 @@ object Friends {
 
     fun request(code: String, name: String = ""): Boolean {
         val c = FriendCore.norm(code)
-        if (c.length != 8 || c == FriendCore.norm(core.code)) return false
+        if (!FriendCore.valid(c) || c == FriendCore.norm(core.code)) return false
         bg { core.request(c, name) }
+        main.postDelayed({ kick() }, 1500)
         return true
     }
     fun accept(r: FriendCore.Request) = bg { core.accept(r); main.post { Presence.refresh() } }

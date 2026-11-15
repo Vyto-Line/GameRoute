@@ -22,15 +22,16 @@
 <main>
   <h1>Add a friend on GameRoute</h1>
   <p>Open this in GameRoute to send a friend request. They choose to accept or decline, and your location is never shared with friends: only inside a convoy you both join.</p>
-  <div class="code" id="code">····-····</div>
+  <div class="code" id="code">NAME-0000</div>
   <a class="btn" id="open" href="#">Open in GameRoute</a>
   <div class="note">No GameRoute yet? <a href="https://github.com/Vyto-Line/GameRoute/releases/latest">Get it here</a>, then open this link again.<br>
   Or in GameRoute: Settings › Sharing › Friends › Add a friend, and type the code.</div>
 </main>
 <script>
   var code = decodeURIComponent((location.hash || "").slice(1)).toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (code.length === 8) {
-    var pretty = code.slice(0, 4) + "-" + code.slice(4);
+  var m = code.match(/^([A-Z]{1,6})([0-9]{4})$/);
+  if (m) {
+    var pretty = m[1] + "-" + m[2];
     document.getElementById("code").textContent = pretty;
     document.getElementById("open").href = "gamemap://friend/" + pretty;
     // try once by itself (works when the app is installed)

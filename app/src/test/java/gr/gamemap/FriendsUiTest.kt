@@ -27,7 +27,7 @@ class FriendsUiTest {
         val now = System.currentTimeMillis()
         // a phone that already has friends (as if they'd been added over the network)
         RuntimeEnvironment.getApplication().getSharedPreferences("friends", Context.MODE_PRIVATE).edit()
-            .putString("code", "KX7P-4821").putString("fid", "me0000000000")
+            .putString("code", "VYTO-4821").putString("codeV", "2").putString("fid", "me0000000000")
             .putString("friends", JSONArray()
                 .put(JSONObject().put("fid", "f1nikos").put("n", "Nikos").put("s", "c2VjcmV0MQ").put("since", now - 86_400_000L * 3))
                 .put(JSONObject().put("fid", "f2giorgos").put("n", "Giorgos").put("s", "c2VjcmV0Mg").put("since", now))
@@ -35,7 +35,10 @@ class FriendsUiTest {
                 .put(JSONObject().put("fid", "f4kostas").put("n", "Kostas").put("s", "c2VjcmV0NA").put("since", now)).toString())
             .putString("requests", JSONArray().put(JSONObject().put("fid", "r1eleni").put("n", "Eleni").put("s", "c2VjcmV0NQ").put("at", now).put("nonce", "n1")).toString())
             .putString("invites", JSONArray().put(JSONObject().put("iid", "i1").put("fid", "f3maria").put("n", "Maria").put("cv", "glyf22").put("d", "Glyfada Marina").put("at", now - 120_000).put("k", 3)).toString())
-            .putString("recent", JSONArray().put(JSONObject().put("fid", "p1petros").put("n", "Petros").put("c", "PTRS-2290").put("d", "Sounio").put("at", now)).toString())
+            .putString("pending", JSONArray()
+                .put(JSONObject().put("nonce", "p1").put("code", "ELENI-5512").put("n", "").put("at", now).put("st", "waiting"))
+                .put(JSONObject().put("nonce", "p2").put("code", "KOSTAS-1180").put("n", "Kostas").put("at", now).put("st", "accepted")).toString())
+            .putString("recent", JSONArray().put(JSONObject().put("fid", "p1petros").put("n", "Petros").put("c", "PETROS-2290").put("d", "Sounio").put("at", now)).toString())
             .apply()
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         val root = activity.window.decorView
@@ -63,8 +66,8 @@ class FriendsUiTest {
         Convoy.myName = "Vyto"; Convoy.debugStart(Place("Acropolis Museum", "", r.points.last()))
         Convoy.debugMember("Petros", r.points[20], 0, 0, -1.0, -1.0, "ready")
         Convoy.debugMember("Nikos", r.points[30], 0, 0, -1.0, -1.0, "ready")
-        Convoy.members.values.first { it.name == "Petros" }.apply { fid = "p1petros"; fc = "PTRS-2290" }
-        Convoy.members.values.first { it.name == "Nikos" }.apply { fid = "f1nikos"; fc = "NIKO-7731" }
+        Convoy.members.values.first { it.name == "Petros" }.apply { fid = "p1petros"; fc = "PETROS-2290" }
+        Convoy.members.values.first { it.name == "Nikos" }.apply { fid = "f1nikos"; fc = "NIKOS-7731" }
         val sent = JSONArray()
             .put(JSONObject().put("fid", "f1nikos").put("iid", "a").put("cv", Convoy.code).put("at", now).put("st", "joined"))
             .put(JSONObject().put("fid", "f2giorgos").put("iid", "b").put("cv", Convoy.code).put("at", now).put("st", "seen"))

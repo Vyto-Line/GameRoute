@@ -34,7 +34,9 @@ class FriendCoreTest {
     @Test
     fun friends() {
         val a = phone("Vyto"); val b = phone("Nikos")
-        assertTrue(a.code.matches(Regex("[A-Z2-9]{4}-[A-Z2-9]{4}")))
+        assertTrue(a.code, a.code.matches(Regex("VYTO-[0-9]{4}")))
+        assertTrue(phone("Νίκος").code.startsWith("NIKOS-"))
+        assertTrue(phone("").code.startsWith("DRIVER-"))
 
         // A adds B by code ("kx7p 4821" typed any way)
         assertTrue(a.request(b.code.lowercase().replace("-", " ")))
@@ -51,11 +53,14 @@ class FriendCoreTest {
         assertEquals("Nikos", na.accepted.single().name)
         assertEquals("Nikos", a.friends.single().name)
         assertFalse(a.requested(b.code))
+        assertEquals("the sender sees it was accepted", "accepted", a.pending.single().status)
+        assertEquals("Nikos", a.pending.single().name)
 
         // a new code: friends stay, the old code stops working
         val old = b.code
-        b.newCode()
+        while (b.code == old) b.newCode()
         assertNotEquals(old, b.code)
+        assertTrue("same name, new digits", b.code.startsWith("NIKOS-"))
         assertEquals(1, b.friends.size)
         val c = phone("Eleni")
         c.request(old)
@@ -64,6 +69,9 @@ class FriendCoreTest {
         assertEquals("Eleni", b.check().requests.single().name)
         b.decline(b.requests.single())
         assertTrue(b.requests.isEmpty())
+        assertEquals("the sender sees it was declined", 1, c.check().declined.size)
+        assertEquals("declined", c.pending.single().status)
+        assertFalse(c.requested(b.code))
     }
 
     @Test

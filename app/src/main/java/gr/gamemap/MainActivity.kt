@@ -385,7 +385,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             preview.setPadding(bars.left + p + p / 2, p, bars.right + p + p / 2, bars.bottom + p + p / 2)
             homeSheet.setPadding(bars.left, p, bars.right, bars.bottom + p)
             placeCard.setPadding(bars.left + 2 * p, p + p / 2, bars.right + 2 * p, bars.bottom + 2 * p)
-            sheetHost.setPadding(bars.left + 2 * p, p + p / 2, bars.right + 2 * p, bars.bottom + 2 * p)
+            // the keyboard up: the sheets sit on top of it (the app draws edge to edge, so Android doesn't move them)
+            sheetOverlay.setPadding(0, if (ime.bottom > 0) bars.top else 0, 0, ime.bottom)
+            sheetHost.setPadding(bars.left + 2 * p, p + p / 2, bars.right + 2 * p, (if (ime.bottom > 0) 0 else bars.bottom) + 2 * p)
             (offerCard.layoutParams as FrameLayout.LayoutParams).setMargins(bars.left + p, bars.top + p, bars.right + p, 0)
             (askCard.layoutParams as FrameLayout.LayoutParams).setMargins(bars.left + p, 0, bars.right + p, bars.bottom + (120 * d).toInt())
             offerCard.requestLayout()
@@ -2048,6 +2050,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (kind != sheetKind) settingsPage = null
         // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
         quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""
+        if ((kind == "friends" || kind == "addfriend") && Friends.ready && Friends.core.started) Friends.kick()
         sheetKind = kind
         if (sheetOverlay.visibility != View.VISIBLE) {
             // the sheet slides up over a fading-in shade
@@ -2759,8 +2762,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val p = (12 * d).toInt()
         if (!Convoy.active) {
             togetherHeader("convoy")
+            // (scrolls, and shrinks above the keyboard: the code box stays in view)
+            val cbody = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            sheetHost.addView(SheetScroll(0.75).apply { addView(cbody) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             // your name first: it's what the others see
-            sheetHost.addView(LinearLayout(this).apply {
+            cbody.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                 setPadding(p, p / 3, p / 3, p / 3); background = bg(dim(22), radius = 14f)
                 addView(LinearLayout(context).apply {
@@ -2770,20 +2776,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 addView(pill("Edit") { editConvoyName() }.apply { textSize = 14f; setTextColor(readable(accent)) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 })
-            sheetHost.addView(label("Drive together: everyone sees the others on the map with their speed and arrival time.", 14f).apply {
+            cbody.addView(label("Drive together: everyone sees the others on the map with their speed and arrival time.", 14f).apply {
                 setTextColor(dim()); setPadding(0, p, 0, p / 2)
             })
-            sheetHost.addView(pill("＋  Create a convoy") { withConvoyName { Convoy.create(null); openSheet("convoy") } }.apply {
+            cbody.addView(pill("＋  Create a convoy") { withConvoyName { Convoy.create(null); openSheet("convoy") } }.apply {
                 textSize = 17f; setTextColor(onAccent(accent)); background = bg(accent, radius = 22f)
             }, LinearLayout.LayoutParams(MATCH_PARENT, (54 * d).toInt()))
-            sheetHost.addView(label("You can choose where to go now or later, together.", 12f).apply {
+            cbody.addView(label("You can choose where to go now or later, together.", 12f).apply {
                 setTextColor(dim()); gravity = Gravity.CENTER; setPadding(0, p / 3, 0, p)
             })
             // friends online: one tap starts a convoy and invites them
             val online = onlineFriends()
             if (online.isNotEmpty()) {
-                sheetHost.addView(label("FRIENDS ONLINE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding(p / 3, 0, 0, p / 3) })
-                for (f in online.take(3)) sheetHost.addView(LinearLayout(this).apply {
+                cbody.addView(label("FRIENDS ONLINE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding(p / 3, 0, 0, p / 3) })
+                for (f in online.take(3)) cbody.addView(LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 3, 0, p / 3)
                     addView(avatar(f.name, f.fid, true, 34), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
                     addView(label(f.name, 15f, bold = true).apply { setTextColor(ink) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
@@ -2791,9 +2797,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         textSize = 14f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 12f); maxLines = 1
                     })
                 })
-                sheetHost.addView(View(this), LinearLayout.LayoutParams(1, p))
+                cbody.addView(View(this), LinearLayout.LayoutParams(1, p))
             }
-            sheetHost.addView(label("JOIN WITH A CODE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding(p / 3, 0, 0, p / 2) })
+            cbody.addView(label("JOIN WITH A CODE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding(p / 3, 0, 0, p / 2) })
             lateinit var joinBtn: TextView
             val input = EditText(this).apply {
                 hint = "K7P 2QX"; setSingleLine(); setTextColor(ink); setHintTextColor(dim(110))
@@ -2822,12 +2828,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     }
                 })
             }
-            sheetHost.addView(input, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            cbody.addView(input, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             joinBtn = pill("Join") { joinConvoy(input.text.toString()) }.apply {
                 setTextColor(onAccent(accent)); background = bg(accent, radius = 14f); alpha = 0.45f; isEnabled = false
             }
-            sheetHost.addView(joinBtn, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p })
-            sheetHost.addView(pill("Paste an invite link") {
+            cbody.addView(joinBtn, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p })
+            cbody.addView(pill("Paste an invite link") {
                 val clip = getSystemService(android.content.ClipboardManager::class.java)?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()
                 if (clip.isNullOrBlank()) Toast.makeText(this, L.t("Nothing to paste"), Toast.LENGTH_SHORT).show() else joinConvoy(clip)
             }.apply { textSize = 14f; setTextColor(readable(accent)) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -3018,11 +3024,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             android.widget.FrameLayout.LayoutParams((13 * d).toInt(), (13 * d).toInt(), Gravity.END or Gravity.BOTTOM))
     }
 
+    /**
+     * A scrolling part of a sheet, at most [frac] of the screen, and less when the keyboard is up
+     * (then the sheet sits above the keyboard and this part shrinks: what you type stays in view).
+     */
+    private inner class SheetScroll(private val frac: Double) : ScrollView(this@MainActivity) {
+        override fun onMeasure(w: Int, h: Int) {
+            val maxH = (resources.displayMetrics.heightPixels * frac).toInt()
+            val lim = if (MeasureSpec.getMode(h) == MeasureSpec.UNSPECIFIED) maxH else minOf(maxH, MeasureSpec.getSize(h))
+            super.onMeasure(w, MeasureSpec.makeMeasureSpec(lim, MeasureSpec.AT_MOST))
+        }
+    }
+
     private fun friendsBody(): LinearLayout {
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val maxH = (resources.displayMetrics.heightPixels * 0.72).toInt()
-        sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        body.post { (body.parent as? View)?.let { sv -> if (body.height > maxH) { sv.layoutParams.height = maxH; sv.requestLayout() } } }
+        sheetHost.addView(SheetScroll(0.72).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         return body
     }
 
@@ -3040,7 +3056,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val cv = Convoy.code
         val fr = c.friends.sortedWith(compareBy({ !c.isOnline(it.fid) }, { it.name.lowercase() }))
         val key = "${c.code}|${fr.joinToString { it.fid + it.name + c.isOnline(it.fid) + (cv?.let { x -> c.sentTo(it.fid, x)?.status }) }}|" +
-            "${c.requests.joinToString { it.fid }}|${c.invites.joinToString { it.convoy + it.count }}|${c.pending.size}|$cv|${Convoy.active}|${theme.name}|${MapState.dark}"
+            "${c.requests.joinToString { it.fid }}|${c.invites.joinToString { it.convoy + it.count }}|${c.pending.joinToString { it.nonce + it.status }}|$cv|${Convoy.active}|${theme.name}|${MapState.dark}"
         if (key == friendsKey && sheetHost.childCount > 0) return
         friendsKey = key
         sheetHost.removeAllViews()
@@ -3128,7 +3144,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         if (c.pending.isNotEmpty()) {
             friendsSection(body, "Requests you sent")
-            for (q in c.pending) body.addView(label("${q.name.ifBlank { q.code }} · ${L.t("waiting")}…", 13.5f).apply { setTextColor(dim()); setPadding((4 * d).toInt(), p / 3, 0, p / 3) })
+            for (q in c.pending) body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding((4 * d).toInt(), p / 3, 0, p / 3)
+                addView(label(q.name.ifBlank { FriendCore.pretty(q.code) }, 14.5f, bold = true).apply { setTextColor(ink) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(label(when (q.status) { "accepted" -> "✓ Accepted"; "declined" -> "Declined"; else -> L.t("Waiting for an answer") + "…" }, 13.5f, bold = q.status != "waiting").apply {
+                    setTextColor(when (q.status) { "accepted" -> readable(Color.rgb(47, 180, 100)); "declined" -> readable(Color.rgb(230, 80, 80)); else -> dim() })
+                })
+            })
         }
         body.addView(label("Your location is never shared with friends: only inside a convoy you join.", 12f).apply { setTextColor(dim()); setPadding(0, p, 0, 0) })
     }
@@ -3162,7 +3184,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         friendsSection(body, "Or type their code")
         lateinit var add: TextView
         val input = EditText(this).apply {
-            hint = "KX7P-4821"; setSingleLine(); setTextColor(ink); setHintTextColor(dim(110))
+            hint = "NIKOS-2290"; setSingleLine(); setTextColor(ink); setHintTextColor(dim(110))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             textSize = 22f; letterSpacing = 0.1f; typeface = Typeface.MONOSPACE; gravity = Gravity.CENTER
             background = bg(dim(22), dim(90), 1.5f, 14f); val q = (10 * d).toInt(); setPadding(q, q, q, q)
@@ -3174,11 +3196,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     if (busy) return
                     val raw = e.toString()
                     if (!raw.contains("/")) {
-                        val k = raw.uppercase().filter { it.isLetterOrDigit() }.take(8)
-                        val pretty = if (k.length > 4) k.take(4) + "-" + k.drop(4) else k
+                        // letters, then the 4 digits: "nikos2290" shows as "NIKOS-2290"
+                        val k = FriendCore.norm(FriendCore.latin(raw)).take(10)
+                        val pretty = FriendCore.pretty(k)
                         if (pretty != raw) { busy = true; e.replace(0, e.length, pretty); busy = false }
                     }
-                    val ok = FriendCore.norm(e.toString()).length == 8
+                    val ok = FriendCore.valid(e.toString())
                     add.alpha = if (ok) 1f else 0.45f; add.isEnabled = ok
                 }
             })
@@ -3234,7 +3257,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** gamemap://friend/<code>, from a friend's link or QR. */
     private fun addFriendFromLink(code: String) {
         val k = FriendCore.norm(code)
-        if (k.length != 8) { Toast.makeText(this, L.t("That isn't a friend code"), Toast.LENGTH_SHORT).show(); return }
+        if (!FriendCore.valid(k)) { Toast.makeText(this, L.t("That isn't a friend code"), Toast.LENGTH_SHORT).show(); return }
         Friends.start()
         if (k == FriendCore.norm(Friends.core.code)) { Toast.makeText(this, L.t("That's your own code"), Toast.LENGTH_SHORT).show(); return }
         AlertDialog.Builder(this).setTitle("Add a friend?")
