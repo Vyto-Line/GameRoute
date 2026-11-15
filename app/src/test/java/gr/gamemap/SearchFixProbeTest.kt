@@ -20,10 +20,10 @@ class SearchFixProbeTest {
         Traffic.init(RuntimeEnvironment.getApplication()); Places.init(RuntimeEnvironment.getApplication())
         val key = Traffic.key
         val log = StringBuilder()
-        val near = LatLng(37.9310, 23.7560) // Ilioupoli
+        val near = LatLng(37.9755, 23.7348) // Athens centre
         fun d(b: LatLng) = "%.1f km (%.4f,%.4f)".format(Geo.distance(near, b) / 1000, b.lat, b.lon)
         fun get(url: String) = try { Http.get(url, timeout = 10000) } catch (e: Exception) { "ERR $e" }
-        for (q in listOf("σπηλια του νταβελη", "σουνιο", "Acropolis Museum", "μουσειο ακροπολης")) {
+        for (q in listOf("sounio", "Acropolis Museum", "σπηλια νταβελη")) {
             log.append("\n=== \"$q\"\n")
             for (ta in listOf(true, false)) {
                 val j = get("https://api.tomtom.com/search/2/search/${enc(q)}.json?key=$key&limit=8&language=el-GR&typeahead=$ta&idxSet=POI,PAD,Addr,Str,Geo&lat=${near.lat}&lon=${near.lon}")
