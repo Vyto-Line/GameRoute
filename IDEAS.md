@@ -9,7 +9,7 @@
    check, expire after 2 h or when the convoy ends (never shown), grouped.
 3. After a convoy: "Drove with you" → Add.
 4. Settings › Friends: "Show me as online", "Friends can invite me to convoys", code, blocked.
-5. Settings › Backup & restore: Android backup (link to its settings), Move to a new phone
+5. Settings › Backup & restore: Move to a new phone
    (QR + matching numbers; the old phone stops showing friends), backup file with password,
    restore from file. Includes friends + ID, saved places + labels, Home/Work, XP + trips,
    marked cameras, settings.
@@ -34,3 +34,7 @@ Invites (option 1, polished; mockups 18d, 18g, 18h):
 - Invites expire after 2 h or when the convoy ends, and expired ones are never shown.
 - Several invites to the same convoy show as one ("3 invites").
 - Later, maybe: UnifiedPush (ntfy) for instant invites with the app closed.
+
+## When GameRoute goes on the Play Store
+- Add "Automatic: Android backup" back to Backup & restore (restore on a new phone only
+  works reliably for Play Store installs).
