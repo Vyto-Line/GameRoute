@@ -10,6 +10,7 @@ import java.net.URLEncoder
 
 /** Davelis cave, Sounio, Acropolis Museum: what each source returns and what the app ranks first (from Ilioupoli). */
 @RunWith(RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [34])
 class SearchFixProbeTest {
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
