@@ -43,7 +43,7 @@ object L {
         if (!greek || s.isEmpty()) return s
         words[s]?.let { return it }
         // a value with an arrow or spaces around it ("Kilometres  ›", "You  "): the words inside
-        val core = s.trim().removeSuffix("›").trim()
+        val core = s.trim().removeSuffix("›").removeSuffix("+").trim() // ("Work  +": not set yet)
         if (core.isNotEmpty() && core != s) { val tc = t(core); if (tc != core) return s.replace(core, tc) }
         for ((re, out) in patterns) {
             val m = re.matchEntire(s) ?: continue
