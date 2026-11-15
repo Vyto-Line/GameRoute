@@ -9,6 +9,7 @@
    check, expire after 2 h or when the convoy ends (never shown), grouped.
 3. Add people you drive with: in the convoy list at any time (add button next to anyone who
    isn't a friend; no pop-ups while driving) and on the finish card ("Drove with you").
+   The convoy menu's Invite button opens: "Invite friends" (who's online) or "Share the link".
 4. Settings › Friends: "Show me as online", "Friends can invite me to convoys", code, blocked.
 5. Settings › Backup & restore: Move to a new phone
    (QR + matching numbers; the old phone stops showing friends), backup file with password,
