@@ -675,11 +675,13 @@ object Places {
             // the name is just what was typed (small words aside): "Σπηλιά Νταβέλη" (Penteli) over
             // "Σπηλιά του Νταβέλη / Μπίμπεση" round the corner; each extra word costs a little
             // ("Acropolis Museum" before "Acropolis Museum Restaurant")
-            val sig = words.filter { it !in stopWords && it.length > 1 }
+            // ("Αρχαιολογικός Χώρος", "Cape"… aren't extra; a street isn't the town it's named after)
+            val sig = words.filter { it !in stopWords && it !in genericWords && it.length > 1 }
             if (qWords.isNotEmpty() && sig.isNotEmpty()) {
                 val extra = sig.count { w -> qWords.none { fs -> fs.any { w.startsWith(it) } } }
-                val allIn = qWords.withIndex().all { (k, fs) -> fs.any { f -> sig.any { it.startsWith(f) } } || sound(greeklish(q.words[k])) in stopWords }
-                if (allIn && extra == 0) s += 12 + far * 14 * Math.log10(1 + d / 1000) * 0.15 // and distance matters a bit less
+                val allIn = qWords.all { fs -> fs.any { f -> sig.any { it.startsWith(f) } } }
+                val exact = allIn && extra == 0 && sig.all { w -> qWords.any { fs -> w in fs } }
+                if (exact && !(p.icon == "🛣" && q.number == null)) s += 12 + far * 14 * Math.log10(1 + d / 1000) * 0.15 // and distance matters a bit less
                 else if (allIn) s -= minOf(extra, 3) * 2.5
             }
             // far away (another country) and not the name typed: not what anyone wants
