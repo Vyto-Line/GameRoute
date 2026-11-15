@@ -1461,10 +1461,10 @@ class MapRenderer(private val car: Boolean = false) {
         bannerBottom = r.bottom
     }
 
-    /** Car: the convoy box under the turn box (name · how far ahead, speed, arrival). */
+    /** Car: the convoy box under the turn box (name · how far ahead, % of the race, speed, arrival). */
     private fun drawCarConvoy(c: Canvas, a: Rect, d: Float, t: Theme) {
         val rows = Convoy.rows(t.route).take(5)
-        val w = minOf(352 * d, a.width() - 28f * d)
+        val w = minOf(400 * d, a.width() - 28f * d)
         val rowH = 26 * d
         val r = RectF(a.left + 12 * d, bannerBottom + 8 * d, a.left + 12 * d + w, bannerBottom + 8 * d + 46 * d + rows.size * rowH)
         panel(c, r, d, t, outline = true)
@@ -1480,6 +1480,8 @@ class MapRenderer(private val car: Boolean = false) {
             c.drawCircle(x0 + ((x1 - x0) * row.progress).toFloat(), ly, 6.5f * d, fill)
         }
         var y = r.top + 46 * d
+        // columns from the right: arrival time, speed (with its unit), how much of the race (%)
+        val etaX = r.right - 12 * d; val speedX = r.right - 70 * d; val pctX = r.right - 142 * d
         for (row in rows) {
             fill.color = if (row.stale) Color.GRAY else row.color
             c.drawCircle(r.left + 18 * d, y + 13 * d, 5 * d, fill)
@@ -1488,12 +1490,29 @@ class MapRenderer(private val car: Boolean = false) {
             c.drawText(ellipsize(name, 90 * d), r.left + 30 * d, y + 18 * d, text)
             val nw = text.measureText(ellipsize(name, 90 * d))
             text.typeface = Typeface.DEFAULT; text.textSize = 13 * d; text.color = Ui.dim(t, 190)
-            c.drawText(ellipsize(gr.gamemap.L.t(" · " + Convoy.relative(row)), w - nw - 160 * d), r.left + 30 * d + nw, y + 18 * d, text)
-            text.textAlign = Paint.Align.RIGHT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 15 * d
-            text.color = if (row.kmh == 0 && row.state == "driving") Color.rgb(255, 120, 120) else Ui.ink(t)
-            c.drawText(if (row.state == "arrived") "✓" else "${row.kmh}", r.right - 72 * d, y + 18 * d, text)
+            // the "850 m ahead" part gives way first on a narrow screen (the numbers never do)
+            c.drawText(ellipsize(gr.gamemap.L.t(" · " + Convoy.relative(row)), pctX - 48 * d - (r.left + 30 * d + nw)), r.left + 30 * d + nw, y + 18 * d, text)
+            text.textAlign = Paint.Align.RIGHT
+            // % of the race: the race figure, in bold and the route's colour (✓ arrived, – not racing)
+            val known = row.me || row.left >= 0
+            val pct = (row.progress * 100).toInt().coerceIn(0, 99)
+            text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 16 * d
+            text.color = if (row.state == "arrived") Ui.onPanel(t, Color.rgb(47, 210, 122), 3.0) else Ui.onPanel(t, t.route, 3.0)
+            c.drawText(when { row.state == "arrived" -> "✓"; row.state == "own" || !known -> "–"; else -> "$pct%" }, pctX, y + 18 * d, text)
+            // speed with a small "km/h", so the two numbers can't be mixed up
+            if (row.state != "arrived") {
+                text.typeface = Typeface.DEFAULT; text.textSize = 10 * d; text.color = Ui.dim(t, 170)
+                val unit = if (MapState.imperial) "mph" else "km/h"
+                c.drawText(unit, speedX, y + 18 * d, text)
+                val uw = text.measureText(unit) + 3 * d
+                text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 15 * d
+                text.color = if (row.kmh == 0 && row.state == "driving") Color.rgb(255, 120, 120) else Ui.ink(t)
+                val v = if (MapState.imperial) (row.kmh / 1.609).toInt() else row.kmh
+                c.drawText("$v", speedX - uw, y + 18 * d, text)
+            }
+            text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 15 * d
             text.color = Ui.onPanel(t, Color.rgb(47, 210, 122), 3.0)
-            c.drawText(if (row.eta > 0) NavEngine.clock(row.eta) else "–", r.right - 12 * d, y + 18 * d, text)
+            c.drawText(if (row.eta > 0) NavEngine.clock(row.eta) else "–", etaX, y + 18 * d, text)
             text.textAlign = Paint.Align.LEFT
             carHits += RectF(r.left, y, r.right, y + rowH) to "friend:${row.id}"
             y += rowH

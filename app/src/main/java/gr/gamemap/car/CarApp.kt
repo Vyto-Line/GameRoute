@@ -236,7 +236,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         if (r != null && r !== askedFor && carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_5) {
             askedFor = r
             val t = gr.gamemap.Alerts.typeOf(r.type)
-            val alert = Alert.Builder(ASK_ALERT, CarText.create("${t.title} reported here"), 10_000L)
+            val alert = Alert.Builder(ASK_ALERT, CarText.create(gr.gamemap.L.t("${t.title} reported here")), 10_000L)
                 .setSubtitle(CarText.create(gr.gamemap.L.t("Is it still there?")))
                 .addAction(Action.Builder().setTitle(gr.gamemap.L.t("Still there")).setOnClickListener { gr.gamemap.Alerts.vote(r, true); gr.gamemap.Alerts.clearAsk() }.build())
                 .addAction(Action.Builder().setTitle(gr.gamemap.L.t("Not there")).setOnClickListener { gr.gamemap.Alerts.vote(r, false); gr.gamemap.Alerts.clearAsk() }.build())
@@ -381,13 +381,13 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         if (alertFor === o) return
         alertFor = o
         if (carContext.carAppApiLevel < CarAppApiLevels.LEVEL_5) {
-            CarToast.makeText(carContext, "Faster route: saves ${(o.savingSeconds + 30) / 60} min" +
-                if (NavEngine.autoSwitch) ", switching" else "", CarToast.LENGTH_LONG).show()
+            CarToast.makeText(carContext, gr.gamemap.L.t("Faster route · saves ${(o.savingSeconds + 30) / 60} min") +
+                if (NavEngine.autoSwitch) " · " + gr.gamemap.L.t("Switch") else "", CarToast.LENGTH_LONG).show()
             return
         }
         val via = o.option.via.takeIf { it.isNotBlank() }?.let { "Via $it" } ?: "Avoids traffic on your route"
-        val alert = Alert.Builder(OFFER_ALERT, CarText.create("Faster route · saves ${(o.savingSeconds + 30) / 60} min"), NavEngine.OFFER_SECONDS * 1000L)
-            .setSubtitle(CarText.create(via))
+        val alert = Alert.Builder(OFFER_ALERT, CarText.create(gr.gamemap.L.t("Faster route · saves ${(o.savingSeconds + 30) / 60} min")), NavEngine.OFFER_SECONDS * 1000L)
+            .setSubtitle(CarText.create(gr.gamemap.L.t(via)))
             .setIcon(icon(carContext, R.drawable.ic_bolt))
             .addAction(Action.Builder().setTitle(gr.gamemap.L.t("Switch")).setOnClickListener { NavEngine.acceptOffer() }.build())
             .addAction(Action.Builder().setTitle(gr.gamemap.L.t("Keep")).setOnClickListener { NavEngine.declineOffer() }.build())
@@ -814,7 +814,7 @@ class ReportScreen(carContext: CarContext) : Screen(carContext) {
         if (gr.gamemap.Alerts.reportsReady) for (t in gr.gamemap.Alerts.reportTypes.take(4)) {
             list.addItem(Row.Builder().setTitle("${t.glyph}  ${t.title}").setOnClickListener {
                 gr.gamemap.Alerts.report(t.key) { ok ->
-                    CarToast.makeText(carContext, if (ok) "Thanks! ${t.title} reported" else "Couldn't send the report", CarToast.LENGTH_SHORT).show()
+                    CarToast.makeText(carContext, gr.gamemap.L.t(if (ok) "Thanks! ${t.title} reported" else "Couldn't send the report"), CarToast.LENGTH_SHORT).show()
                 }
                 screenManager.pop()
             }.build())
@@ -961,11 +961,11 @@ class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
             }
         }
         friendsRow()
-        if (gr.gamemap.Convoy.active) row(gr.gamemap.L.t("Leave convoy"), "${gr.gamemap.Convoy.members.size + 1} drivers") { gr.gamemap.Convoy.leave(); screenManager.pop() }
+        if (gr.gamemap.Convoy.active) row(gr.gamemap.L.t("Leave convoy"), gr.gamemap.L.t("${gr.gamemap.Convoy.members.size + 1} drivers")) { gr.gamemap.Convoy.leave(); screenManager.pop() }
         else row(gr.gamemap.L.t("Map style"), (MapState.carTheme ?: MapState.theme).title) { MapState.nextCarTheme(); invalidate() }
         val stop = NavEngine.stops.firstOrNull()
         if (stop != null && NavEngine.active) row(gr.gamemap.L.t("Remove stop"), stop.name) { NavEngine.removeStop(stop); screenManager.pop() }
-        else row("Traffic", if (gr.gamemap.Traffic.showLayer) gr.gamemap.L.t("On") else gr.gamemap.L.t("Off")) { gr.gamemap.Traffic.showLayer = !gr.gamemap.Traffic.showLayer; invalidate() }
+        else row(gr.gamemap.L.t("Traffic"), if (gr.gamemap.Traffic.showLayer) gr.gamemap.L.t("On") else gr.gamemap.L.t("Off")) { gr.gamemap.Traffic.showLayer = !gr.gamemap.Traffic.showLayer; invalidate() }
         row(gr.gamemap.L.t("Spoken directions"), if (Voice.muted) gr.gamemap.L.t("Off") else gr.gamemap.L.t("On")) { Voice.muted = !Voice.muted; invalidate() }
         row(gr.gamemap.L.t("Report")) { screenManager.pop(); screenManager.push(ReportScreen(carContext)) }
         // the car decides how many rows fit (often 6): the least needed go last
