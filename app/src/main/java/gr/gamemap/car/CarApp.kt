@@ -282,8 +282,14 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     private var previewShown = false
     private var alertFor: NavEngine.Offer? = null
 
+    private var shownEndNote: String? = null
+
     private val onNav: () -> Unit = {
         syncNavigationState()
+        // the route stops where the car road ends: say so once
+        val note = NavEngine.endNote
+        if (note != null && note != shownEndNote) CarToast.makeText(carContext, note, CarToast.LENGTH_LONG).show()
+        shownEndNote = note
         // a route preview started from the phone or the car search shows here too
         if (NavEngine.planning && !previewShown) {
             previewShown = true
@@ -299,7 +305,9 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(surface)
         surface.onButton = { onCarButton(it) }
         nav.setNavigationManagerCallback(object : NavigationManagerCallback {
-            override fun onStopNavigation() = NavEngine.stop()
+            // Android Auto stops it (the car app closing, another navigation app): it comes back
+            // when GameRoute's car screen opens again
+            override fun onStopNavigation() = NavEngine.stop(keepResume = true)
         })
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onCreate(owner: LifecycleOwner) {
@@ -317,6 +325,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 gr.gamemap.Friends.setInCar(true)
                 onFriends()
                 ensureLocation()
+                tryResume(0)
                 if (gr.gamemap.Updater.dueForCheck(carContext)) Executors.newSingleThreadExecutor().execute {
                     val r = try { gr.gamemap.Updater.check(carContext) } catch (e: Exception) { null }
                     if (r != null) main.post {
@@ -343,6 +352,16 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 LocationTracker.release(carContext, "car")
             }
         })
+    }
+
+    /** The route that ran when the car app last closed: started again (once there's a GPS fix). */
+    private fun tryResume(attempt: Int) {
+        if (NavEngine.active || NavEngine.planning || attempt > 10) return
+        val (place, via) = NavEngine.resumable(carContext) ?: return
+        val here = LocationTracker.position ?: run { main.postDelayed({ tryResume(attempt + 1) }, 2000); return }
+        if (gr.gamemap.Geo.distance(here, place.goal) < 150) return // already there
+        NavEngine.resume(carContext, place, via)
+        CarToast.makeText(carContext, gr.gamemap.L.t("Route to ${place.name} resumed"), CarToast.LENGTH_LONG).show()
     }
 
     private fun ensureLocation() {

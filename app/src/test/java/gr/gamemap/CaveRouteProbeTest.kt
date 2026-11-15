@@ -51,6 +51,14 @@ class CaveRouteProbeTest {
             if (line != last) log.append("  at ${"%.2f".format((r.length - m) / 1000)} km before the end: $line\n")
             last = line; m += 50
         }
+        // the app's answer: where the car road ends
+        val tail = RoadKind.dirtTail(r)
+        log.append("\ndirtTail: ${tail?.let { "car road ends ${(r.length - it.first).toInt()} m before the end, at ${f(it.second)}, ${Geo.distance(it.second, cave).toInt()} m from the cave" } ?: "none"}\n")
+        org.junit.Assert.assertNotNull(tail)
+        // a normal town address: no tail
+        val r2 = Router.routes(from, LatLng(37.9755, 23.7348), alternatives = false)[0]
+        log.append("Syntagma: ${RoadKind.dirtTail(r2)}\n")
+        org.junit.Assert.assertNull(RoadKind.dirtTail(r2))
         // what roads are near the cave (Nominatim reverse at the cave and the end)
         try { log.append("reverse at cave: " + Http.get("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${cave.lat}&lon=${cave.lon}&zoom=17", timeout = 8000).take(400) + "\n") } catch (e: Exception) { log.append("rev: $e\n") }
         File(out, "caveroute.txt").writeText(log.toString())

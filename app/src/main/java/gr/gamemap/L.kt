@@ -110,6 +110,8 @@ object L {
         "(\\d+) waiting" to "$1 σε αναμονή",
         "(.+) accepted your friend request" to "$1 αποδέχτηκε το αίτημα φιλίας",
         "(.+) invites you to a convoy" to "$1 σε προσκαλεί σε κομβόι",
+        "The road ends (.+) before (.+): the rest is a dirt track or a path" to "Ο δρόμος τελειώνει $1 πριν από: $2. Το υπόλοιπο είναι χωματόδρομος ή μονοπάτι",
+        "Route to (.+) resumed" to "Η διαδρομή προς $1 συνεχίζεται",
         "(.+) from you" to "$1 από σένα",
         "🏁 Racing: (.+) · they start without you" to "🏁 Τρέχουν: $1 · ξεκινούν χωρίς εσένα",
         "🏁 Racing: (.+)" to "🏁 Τρέχουν: $1",

@@ -1449,6 +1449,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         ).joinToString(" · ")
         previewList.removeAllViews()
         if (place != null) placeInfo(place)?.let { previewList.addView(it) }
+        // the route stops where the car road ends (a cave, a peak)
+        NavEngine.endNote?.let { note ->
+            previewList.addView(label("⚠ $note", 13.5f).apply {
+                setTextColor(ink); val q = (10 * d).toInt(); setPadding(q, q * 3 / 4, q, q * 3 / 4)
+                background = bg(Color.argb(45, 255, 170, 60), Color.rgb(255, 170, 60), 1.5f, 12f)
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (8 * d).toInt() })
+        }
         val fastest = NavEngine.fastestIndex()
         val p = (12 * d).toInt()
         opts.forEachIndexed { i, o ->

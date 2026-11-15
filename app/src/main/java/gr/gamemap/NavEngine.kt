@@ -103,6 +103,52 @@ object NavEngine {
         } catch (e: Exception) { null }
     }
 
+    /** The route stops short of the place (dirt track or path after it): what to tell the driver. */
+    @Volatile var endNote: String? = null
+
+    // ------------------------------------------------------------- resume after the car app closed
+
+    private var resumePlace: Place? = null
+
+    private fun saveResume() {
+        if (!::appContext.isInitialized) return
+        val p = resumePlace ?: return
+        fun j(x: Place) = org.json.JSONObject().put("n", x.name).put("a", x.address).put("la", x.pos.lat).put("lo", x.pos.lon).put("i", x.icon)
+            .apply { x.entry?.let { put("ela", it.lat); put("elo", it.lon) } }
+        val o = j(p).put("at", System.currentTimeMillis()).put("stops", org.json.JSONArray().apply { stops.forEach { put(j(it)) } })
+        try { prefs().edit().putString("resume", o.toString()).apply() } catch (_: Exception) {}
+    }
+
+    private fun clearResume() {
+        resumePlace = null
+        if (::appContext.isInitialized) try { prefs().edit().remove("resume").apply() } catch (_: Exception) {}
+    }
+
+    /** The route that was running when the car app closed (within 45 min), with its stops. */
+    fun resumable(ctx: Context): Pair<Place, List<Place>>? {
+        if (active || planning) return null
+        val raw = ctx.getSharedPreferences("gamemap", Context.MODE_PRIVATE).getString("resume", null) ?: return null
+        return try {
+            val o = org.json.JSONObject(raw)
+            if (System.currentTimeMillis() - o.getLong("at") > 45 * 60_000) return null
+            fun pl(x: org.json.JSONObject) = Place(x.getString("n"), x.optString("a"), LatLng(x.getDouble("la"), x.getDouble("lo")), x.optString("i", "📍"),
+                entry = if (x.has("ela")) LatLng(x.getDouble("ela"), x.getDouble("elo")) else null)
+            val st = o.optJSONArray("stops")
+            pl(o) to (0 until (st?.length() ?: 0)).map { pl(st!!.getJSONObject(it)) }
+        } catch (e: Exception) { null }
+    }
+
+    /** Starts that route again (from where the car is now). */
+    fun resume(ctx: Context, place: Place, via: List<Place>) {
+        CrashLog.note("resume navigation")
+        appContext = ctx.applicationContext
+        planning = false; planSeq++
+        begin(place)
+        stops.addAll(via)
+        saveResume()
+        fetchRoute()
+    }
+
     /** The speed limit where we are now, km/h, if known. */
     val speedLimit: Int?
         get() = current?.limits?.firstOrNull { along >= it.start - 5 && along < it.end + 5 }?.value
@@ -222,6 +268,7 @@ object NavEngine {
         planning = true
         lastTrip = null
         planPlace = place
+        endNote = null
         options = emptyList(); selected = 0; userPicked = false
         departAt = null
         planError = null
@@ -241,9 +288,25 @@ object NavEngine {
         changed.fire()
         MapState.requestFit(listOf(from, place.pos))
         io.execute {
-            val routes = try { Router.routes(from, place.goal, alternatives = true, heading = heading()).also { Tolls.annotate(it) } } catch (e: Exception) { null }
+            var routes = try { Router.routes(from, place.goal, alternatives = true, heading = heading()).also { Tolls.annotate(it) } } catch (e: Exception) { null }
+            // the last part is a dirt track or a footpath (a cave, a peak): the route ends where
+            // the car road does, and says how much is left
+            var goal = place
+            val tail = routes?.firstOrNull()?.let { try { RoadKind.dirtTail(it) } catch (e: Exception) { null } }
+            if (tail != null) {
+                val again = try { Router.routes(from, tail.second, alternatives = true, heading = heading()).also { Tolls.annotate(it) } } catch (e: Exception) { null }
+                if (!again.isNullOrEmpty()) {
+                    routes = again
+                    goal = place.copy(entry = tail.second)
+                }
+            }
             main.post {
                 if (seq != planSeq || !planning) return@post
+                if (goal !== place) {
+                    planPlace = goal
+                    val left = Geo.distance(goal.goal, place.pos)
+                    endNote = gr.gamemap.L.t("The road ends ${formatDistance(left)} before ${place.name}: the rest is a dirt track or a path")
+                } else endNote = null
                 if (routes.isNullOrEmpty()) {
                     planLoading = false; planError = gr.gamemap.L.t("No route found"); changed.fire(); return@post
                 }
@@ -316,6 +379,7 @@ object NavEngine {
             if (others != null && others - opt.seconds >= 60) tripSaved = (others - opt.seconds).toInt()
         }
         if (opt != null) apply(opt, announce = true) else fetchRoute()
+        endNote?.let { Voice.say(it) }
     }
 
     /** Starts navigation straight away (no preview). */
@@ -323,6 +387,7 @@ object NavEngine {
         CrashLog.note("start navigation")
         appContext = ctx.applicationContext
         planning = false; planSeq++
+        endNote = null
         begin(place)
         fetchRoute()
     }
@@ -346,6 +411,8 @@ object NavEngine {
         Convoy.startedDriving()
         estimating = false; lastRealFixAt = 0; tollAhead = null; tollSaid = null
         main.removeCallbacks(tunnel); main.postDelayed(tunnel, 1000)
+        resumePlace = place
+        saveResume()
         changed.fire()
         try {
             if (LocationTracker.hasPermission(appContext))
@@ -388,6 +455,7 @@ object NavEngine {
     fun addStop(p: Place) {
         if (!active || stops.any { Geo.distance(it.pos, p.pos) < 30 }) return
         stops += p
+        saveResume()
         Voice.say(if (Voice.lang == Phrases.GREEK) "Προστέθηκε στάση: ${p.name}" else "Stop added: ${p.name}")
         fetchRoute()
     }
@@ -395,7 +463,7 @@ object NavEngine {
     internal fun debugStop(p: Place) { stops += p; changed.fire() }
 
     fun removeStop(p: Place) {
-        if (stops.remove(p)) fetchRoute()
+        if (stops.remove(p)) { saveResume(); fetchRoute() }
     }
 
     /** Reached the next stop: it's done, the route carries on to the destination. */
@@ -403,13 +471,20 @@ object NavEngine {
         val s = stops.firstOrNull() ?: return
         if (Geo.distance(pos, s.pos) < 40) {
             stops.remove(s)
+            saveResume()
             Voice.say(if (Voice.lang == Phrases.GREEK) "Φτάσατε στη στάση: ${s.name}" else "Stop reached: ${s.name}")
             changed.fire()
         }
     }
 
-    fun stop() {
-        CrashLog.note("stop navigation")
+    /**
+     * Ends navigation. [keepResume]: Android Auto stopped it (the car app closed, another app
+     * took over), not the driver: the route comes back when the car screen opens again.
+     */
+    fun stop(keepResume: Boolean = false) {
+        CrashLog.note(if (keepResume) "navigation stopped by the car" else "stop navigation")
+        if (!keepResume) clearResume()
+        endNote = null
         LiveShare.stop(if (arrived) "arrived" else "stopped")
         stops.clear()
         destination = null
@@ -533,7 +608,7 @@ object NavEngine {
             val here = LocationTracker.position ?: from
             val h = heading()
             val via = stops.map { it.pos }
-            val r = try {
+            val r0 = try {
                 if (reroute && !wantsAlternatives) {
                     // one route, raced (OSRM / TomTom): ~3–6× quicker than asking for alternatives.
                     // Only if it would send the car back the way it came, ask again for the choices.
@@ -545,8 +620,24 @@ object NavEngine {
                     if (reroute) pickForward(list, h, current) else list.firstOrNull()
                 }
             } catch (e: Exception) { null }
+            // a new trip that ends on a dirt track: end where the car road does
+            var newDest: LatLng? = null
+            var routeOut = r0
+            if (!reroute && r0 != null && stops.isEmpty()) {
+                val tail = try { RoadKind.dirtTail(r0) } catch (e: Exception) { null }
+                if (tail != null) {
+                    val again = try { Router.routes(here, tail.second, alternatives = false, heading = h).also { Tolls.annotate(it) }.firstOrNull() } catch (e: Exception) { null }
+                    if (again != null) { routeOut = again; newDest = tail.second }
+                }
+            }
+            val r = routeOut
             main.post {
                 if (destination != dest || seq != routeSeq) return@post
+                if (newDest != null) {
+                    endNote = gr.gamemap.L.t("The road ends ${formatDistance(Geo.distance(newDest, dest))} before $destinationName: the rest is a dirt track or a path")
+                    destination = newDest
+                    Voice.say(endNote!!)
+                }
                 main.removeCallbacks(routeWatchdog)
                 if (r == null) {
                     loading = false; error = gr.gamemap.L.t("No route found"); changed.fire()
@@ -665,6 +756,7 @@ object NavEngine {
         if (real && (Geo.distance(pos, dest) < 30 || (remainingDistance < 20 && bestD < 35))) {
             if (!arrived) {
                 arrived = true
+                clearResume()
                 offer = null
                 finishTrip()
                 LiveShare.stop("arrived")
