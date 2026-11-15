@@ -1442,9 +1442,17 @@ class MapRenderer(private val car: Boolean = false) {
         c.drawText("🏁", x1 + 14 * d, ly + 5 * d, text)
         for (row in rows.sortedBy { if (it.me) 1 else 0 }) { // me on top
             val x = x0 + ((x1 - x0) * row.progress).toFloat()
-            fill.color = if (row.stale) Color.GRAY else row.color
-            c.drawCircle(x, ly, 11 * d, fill)
-            stroke.color = Ui.panel(t); stroke.strokeWidth = 2 * d; c.drawCircle(x, ly, 11 * d, stroke)
+            if (row.along) {
+                // driving along (not racing): a grey, dashed dot
+                fill.color = Color.argb(150, 122, 128, 137); c.drawCircle(x, ly, 11 * d, fill)
+                stroke.color = Ui.dim(t, 200); stroke.strokeWidth = 1.6f * d
+                stroke.pathEffect = android.graphics.DashPathEffect(floatArrayOf(3 * d, 2.5f * d), 0f)
+                c.drawCircle(x, ly, 10 * d, stroke); stroke.pathEffect = null
+            } else {
+                fill.color = if (row.stale) Color.GRAY else row.color
+                c.drawCircle(x, ly, 11 * d, fill)
+                stroke.color = Ui.panel(t); stroke.strokeWidth = 2 * d; c.drawCircle(x, ly, 11 * d, stroke)
+            }
             text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 11 * d; text.color = Color.rgb(17, 20, 24)
             c.drawText(if (row.me) "★" else row.name.take(1).uppercase(), x, ly + 4 * d, text)
             // how much of the race each has done (their speed stays on their tag on the map)
@@ -1452,7 +1460,7 @@ class MapRenderer(private val car: Boolean = false) {
             text.color = Ui.dim(t, 220)
             val known = row.me || row.left >= 0
             val pct = (row.progress * 100).toInt().coerceIn(0, 99) // 100 is the ✓
-            c.drawText(when { row.state == "arrived" -> "✓"; row.state == "own" || !known -> "–"; else -> "$pct%" }, x, ly + 25 * d, text)
+            c.drawText(when { row.along -> gr.gamemap.L.t("along"); row.state == "arrived" -> "✓"; row.state == "own" || !known -> "–"; else -> "$pct%" }, x, ly + 25 * d, text)
         }
         text.textSize = 15 * d; text.color = Ui.onPanel(t, t.route, 3.0)
         c.drawText("▾", r.right - 16 * d, ly + 5 * d, text)
@@ -1476,8 +1484,15 @@ class MapRenderer(private val car: Boolean = false) {
         fill.color = withAlpha(Ui.ink(t), 60); c.drawRoundRect(x0, ly - 1.5f * d, x1, ly + 1.5f * d, 2 * d, 2 * d, fill)
         text.textSize = 12 * d; text.typeface = Typeface.DEFAULT; c.drawText("🏁", x1 + 6 * d, ly + 5 * d, text)
         for (row in rows.sortedBy { if (it.me) 1 else 0 }) {
+            val cx = x0 + ((x1 - x0) * row.progress).toFloat()
+            if (row.along) {
+                stroke.color = Ui.dim(t, 190); stroke.strokeWidth = 1.5f * d
+                stroke.pathEffect = android.graphics.DashPathEffect(floatArrayOf(2.5f * d, 2f * d), 0f)
+                c.drawCircle(cx, ly, 5.5f * d, stroke); stroke.pathEffect = null
+                continue
+            }
             fill.color = if (row.stale) Color.GRAY else row.color
-            c.drawCircle(x0 + ((x1 - x0) * row.progress).toFloat(), ly, 6.5f * d, fill)
+            c.drawCircle(cx, ly, 6.5f * d, fill)
         }
         var y = r.top + 46 * d
         // columns from the right: arrival time, speed (with its unit), how much of the race (%)
@@ -1485,7 +1500,7 @@ class MapRenderer(private val car: Boolean = false) {
         for (row in rows) {
             fill.color = if (row.stale) Color.GRAY else row.color
             c.drawCircle(r.left + 18 * d, y + 13 * d, 5 * d, fill)
-            text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 15 * d; text.color = Ui.ink(t)
+            text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 15 * d; text.color = if (row.along) Ui.dim(t, 200) else Ui.ink(t)
             val name = if (row.me) gr.gamemap.L.t("You") else row.name
             c.drawText(ellipsize(name, 90 * d), r.left + 30 * d, y + 18 * d, text)
             val nw = text.measureText(ellipsize(name, 90 * d))
@@ -1496,9 +1511,15 @@ class MapRenderer(private val car: Boolean = false) {
             // % of the race: the race figure, in bold and the route's colour (✓ arrived, – not racing)
             val known = row.me || row.left >= 0
             val pct = (row.progress * 100).toInt().coerceIn(0, 99)
-            text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 16 * d
-            text.color = if (row.state == "arrived") Ui.onPanel(t, Color.rgb(47, 210, 122), 3.0) else Ui.onPanel(t, t.route, 3.0)
-            c.drawText(when { row.state == "arrived" -> "✓"; row.state == "own" || !known -> "–"; else -> "$pct%" }, pctX, y + 18 * d, text)
+            if (row.along) {
+                // driving along: no race figure
+                text.typeface = Typeface.DEFAULT; text.textSize = 12 * d; text.color = Ui.dim(t, 170)
+                c.drawText(gr.gamemap.L.t("along"), pctX, y + 18 * d, text)
+            } else {
+                text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 16 * d
+                text.color = if (row.state == "arrived") Ui.onPanel(t, Color.rgb(47, 210, 122), 3.0) else Ui.onPanel(t, t.route, 3.0)
+                c.drawText(when { row.state == "arrived" -> "✓"; row.state == "own" || !known -> "–"; else -> "$pct%" }, pctX, y + 18 * d, text)
+            }
             // speed with a small "km/h", so the two numbers can't be mixed up
             if (row.state != "arrived") {
                 text.typeface = Typeface.DEFAULT; text.textSize = 10 * d; text.color = Ui.dim(t, 170)
@@ -1506,7 +1527,7 @@ class MapRenderer(private val car: Boolean = false) {
                 c.drawText(unit, speedX, y + 18 * d, text)
                 val uw = text.measureText(unit) + 3 * d
                 text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 15 * d
-                text.color = if (row.kmh == 0 && row.state == "driving") Color.rgb(255, 120, 120) else Ui.ink(t)
+                text.color = if (row.kmh == 0 && row.state == "driving") Color.rgb(255, 120, 120) else if (row.along) Ui.dim(t, 200) else Ui.ink(t)
                 val v = if (MapState.imperial) (row.kmh / 1.609).toInt() else row.kmh
                 c.drawText("$v", speedX - uw, y + 18 * d, text)
             }

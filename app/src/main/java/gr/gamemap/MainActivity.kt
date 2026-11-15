@@ -1569,6 +1569,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setTextColor(ink); typeface = t.typeface; gravity = Gravity.CENTER; setPadding(0, (14 * d).toInt(), 0, 0)
         })
         tripCard.addView(label("Arrived ${NavEngine.clock(trip.arrivedAt)}", 14f).apply { setTextColor(dim()); gravity = Gravity.CENTER })
+        if (Convoy.active && Convoy.meAlong) tripCard.addView(label("Convoy: you drove along (not in the race)", 14f).apply { setTextColor(dim()); gravity = Gravity.CENTER; setPadding(0, (6 * d).toInt(), 0, 0) })
         Convoy.myPlace()?.let { (place, of) ->
             val nth = when (place) { 1 -> "1st 👑"; 2 -> "2nd"; 3 -> "3rd"; else -> "${place}th" }
             tripCard.addView(label("Convoy: $nth of $of", 15f, bold = true).apply { setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, (6 * d).toInt(), 0, 0) })
@@ -2881,17 +2882,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 pnt.color = dim(70); c.drawRoundRect(x0, y - 1.5f * d, x1, y + 1.5f * d, 2 * d, 2 * d, pnt)
                 pnt.textSize = 14 * d; c.drawText("🏁", x1 + 6 * d, y + 5 * d, pnt)
                 for (r in rows.sortedBy { if (it.me) 1 else 0 }) {
-                    pnt.color = if (r.stale) Color.GRAY else r.color
+                    pnt.color = if (r.stale || r.along) Color.GRAY else r.color
                     c.drawCircle(x0 + ((x1 - x0) * r.progress).toFloat(), y, 8 * d, pnt)
                 }
             }
         }, LinearLayout.LayoutParams(MATCH_PARENT, (30 * d).toInt()))
+        // the start: everyone not driving yet picks Race or Drive along
+        val underway = Convoy.underway
+        val choosing = !NavEngine.active && dest != null && Convoy.atStart().isNotEmpty() && !underway
         for (r in rows) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, p / 2) }
             row.addView(View(this).apply { background = bg(if (r.stale) Color.GRAY else r.color, radius = 6f) }, LinearLayout.LayoutParams((11 * d).toInt(), (11 * d).toInt()).apply { marginEnd = p })
             row.addView(label("${if (r.me) "You" else r.name}  ", 16f, bold = true).apply { setTextColor(ink) })
             row.addView(label(Convoy.relative(r), 13f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            row.addView(label(if (r.state == "arrived") "✓" else "${r.kmh} km/h", 14f, bold = true).apply {
+            // at the start: who races and who drives along
+            if (choosing && !r.me) row.addView(label(if (r.along) "Driving along" else "🏁 Race", 12f, bold = true).apply {
+                val q = (4 * d).toInt(); setPadding(q * 2, q, q * 2, q)
+                if (r.along) { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(140), 1.5f, 6f) }
+                else { setTextColor(onAccent(accent)); background = bg(accent, radius = 6f) }
+            })
+            else row.addView(label(if (r.state == "arrived") "✓" else "${r.kmh} km/h", 14f, bold = true).apply {
                 setTextColor(if (r.kmh == 0 && r.state == "driving") readable(Color.rgb(230, 60, 60)) else ink); setPadding(p, 0, p, 0)
             })
             row.addView(label(if (r.eta > 0) NavEngine.clock(r.eta) else "–", 15f, bold = true).apply { setTextColor(readable(Color.rgb(47, 180, 100))) })
@@ -2912,10 +2922,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         buttons.addView(pill("Leave") { confirmLeaveConvoy() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 22f) },
             LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p })
         val lobby = Convoy.lobby()
-        // the others already on their way: no countdown to wait for, just join them
-        val underway = Convoy.members.values.any { it.state == "driving" && !it.stale }
-        val race = !NavEngine.active && dest != null && lobby.isNotEmpty() && !underway
-        if (!NavEngine.active && dest != null && !race && !underway) buttons.addView(pill("Start") { closeSheet(); NavEngine.start(this, dest); MapState.recenter() }.apply {
+        if (!NavEngine.active && dest != null && !choosing && !underway) buttons.addView(pill("Start") { closeSheet(); NavEngine.start(this, dest); MapState.recenter() }.apply {
             setTextColor(onAccent(accent)); background = bg(accent, radius = 22f)
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.3f))
         // not on the convoy's route (not driving yet, or on a route of my own): one tap to join it
@@ -2924,30 +2931,64 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }.apply {
             setTextColor(onAccent(accent)); background = bg(accent, radius = 22f); maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p })
-        if (race) {
-            // the race start: everyone presses Ready, then 3-2-1 and all go together
-            val waiting = lobby.filter { !it.ready }.map { it.name }
-            val ready = Convoy.meReady
-            sheetHost.addView(pill(when {
-                !ready -> "🏁 I'm ready"
-                waiting.isEmpty() -> "✓ Everyone's ready!"
-                else -> "✓ Ready · waiting for " + waiting.joinToString(", ")
-            }) { Convoy.setReady(!ready) }.apply {
-                textSize = 17f
-                if (ready) { setTextColor(readable(Color.rgb(47, 180, 100))); background = bg(Color.TRANSPARENT, Color.rgb(47, 180, 100), 2f, 22f) }
-                else { setTextColor(onAccent(accent)); background = bg(accent, radius = 22f) }
-                maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(MATCH_PARENT, (54 * d).toInt()).apply { topMargin = p })
-            sheetHost.addView(label(if (ready) "Tap again if you're not ready after all. When everyone is, a 3-2-1 countdown starts on every phone and the route starts by itself."
-                else "When everyone has pressed it, a 3-2-1 countdown starts on every phone and the route starts by itself.", 13f).apply {
-                setTextColor(dim()); setPadding(0, p / 2, 0, 0)
-            })
+        if (choosing) {
+            val along = Convoy.meAlong
+            val counting = Convoy.counting
+            // Race or Drive along (free to switch until the countdown)
+            sheetHost.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                fun option(on: Boolean, title: String, sub: String, pick: () -> Unit) = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    val q = (10 * d).toInt(); setPadding(q + q / 5, q, q, q)
+                    background = if (on) bg(Color.argb(40, Color.red(accent), Color.green(accent), Color.blue(accent)), accent, 2.5f, 14f) else bg(Color.TRANSPARENT, dim(110), 1.5f, 14f)
+                    addView(label(title, 15.5f, bold = true).apply { setTextColor(if (on) readable(accent) else ink) })
+                    addView(label(sub, 12.5f).apply { setTextColor(dim()) })
+                    isClickable = true
+                    contentDescription = L.t(title) + (if (on) ", " + L.t("selected") else "")
+                    setOnClickListener { if (!counting) pick() }
+                }
+                addView(option(!along, "🏁 Race", "Ready, then 3-2-1 with the others") { Convoy.setAlong(false) },
+                    LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginEnd = p / 2 })
+                addView(option(along, "🚗 Drive along", "Same route, no race. Leave when you like") { Convoy.setAlong(true) },
+                    LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p })
+            // who races
+            val racers = lobby.map { it.name } + if (along) emptyList() else listOf(L.t("You"))
+            val line = when {
+                lobby.isEmpty() -> "Nobody else is racing yet"
+                along -> "🏁 Racing: ${lobby.joinToString(", ") { it.name }} · they start without you"
+                else -> "🏁 Racing: ${racers.joinToString(", ")}"
+            }
+            sheetHost.addView(label(line, 13f, bold = true).apply { setTextColor(dim()); setPadding(0, p / 2, 0, 0) })
+            if (along) {
+                sheetHost.addView(pill("Start · no race") { closeSheet(); NavEngine.start(this, dest!!); MapState.recenter() }.apply {
+                    textSize = 17f; setTextColor(onAccent(accent)); background = bg(accent, radius = 22f)
+                }, LinearLayout.LayoutParams(MATCH_PARENT, (54 * d).toInt()).apply { topMargin = p / 2 })
+                sheetHost.addView(label("Go now or wait for the others: the race doesn't wait for you. Until the 3-2-1 starts you can switch back to Race.", 13f).apply {
+                    setTextColor(dim()); setPadding(0, p / 2, 0, 0)
+                })
+            } else {
+                // the race start: everyone racing presses Ready, then 3-2-1 and all go together
+                val waiting = lobby.filter { !it.ready }.map { it.name }
+                val ready = Convoy.meReady
+                sheetHost.addView(pill(when {
+                    !ready -> "🏁 I'm ready"
+                    lobby.isEmpty() -> "✓ Ready · nobody else is racing yet"
+                    waiting.isEmpty() -> "✓ Everyone's ready!"
+                    else -> "✓ Ready · waiting for " + waiting.joinToString(", ")
+                }) { Convoy.setReady(!ready) }.apply {
+                    textSize = 17f
+                    if (ready) { setTextColor(readable(Color.rgb(47, 180, 100))); background = bg(Color.TRANSPARENT, Color.rgb(47, 180, 100), 2f, 22f) }
+                    else { setTextColor(onAccent(accent)); background = bg(accent, radius = 22f) }
+                    maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(MATCH_PARENT, (54 * d).toInt()).apply { topMargin = p / 2 })
+                sheetHost.addView(label(if (ready) "Tap again if you're not ready after all. When every racer is, a 3-2-1 countdown starts on every phone and the route starts by itself."
+                    else "When every racer has pressed it, a 3-2-1 countdown starts on every phone and the route starts by itself.", 13f).apply {
+                    setTextColor(dim()); setPadding(0, p / 2, 0, 0)
+                })
+            }
         }
         sheetHost.addView(buttons)
-        if (race) sheetHost.addView(label("Start without waiting", 13f, bold = true).apply {
-            setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, p, 0, 0)
-            setOnClickListener { closeSheet(); NavEngine.start(this@MainActivity, dest!!); MapState.recenter() }
-        })
         sheetHost.addView(label("Positions update every second while moving, end-to-end encrypted: only people with the code can see them.", 12f).apply {
             setTextColor(dim()); setPadding(0, p, 0, 0)
         })

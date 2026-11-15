@@ -49,3 +49,5 @@ Mockups: the GameRoute mockups canvas, rows 18 (Friends) and 19 (Backup & restor
 - **Play Store**: add "Automatic: Android backup" back to Backup & restore (restore on a new
   phone only works reliably for Play Store installs).
 - Maybe: UnifiedPush (ntfy) for instant invites with the app closed.
+- **XP and levels**: something to do with them (to talk through first). Today every trip gives
+  the same trip XP (none under 200 m), races give no extra, and levels only come from trip XP.

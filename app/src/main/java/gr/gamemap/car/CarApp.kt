@@ -954,6 +954,9 @@ class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
                     if (waiting.isEmpty()) gr.gamemap.L.t("Everyone's ready!") else gr.gamemap.L.t("Waiting for ") + waiting.joinToString(", ")) {
                     gr.gamemap.Convoy.setReady(false); invalidate()
                 } else row(gr.gamemap.L.t("🏁 I'm ready"), cd.name) { gr.gamemap.Convoy.setReady(true); screenManager.pop() }
+                if (!gr.gamemap.Convoy.counting) row(gr.gamemap.L.t("🚗 Drive along"), gr.gamemap.L.t("Same route, no race")) {
+                    gr.gamemap.Convoy.setAlong(true); screenManager.pop(); NavEngine.start(carContext, cd)
+                }
             } else if (gr.gamemap.Convoy.active && !NavEngine.active && cd != null) row(gr.gamemap.L.t("Convoy: go"), cd.name) {
                 screenManager.pop(); NavEngine.start(carContext, cd)
             } else row(gr.gamemap.L.t("Fuel nearby"), if (NavEngine.active) gr.gamemap.L.t("Add a fuel stop") else gr.gamemap.L.t("Prices and ratings")) {
