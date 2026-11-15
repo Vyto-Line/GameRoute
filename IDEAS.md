@@ -1,5 +1,20 @@
 # Ideas for later
 
+## Plan for 16 Nov 2026 (mockups: canvas rows 18 and 19)
+
+1. Friends: your ID + friend code, add by code / link / QR, requests (Accept / Decline),
+   list with Online / Offline, friend card (Invite, Remove, Block), "Make a new code"
+   (friends stay).
+2. Convoy invites to friends: one tap, Sent → Seen → Joined / Not now, ~15 min background
+   check, expire after 2 h or when the convoy ends (never shown), grouped.
+3. After a convoy: "Drove with you" → Add.
+4. Settings › Friends: "Show me as online", "Friends can invite me to convoys", code, blocked.
+5. Settings › Backup & restore: Android backup (link to its settings), Move to a new phone
+   (QR + matching numbers; the old phone stops showing friends), backup file with password,
+   restore from file. Includes friends + ID, saved places + labels, Home/Work, XP + trips,
+   marked cameras, settings.
+6. QR scanning with the camera (needed for "I'm the new phone" and adding friends by QR).
+
 ## Friends list (suggested 15 Nov 2026; mockups: canvas section 18)
 
 Decided:
