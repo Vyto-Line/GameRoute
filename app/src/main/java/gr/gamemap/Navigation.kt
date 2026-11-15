@@ -802,11 +802,14 @@ object Places {
         fun <T> get(f: java.util.concurrent.Future<T>, ms: Long): T? =
             try { f.get(ms, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (e: Exception) { f.cancel(true); null }
         val tom = get(fTom, 7000)?.let { t -> t + fLat?.let { get(it, 1500) }.orEmpty() } ?: fLat?.let { get(it, 3000) }
-        val pho = get(fPho, if (tom.isNullOrEmpty()) 4000 else 1500)
+        val pho = get(fPho, if (tom.isNullOrEmpty()) 4000 else if (full) 2500 else 1500)
         val addr = get(fAddr, 5000)
         val towns = fTown?.let { get(it, 1200) }.orEmpty()
         var osm = pho.orEmpty() + towns
-        if (tom.isNullOrEmpty() && osm.isEmpty() && open.isEmpty() && tiles.isEmpty() && addr == null) {
+        // Photon down (it often is for a moment): OpenStreetMap through Nominatim, on Enter, so
+        // places only it knows (a cave, a chapel) aren't lost
+        if (pho == null && full) osm = osm + (try { nominatim(core, focus) } catch (e: Exception) { emptyList() })
+        else if (tom.isNullOrEmpty() && osm.isEmpty() && open.isEmpty() && tiles.isEmpty() && addr == null) {
             osm = try { nominatim(core, focus) } catch (e: Exception) { return if (tom == null && pho == null) null else emptyList() }
         }
         val ranked = rank(q, focus, area, listOf(open to SRC_OPEN, tom.orEmpty() to SRC_TOMTOM, tiles to SRC_TILES, osm to SRC_OSM))
@@ -939,37 +942,9 @@ object Places {
             // down for a minute only after failing twice in a row
             if (++photonFails >= 2) { photonDownUntil = System.currentTimeMillis() + 60_000; photonFails = 0 }
         }
-        return try { nominatim(query, near) } catch (e: Exception) { null }
+        return null // (find() then asks Nominatim)
     }
 
-    /** Nominatim (the OpenStreetMap search): the backup when Photon is down. Few calls: only then. */
-    fun nominatim(query: String, near: LatLng?): List<Place> {
-        val q = URLEncoder.encode(query.trim(), "UTF-8")
-        val box = near?.let { "&viewbox=${it.lon - 1.5},${it.lat + 1.2},${it.lon + 1.5},${it.lat - 1.2}" } ?: ""
-        val lang = if (java.util.Locale.getDefault().language == "el") "el,en" else "en,el"
-        val a = org.json.JSONArray(Http.get("https://nominatim.openstreetmap.org/search?format=jsonv2&q=$q&limit=8&addressdetails=1&accept-language=$lang$box", timeout = 5000))
-        val out = ArrayList<Place>()
-        for (i in 0 until a.length()) {
-            val o = a.getJSONObject(i)
-            val pos = LatLng(o.getString("lat").toDouble(), o.getString("lon").toDouble())
-            val cat = o.optString("category"); val type = o.optString("type")
-            val name = o.optString("name").ifBlank { o.optString("display_name").substringBefore(",") }
-            if (name.isBlank()) continue
-            val ad = o.optJSONObject("address")
-            val where = listOfNotNull(ad?.optString("road")?.takeIf { it.isNotBlank() },
-                (ad?.optString("village")?.ifBlank { null } ?: ad?.optString("town")?.ifBlank { null } ?: ad?.optString("suburb")?.ifBlank { null } ?: ad?.optString("city")?.ifBlank { null })).joinToString(", ")
-            val town = if (cat == "place") when (type) { "city" -> 3; "town" -> 3; "village" -> 2; "suburb", "neighbourhood", "quarter", "hamlet" -> 1; else -> 0 } else 0
-            val icon = when {
-                town > 0 -> "🏙"
-                cat == "historic" || (cat == "tourism" && type in setOf("museum", "attraction", "viewpoint")) -> "🏛"
-                type == "beach" -> "🏖"
-                cat == "highway" -> "🛣"
-                else -> "📍"
-            }
-            out += Place(name, where, pos, icon, town = town)
-        }
-        return out
-    }
 
     /** Photon (OpenStreetMap data); short timeout, it's only a fallback now. */
     fun photon(query: String, near: LatLng?, townsOnly: Boolean = false): List<Place> {
