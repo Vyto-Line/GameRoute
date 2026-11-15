@@ -235,7 +235,7 @@ object Friends {
 
     // ------------------------------------------------------------------ ntfy
 
-    private object Ntfy : FriendCore.Wire {
+    internal object Ntfy : FriendCore.Wire {
         override fun post(topic: String, body: String) {
             Http.post("https://ntfy.sh/$topic", body, "text/plain", timeout = 10_000)
         }

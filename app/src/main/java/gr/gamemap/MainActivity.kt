@@ -2956,7 +2956,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(p, p / 2, p / 2, p / 2); background = bg(dim(22), radius = 14f)
             addView(label("YOUR CODE", 11f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding(0, 0, p, 0) })
-            addView(label(c.code, 20f, bold = true).apply { setTextColor(ink); letterSpacing = 0.06f; typeface = Typeface.MONOSPACE }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(label(c.code, 20f, bold = true).apply {
+                setTextColor(ink); letterSpacing = 0.06f; typeface = Typeface.MONOSPACE; maxLines = 1
+                setAutoSizeTextTypeUniformWithConfiguration(13, 20, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(pill("Share") { shareFriendLink() }.apply { textSize = 14f; setTextColor(readable(accent)) })
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 })
         body.addView(pill("＋  Add a friend") { openSheet("addfriend") }.apply {
