@@ -217,14 +217,64 @@ object Router {
     }
 
     fun routes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float? = null, reroute: Boolean = false, via: List<LatLng> = emptyList()): List<RouteOption> {
+        // planning a trip: TomTom's alternatives too, at the same time (OSRM often finds just one)
+        val extra = if (alternatives && !reroute && via.isEmpty() && Traffic.active)
+            racers.submit(java.util.concurrent.Callable { try { TomTomRoute.routes(from, to, true, heading, via) } catch (e: Exception) { null } }) else null
         val first = try { Osrm.routes(from, to, alternatives, heading, reroute, via).takeIf { it.isNotEmpty() } } catch (e: Exception) { null }
-        if (first != null) { lastSource = "OSRM"; return first }
+        if (first != null) {
+            lastSource = "OSRM"
+            if (extra == null || first.size >= 3) { extra?.cancel(true); return first }
+            val more = try { extra.get(4000, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (e: Exception) { extra.cancel(true); null }
+            return mergeRoutes(first, more.orEmpty())
+        }
         if (!Traffic.active) throw RuntimeException("No route")
-        val backup = TomTomRoute.routes(from, to, alternatives && via.isEmpty(), heading, via)
+        val early = extra?.let { try { it.get(12_000, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (e: Exception) { null } }
+        val backup = early?.takeIf { it.isNotEmpty() } ?: TomTomRoute.routes(from, to, alternatives && via.isEmpty(), heading, via)
         if (backup.isEmpty()) throw RuntimeException("No route")
         lastSource = "TomTom"
         return backup
     }
+}
+
+/**
+ * Adds the routes of [more] that really are other ways (not the same road with a small detour,
+ * and not far longer) to [base], up to [max] in all.
+ */
+internal fun mergeRoutes(base: List<RouteOption>, more: List<RouteOption>, max: Int = 3): List<RouteOption> {
+    val out = base.toMutableList()
+    val shortest = base.minOfOrNull { it.distance } ?: return more.take(max)
+    for (r in more) {
+        if (out.size >= max) break
+        if (r.points.size < 2 || r.distance > shortest * 1.4) continue
+        if (out.none { routeOverlap(r, it) > 0.8 }) out += r
+    }
+    return out
+}
+
+/** How much of [a], by length, runs along [b] (within 40 m): 0..1. */
+internal fun routeOverlap(a: RouteOption, b: RouteOption): Double {
+    if (a.points.size < 2 || b.points.size < 2) return 0.0
+    val step = maxOf(200.0, a.length / 150)
+    var next = 0.0; var n = 0; var on = 0
+    // b's box, a little wider: points outside it are off b for sure
+    var minLat = 90.0; var maxLat = -90.0; var minLon = 180.0; var maxLon = -180.0
+    for (p in b.points) { minLat = minOf(minLat, p.lat); maxLat = maxOf(maxLat, p.lat); minLon = minOf(minLon, p.lon); maxLon = maxOf(maxLon, p.lon) }
+    for (i in a.points.indices) {
+        if (a.cum[i] < next) continue
+        next = a.cum[i] + step
+        n++
+        val p = a.points[i]
+        if (p.lat < minLat - 0.001 || p.lat > maxLat + 0.001 || p.lon < minLon - 0.001 || p.lon > maxLon + 0.001) continue
+        var hit = false
+        for (k in 0 until b.points.size - 1) {
+            val s = b.points[k]; val e = b.points[k + 1]
+            // cheap skip: both ends far in latitude (~1 km)
+            if (kotlin.math.abs(s.lat - p.lat) > 0.01 && kotlin.math.abs(e.lat - p.lat) > 0.01 && (s.lat - p.lat) * (e.lat - p.lat) > 0) continue
+            if (Geo.distanceToSegment(p, s, e) < 40.0) { hit = true; break }
+        }
+        if (hit) on++
+    }
+    return if (n == 0) 0.0 else on.toDouble() / n
 }
 
 /** TomTom as a full router (the backup): geometry, turns, traffic and speed limits in one go. */

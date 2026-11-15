@@ -72,13 +72,24 @@ object Friends {
 
     // ------------------------------------------------------------------ checking for news
 
-    @Volatile private var visible = false
+    @Volatile private var onPhone = false
+    @Volatile private var inCar = false
+    /** GameRoute is on the phone's screen or on the car's: check often, show me online. */
+    private val visible get() = onPhone || inCar
+
     @Volatile private var loop: Thread? = null
 
     /** The app is on screen (or not): check often, and show me online. */
     fun setVisible(v: Boolean) {
-        visible = v
-        if (v) { ensureLoop(); kick(); Presence.start() } else Presence.stop()
+        onPhone = v
+        if (visible) { ensureLoop(); kick(); Presence.start() } else Presence.stop()
+    }
+
+    /** Android Auto opened (or closed): the car shows invites itself, so it counts as on screen. */
+    fun setInCar(v: Boolean) {
+        if (!ready) return
+        inCar = v
+        if (visible) { ensureLoop(); kick(); Presence.start() } else Presence.stop()
     }
 
     /** Check right now (the app came back, Friends opened, a request sent): no waiting for the next round. */

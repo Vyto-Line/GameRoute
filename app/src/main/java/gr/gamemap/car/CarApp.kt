@@ -245,6 +245,34 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         }
     }
 
+    /** The invite last shown (convoy + how many invites), so each is asked once. */
+    private var invitedKey = ""
+
+    /** A friend invites me to a convoy: a car alert with Join / Not now. */
+    private val onFriends: () -> Unit = {
+        val F = gr.gamemap.Friends
+        val i = if (F.ready && F.core.started && F.core.allowInvites) F.core.invites.firstOrNull { it.convoy != gr.gamemap.Convoy.code } else null
+        val k = i?.let { it.convoy + it.count }.orEmpty()
+        if (i != null && k != invitedKey) {
+            invitedKey = k
+            F.cancelNotification(i.convoy)
+            F.markSeen(listOf(i))
+            val title = gr.gamemap.L.t("${i.from} invites you to a convoy")
+            val sub = if (i.dest.isNotBlank()) i.dest else gr.gamemap.L.t("No destination yet")
+            if (carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_5) {
+                val alert = Alert.Builder(FRIEND_ALERT, CarText.create(title), 20_000L)
+                    .setSubtitle(CarText.create(sub))
+                    .addAction(Action.Builder().setTitle(gr.gamemap.L.t("Join")).setOnClickListener { carJoinConvoy(carContext, i.convoy) }.build())
+                    .addAction(Action.Builder().setTitle(gr.gamemap.L.t("Not now")).setOnClickListener { F.answer(i.convoy, "no") }.build())
+                    .build()
+                try { carContext.getCarService(AppManager::class.java).showAlert(alert) } catch (_: Exception) {}
+            } else {
+                // older cars: say it, and the ☰ menu's Friends row has Join
+                CarToast.makeText(carContext, "$title · ☰", CarToast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private var lastFollowing = true
     private val onMapState: () -> Unit = {
         val f = MapState.car.following && MapState.car.userBearing == null
@@ -285,6 +313,9 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 NavEngine.changed += onNav
                 Voice.changed += onNav
                 gr.gamemap.Alerts.changed += onAlerts
+                gr.gamemap.Friends.changed += onFriends
+                gr.gamemap.Friends.setInCar(true)
+                onFriends()
                 ensureLocation()
                 if (gr.gamemap.Updater.dueForCheck(carContext)) Executors.newSingleThreadExecutor().execute {
                     val r = try { gr.gamemap.Updater.check(carContext) } catch (e: Exception) { null }
@@ -306,6 +337,8 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 NavEngine.changed -= onNav
                 Voice.changed -= onNav
                 gr.gamemap.Alerts.changed -= onAlerts
+                gr.gamemap.Friends.changed -= onFriends
+                gr.gamemap.Friends.setInCar(false)
                 if (navigating) nav.navigationEnded()
                 LocationTracker.release(carContext, "car")
             }
@@ -581,6 +614,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     companion object {
         const val OFFER_ALERT = 7
         const val ASK_ALERT = 8
+        const val FRIEND_ALERT = 9
     }
 }
 
@@ -623,17 +657,26 @@ class RoutePreviewScreen(carContext: CarContext) : Screen(carContext) {
         }
         val list = ItemList.Builder()
         val fastest = NavEngine.fastestIndex()
+        val anyToll = opts.any { it.tollCost > 0 || it.hasToll }
         opts.forEachIndexed { i, o ->
-            val title = SpannableString(" ")
+            // title: the time (with traffic) and the toll price, so the price is never cut off
+            val toll = when {
+                o.tollCost > 0 -> gr.gamemap.Tolls.money(o.tollCost)
+                o.hasToll -> gr.gamemap.L.t("tolls")
+                anyToll -> gr.gamemap.L.t("No tolls")
+                else -> null
+            }
+            val title = SpannableString(" " + (toll?.let { " · $it" } ?: ""))
             title.setSpan(DurationSpan.create(o.seconds.toLong()), 0, 1, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-            val toll = if (o.tollCost > 0) " · " + gr.gamemap.L.t("${gr.gamemap.Tolls.money(o.tollCost)} tolls") else if (o.hasToll) " · " + gr.gamemap.L.t("tolls") else ""
-            val line = SpannableString(" · " + gr.gamemap.L.t(if (o.via.isNotBlank()) "via ${o.via}" else "route ${i + 1}") + toll)
+            val line = SpannableString(" · " + gr.gamemap.L.t(if (o.via.isNotBlank()) "via ${o.via}" else "route ${i + 1}"))
             line.setSpan(DistanceSpan.create(carDistance(o.distance)), 0, 1, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             val row = Row.Builder().setTitle(title).addText(line)
-            when {
-                o.trafficSeconds != null && i == fastest && opts.size > 1 -> row.addText(gr.gamemap.L.t("Fastest"))
-                o.delaySeconds >= 60 -> row.addText(gr.gamemap.L.t("+${o.delaySeconds / 60} min traffic"))
-            }
+            val notes = listOfNotNull(
+                if (o.trafficSeconds != null && i == fastest && opts.size > 1) gr.gamemap.L.t("Fastest") else null,
+                if (o.delaySeconds >= 60) gr.gamemap.L.t("+${o.delaySeconds / 60} min traffic") else null,
+                if (o.tolls.size > 1) gr.gamemap.L.t("${o.tolls.size} toll stations") else null,
+            )
+            if (notes.isNotEmpty()) row.addText(notes.joinToString(" · "))
             list.addItem(row.build())
         }
         list.setSelectedIndex(NavEngine.selected.coerceIn(0, opts.size - 1))
@@ -668,30 +711,43 @@ private fun carStart(): List<Place> {
     return (fav + Places.recents().filter { r -> fav.none { gr.gamemap.Geo.distance(it.pos, r.pos) < 25 } }).take(8)
 }
 
+/** Car searches run here: several at once, so a new search never waits behind an old one. */
+private val carWork = Executors.newCachedThreadPool(gr.gamemap.Bg.factory("car"))
+
 class SearchScreen(carContext: CarContext) : Screen(carContext) {
     private var results: List<Place> = carStart()
+    /** [results] are the saved/recent places shown before typing (not search results). */
+    private var showingStart = true
     private var loading = false
     private var message = gr.gamemap.L.t("Type a destination")
-    private var seq = 0
-    private val io = Executors.newSingleThreadExecutor()
+    private var typed = ""
+    @Volatile private var seq = 0
     private val main = Handler(Looper.getMainLooper())
+    private val debounce = Runnable { search(typed, full = false) }
 
-    init { LocationTracker.position?.let { Places.warmUp(it, force = true) } }
+    init {
+        LocationTracker.position?.let { Places.warmUp(it, force = true) }
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) { main.removeCallbacks(debounce); seq++ }
+        })
+    }
 
     override fun onGetTemplate(): Template {
         val b = SearchTemplate.Builder(object : SearchTemplate.SearchCallback {
             override fun onSearchTextChanged(searchText: String) {
-                main.removeCallbacksAndMessages(null)
+                typed = searchText
+                main.removeCallbacks(debounce)
                 if (searchText.trim().length < 2) {
                     seq++
-                    results = carStart(); loading = false; invalidate()
-                } else {
-                    main.postDelayed({ search(searchText, full = false) }, 500)
-                }
+                    results = carStart(); showingStart = true; loading = false
+                    message = gr.gamemap.L.t("Type a destination")
+                    invalidate()
+                } else main.postDelayed(debounce, 350)
             }
 
             override fun onSearchSubmitted(searchText: String) {
-                main.removeCallbacksAndMessages(null)
+                typed = searchText
+                main.removeCallbacks(debounce)
                 search(searchText, full = true)
             }
         })
@@ -704,12 +760,12 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
             val near = LocationTracker.position
             val list = ItemList.Builder().setNoItemsMessage(message)
             results.take(6).forEach { p ->
-                val row = Row.Builder().setTitle(p.name).setOnClickListener {
+                val row = Row.Builder().setTitle(p.name.ifBlank { p.address.ifBlank { "📍" } }).setOnClickListener {
                     screenManager.pop()
                     NavEngine.plan(carContext, p)
                 }
                 val dist = near?.let { NavEngine.formatDistance(gr.gamemap.Geo.distance(it, p.pos)) }
-                val line = listOfNotNull(dist, p.address.takeIf { it.isNotBlank() }?.take(70)).joinToString(" · ")
+                val line = listOfNotNull(dist, p.address.takeIf { it.isNotBlank() && it != p.name }?.take(70)).joinToString(" · ")
                 if (line.isNotBlank()) row.addText(line)
                 list.addItem(row.build())
             }
@@ -718,18 +774,24 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
         return b.build()
     }
 
+    /** Like the phone: the names on the phone at once, then the search services merged in. */
     private fun search(q: String, full: Boolean) {
-        if (q.isBlank()) return
+        if (q.trim().length < 2) return
         val my = ++seq
         loading = true
+        if (showingStart) { results = emptyList(); showingStart = false }
         invalidate()
         val near = LocationTracker.position
-        io.execute {
-            val r = try { Places.find(q, near, full) } catch (e: Exception) { null }
+        carWork.execute {
+            if (my != seq) return@execute // typed on meanwhile: skip
+            val local = try { Places.local(q, near) } catch (e: Exception) { emptyList() }
+            if (local.isNotEmpty()) main.post { if (my == seq) { results = local; invalidate() } }
+            if (my != seq) return@execute
+            val r = try { Places.find(q, near, full, local) } catch (e: Exception) { null }
             main.post {
                 if (my != seq) return@post
                 loading = false
-                results = r ?: emptyList()
+                results = if (r.isNullOrEmpty()) local else r
                 message = if (r == null) gr.gamemap.L.t("Search failed: no internet?") else gr.gamemap.L.t("Nothing found")
                 invalidate()
             }
@@ -761,14 +823,117 @@ class ReportScreen(carContext: CarContext) : Screen(carContext) {
     }
 }
 
+/** Joins a friend's convoy from the car (no name yet: "Driver", changeable on the phone). */
+fun carJoinConvoy(ctx: CarContext, convoy: String) {
+    val C = gr.gamemap.Convoy
+    if (C.myName.isBlank()) C.myName = "Driver"
+    val ok = C.join(convoy)
+    CarToast.makeText(ctx, gr.gamemap.L.t(if (ok) "You joined the convoy" else "That convoy has ended"), CarToast.LENGTH_SHORT).show()
+}
+
+/** How many rows a list may show in this car (6 if the car doesn't say). */
+fun carListLimit(ctx: CarContext): Int = try {
+    if (ctx.carAppApiLevel >= CarAppApiLevels.LEVEL_2)
+        ctx.getCarService(androidx.car.app.constraints.ConstraintManager::class.java)
+            .getContentLimit(androidx.car.app.constraints.ConstraintManager.CONTENT_LIMIT_TYPE_LIST).coerceIn(3, 12)
+    else 6
+} catch (e: Exception) { 6 }
+
+/** Friends in the car: invites to join first, then friends (online first) to invite to my convoy. */
+class FriendsCarScreen(carContext: CarContext) : Screen(carContext) {
+    private val main = Handler(Looper.getMainLooper())
+    private var lastInvalidate = 0L
+    private val refresh = Runnable { lastInvalidate = System.currentTimeMillis(); invalidate() }
+    private val listener: () -> Unit = {
+        main.removeCallbacks(refresh)
+        val wait = 2000 - (System.currentTimeMillis() - lastInvalidate)
+        if (wait <= 0) refresh.run() else main.postDelayed(refresh, wait)
+    }
+
+    init {
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onCreate(owner: LifecycleOwner) {
+                gr.gamemap.Friends.changed += listener
+                gr.gamemap.Convoy.changed += listener
+                gr.gamemap.Friends.kick()
+            }
+            override fun onDestroy(owner: LifecycleOwner) {
+                gr.gamemap.Friends.changed -= listener
+                gr.gamemap.Convoy.changed -= listener
+                main.removeCallbacks(refresh)
+            }
+        })
+    }
+
+    override fun onGetTemplate(): Template {
+        val F = gr.gamemap.Friends
+        val C = gr.gamemap.Convoy
+        val list = ItemList.Builder().setNoItemsMessage(gr.gamemap.L.t("No friends yet") + ". " + gr.gamemap.L.t("Add friends on your phone: Together › Friends"))
+        val rows = ArrayList<Row>()
+        if (F.ready && F.core.started) {
+            for (i in F.core.invites.filter { it.convoy != C.code }) {
+                rows += Row.Builder().setTitle(gr.gamemap.L.t("${i.from} invites you to a convoy"))
+                    .addText(if (i.dest.isNotBlank()) i.dest else gr.gamemap.L.t("No destination yet"))
+                    .setOnClickListener { screenManager.pop(); carJoinConvoy(carContext, i.convoy) }
+                    .build()
+            }
+            val friends = F.core.friends.sortedWith(compareByDescending<gr.gamemap.FriendCore.Friend> { F.core.isOnline(it.fid) }.thenBy { it.name.lowercase() })
+            for (f in friends) {
+                val online = F.core.isOnline(f.fid)
+                val sent = C.code?.let { F.core.sentTo(f.fid, it) }
+                val inConvoy = C.members.values.any { it.fid == f.fid }
+                val state = when {
+                    inConvoy -> gr.gamemap.L.t("✓ Joined")
+                    sent?.status == "joined" -> gr.gamemap.L.t("✓ Joined")
+                    sent?.status == "seen" -> gr.gamemap.L.t("✓✓ Seen")
+                    sent?.status == "no" -> gr.gamemap.L.t("Not now")
+                    sent != null -> gr.gamemap.L.t("✓ Sent")
+                    else -> gr.gamemap.L.t("Tap to invite")
+                }
+                val r = Row.Builder().setTitle((if (online) "● " else "") + f.name)
+                    .addText(gr.gamemap.L.t(if (online) "Online" else "Not online") + " · " + state)
+                if (!inConvoy) r.setOnClickListener {
+                    if (!C.active) {
+                        if (C.myName.isBlank()) C.myName = "Driver"
+                        val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
+                        C.create(dest)
+                    }
+                    F.invite(f)
+                    CarToast.makeText(carContext, gr.gamemap.L.t("Invite sent to ${f.name}"), CarToast.LENGTH_SHORT).show()
+                    listener()
+                }
+                rows += r.build()
+            }
+        }
+        rows.take(carListLimit(carContext)).forEach { list.addItem(it) }
+        val online = if (F.ready && F.core.started) F.core.friends.count { F.core.isOnline(it.fid) } else 0
+        val title = gr.gamemap.L.t("Friends") + if (online > 0) " · " + gr.gamemap.L.t("$online friends online") else ""
+        return ListTemplate.Builder().setTitle(title).setHeaderAction(Action.BACK).setSingleList(list.build()).build()
+    }
+}
+
 /** The ☰ menu: everything the map buttons do, as a list (also for cars that don't report taps). */
 class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
     override fun onGetTemplate(): Template {
         val list = ItemList.Builder()
+        val rows = ArrayList<Row>()
         fun row(title: String, text: String? = null, onClick: () -> Unit) {
             val r = Row.Builder().setTitle(title).setOnClickListener(onClick)
             if (text != null) r.addText(text)
-            list.addItem(r.build())
+            rows += r.build()
+        }
+        fun friendsRow() {
+            val F = gr.gamemap.Friends
+            if (!F.ready || !F.core.started) return
+            val inv = F.core.invites.firstOrNull { it.convoy != gr.gamemap.Convoy.code }
+            val online = F.core.friends.count { F.core.isOnline(it.fid) }
+            val text = when {
+                inv != null -> gr.gamemap.L.t("${inv.from} invites you to a convoy")
+                online > 0 -> gr.gamemap.L.t("$online friends online")
+                F.core.friends.isNotEmpty() -> gr.gamemap.L.t("Invite friends")
+                else -> gr.gamemap.L.t("No friends yet")
+            }
+            row((if (inv != null) "🔔 " else "👥 ") + gr.gamemap.L.t("Friends"), text) { screenManager.pop(); screenManager.push(FriendsCarScreen(carContext)) }
         }
         if (NavEngine.lastTrip != null) {
             row(gr.gamemap.L.t("Done"), NavEngine.lastTrip?.place) { NavEngine.stop(); NavEngine.dismissTrip(); screenManager.pop() }
@@ -779,7 +944,7 @@ class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
         } else {
             if (NavEngine.active) row(gr.gamemap.L.t("End navigation"), NavEngine.destinationName) { NavEngine.stop(); screenManager.pop() }
             else row(gr.gamemap.L.t("Search")) { screenManager.pop(); screenManager.push(SearchScreen(carContext)) }
-            // (the list holds 6 rows; Recenter is on the map itself)
+            // (Recenter is on the map itself)
             val cd = gr.gamemap.Convoy.destination
             val lobby = gr.gamemap.Convoy.lobby()
             if (gr.gamemap.Convoy.active && !NavEngine.active && cd != null && lobby.isNotEmpty()) {
@@ -795,6 +960,7 @@ class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
                 screenManager.pop(); screenManager.push(NearbyScreen(carContext, gr.gamemap.L.t("Fuel nearby"), listOf("fuel", "charging_station")))
             }
         }
+        friendsRow()
         if (gr.gamemap.Convoy.active) row(gr.gamemap.L.t("Leave convoy"), "${gr.gamemap.Convoy.members.size + 1} drivers") { gr.gamemap.Convoy.leave(); screenManager.pop() }
         else row(gr.gamemap.L.t("Map style"), (MapState.carTheme ?: MapState.theme).title) { MapState.nextCarTheme(); invalidate() }
         val stop = NavEngine.stops.firstOrNull()
@@ -802,6 +968,8 @@ class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
         else row("Traffic", if (gr.gamemap.Traffic.showLayer) gr.gamemap.L.t("On") else gr.gamemap.L.t("Off")) { gr.gamemap.Traffic.showLayer = !gr.gamemap.Traffic.showLayer; invalidate() }
         row(gr.gamemap.L.t("Spoken directions"), if (Voice.muted) gr.gamemap.L.t("Off") else gr.gamemap.L.t("On")) { Voice.muted = !Voice.muted; invalidate() }
         row(gr.gamemap.L.t("Report")) { screenManager.pop(); screenManager.push(ReportScreen(carContext)) }
+        // the car decides how many rows fit (often 6): the least needed go last
+        rows.take(carListLimit(carContext)).forEach { list.addItem(it) }
         return ListTemplate.Builder().setTitle("GameRoute").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
     }
 }
@@ -815,7 +983,7 @@ class NearbyScreen(carContext: CarContext, private val title: String, private va
     init {
         val near = LocationTracker.position
         if (near == null) failed = true
-        else Executors.newSingleThreadExecutor().execute {
+        else carWork.execute {
             val main = Handler(Looper.getMainLooper())
             // 1) instant, from the map data on the phone
             val local = try { Places.nearbyLocal(types, near) } catch (e: Exception) { emptyList() }
