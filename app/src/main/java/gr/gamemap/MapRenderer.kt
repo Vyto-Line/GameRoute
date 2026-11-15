@@ -1396,6 +1396,7 @@ class MapRenderer(private val car: Boolean = false) {
         friendGliding = false
         for (m in Convoy.members.values) {
             if (m.state == "left") continue
+            if (car && m.sharing) continue // only sharing their location: not on the car screen
             val p = m.display(now) ?: continue
             val (x, y) = toScreen(p, cam)
             if (x < -40 * d || y < -40 * d || x > a.right + 40 * d || y > a.bottom + 40 * d) continue

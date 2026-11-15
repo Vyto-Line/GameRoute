@@ -85,6 +85,20 @@ class DriveAlongTest {
         log.append("meAlong=${Convoy.meAlong}\n")
         Convoy.setReady(false)
 
+        // 3b) Eleni only shares her location: not a racer, not at the start, the race doesn't wait
+        Convoy.debugMember("Eleni", Geo.offset(start, 45f, 3400.0), 0, 0, -1.0, -1.0, "ready")
+        Convoy.members.values.first { it.name == "Eleni" }.sharing = true
+        log.append("Eleni sharing: racers=${Convoy.lobby().map { it.name }.sorted()} atStart has Eleni=${Convoy.atStart().any { it.name == "Eleni" }} rows have Eleni=${Convoy.rows(0).any { it.name == "Eleni" }}\n")
+        assertTrue(Convoy.lobby().none { it.name == "Eleni" } && Convoy.rows(0).none { it.name == "Eleni" })
+        activity.onBackPressedDispatcher.onBackPressed(); activity.openSheetForTest("convoy"); shot("along_5_others_sharing")
+        // me too: only sharing
+        Convoy.setSharing(true)
+        log.append("me sharing: meSharing=${Convoy.meSharing} meAlong=${Convoy.meAlong} me in rows=${Convoy.rows(0).any { it.me }}\n")
+        assertTrue(Convoy.rows(0).none { it.me })
+        activity.onBackPressedDispatcher.onBackPressed(); activity.openSheetForTest("convoy"); shot("along_6_me_sharing")
+        Convoy.setSharing(false)
+        log.append("back: meSharing=${Convoy.meSharing} me in rows=${Convoy.rows(0).any { it.me }}\n")
+
         // 4) driving: Maria along, the others racing
         activity.onBackPressedDispatcher.onBackPressed()
         NavEngine.debugDrive(dest, r, 60)
@@ -95,6 +109,8 @@ class DriveAlongTest {
         Convoy.debugMember("Maria", at(n / 2), 44, t + 11 * 60_000L, r.length * 0.5, r.length, "driving")
         Convoy.debugMember("Giorgos", at(2), 39, t + 20 * 60_000L, r.length * 0.85, r.length, "driving")
         Convoy.members.values.first { it.name == "Maria" }.along = true
+        Convoy.debugMember("Eleni", Geo.offset(at(n / 3), 45f, 600.0), 0, 0, -1.0, -1.0, "ready")
+        Convoy.members.values.first { it.name == "Eleni" }.sharing = true
         val p = at(n / 3); val p2 = at(n / 3 + 1)
         LocationTracker.onLocationChanged(Location("gps").apply { latitude = p.lat; longitude = p.lon; speed = 11.7f; bearing = Geo.bearing(p, p2); accuracy = 5f; time = t })
         MapState.zoomBy(15.5 - MapState.targetZoom)

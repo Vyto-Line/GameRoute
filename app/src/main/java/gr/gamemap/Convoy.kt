@@ -43,6 +43,8 @@ object Convoy {
         @Volatile var readyAt = 0L
         /** Drives the same route but isn't in the race (no %, not ranked, the countdown doesn't wait). */
         @Volatile var along = false
+        /** Only shares their location: not on the trip (not in the lists' race, not on the car screen). */
+        @Volatile var sharing = false
         /** 0 at the start … 1 at the destination. */
         val progress: Double get() = if (state == "arrived") 1.0 else if (total > 0 && left >= 0) (1 - left / total).coerceIn(0.0, 1.0) else 0.0
         /** Updates come every second while moving (5 s when stopped), so 25 s without one = signal lost. */
@@ -323,7 +325,7 @@ object Convoy {
         if (!quiet) publish(JSONObject().put("t", "bye").put("id", myId).put("ts", System.currentTimeMillis()), c)
         if (Friends.ready) Friends.leftConvoy(c) // my invites to it disappear on my friends' phones
         code = null; destination = null; members.clear()
-        meReady = false; meAlong = false; goAt = 0; main.removeCallbacks(countdown); proposal = null
+        meReady = false; meAlong = false; meSharing = false; goAt = 0; main.removeCallbacks(countdown); proposal = null
         prefs().edit().remove("convoyCode").remove("convoyDest").apply()
         listener?.interrupt(); listener = null
         ConvoyLink.stop(if (quiet) null else myId)
@@ -348,6 +350,7 @@ object Convoy {
         o.put("s", Math.round(LocationTracker.speedMps * 3.6f))
         if (meReady && state == "ready") o.put("rd", true).put("ra", meReadyAt)
         if (meAlong) o.put("al", true) // driving along, not racing (kept all the way)
+        if (meSharing) o.put("sh", true) // only sharing my location
         // a route of my own: where to, so the others can join me
         if (NavEngine.active && !onConvoyRoute) NavEngine.destination?.let {
             o.put("on", NavEngine.destinationName).put("olat", it.lat).put("olon", it.lon)
@@ -387,6 +390,8 @@ object Convoy {
     fun startedDriving() {
         routeTotal = -1.0
         meReady = false
+        // was only sharing my location, now on the convoy's route: I drive along
+        if (meSharing && onConvoyRoute) { meSharing = false; meAlong = true }
         if (code != null) { sentAt = 0; tick() }
     }
 
@@ -506,6 +511,7 @@ object Convoy {
         m.ready = st == "ready" && o.optBoolean("rd", false)
         m.readyAt = if (m.ready) o.optLong("ra", ts) else 0
         m.along = o.optBoolean("al", false)
+        m.sharing = o.optBoolean("sh", false)
         m.seen = o.optLong("ts", System.currentTimeMillis()).coerceAtMost(System.currentTimeMillis())
         soon()
     }
@@ -549,19 +555,35 @@ object Convoy {
     @Volatile var meAlong = false
         private set
 
-    /** The racers still at the start: not driving yet, connected, and racing (not driving along). */
-    fun lobby(): List<Member> = members.values.filter { it.state == "ready" && !it.stale && !it.along }
+    /** I only share my location: not on the trip. */
+    @Volatile var meSharing = false
+        private set
 
-    /** Everyone else still at the start, racing or driving along. */
-    fun atStart(): List<Member> = members.values.filter { it.state == "ready" && !it.stale }
+    /** The racers still at the start: not driving yet, connected, and racing (not driving along). */
+    fun lobby(): List<Member> = members.values.filter { it.state == "ready" && !it.stale && !it.along && !it.sharing }
+
+    /** Everyone else still at the start, racing or driving along (not those only sharing). */
+    fun atStart(): List<Member> = members.values.filter { it.state == "ready" && !it.stale && !it.sharing }
+
+    /** The others only sharing their location (they're on my phone's map, nowhere else on the trip). */
+    fun sharers(): List<Member> = members.values.filter { it.sharing && it.state != "left" }
 
     /** Someone racing is on their way already (the start is over: just join the route). */
-    val underway: Boolean get() = members.values.any { it.state == "driving" && !it.stale && !it.along }
+    val underway: Boolean get() = members.values.any { it.state == "driving" && !it.stale && !it.along && !it.sharing }
+
+    /** Just share my location (or stop: back to Race). Not during the countdown. */
+    fun setSharing(on: Boolean) {
+        if (code == null || counting || on == meSharing) return
+        meSharing = on
+        if (on) { meReady = false; meReadyAt = 0; meAlong = false }
+        publish(hello(myState()))
+        checkGo(); changed.fire()
+    }
 
     /** Race (false) or drive along (true): free to switch until the countdown starts. */
     fun setAlong(on: Boolean) {
-        if (code == null || NavEngine.active || counting || on == meAlong) return
-        meAlong = on
+        if (code == null || NavEngine.active || counting || (on == meAlong && !meSharing)) return
+        meAlong = on; meSharing = false
         if (on) { meReady = false; meReadyAt = 0 }
         publish(hello(myState()))
         checkGo(); changed.fire()
@@ -572,7 +594,7 @@ object Convoy {
 
     fun setReady(on: Boolean) {
         if (code == null || NavEngine.active) return
-        if (on) meAlong = false // ready = racing
+        if (on) { meAlong = false; meSharing = false } // ready = racing
         meReady = on; meReadyAt = if (on) System.currentTimeMillis() else 0
         publish(hello("ready"))
         checkGo(); changed.fire()
@@ -585,7 +607,7 @@ object Convoy {
     private fun checkGo() {
         val now = System.currentTimeMillis()
         val l = lobby()
-        val all = code != null && destination != null && meReady && !meAlong && !NavEngine.active && l.isNotEmpty() && l.all { it.ready }
+        val all = code != null && destination != null && meReady && !meAlong && !meSharing && !NavEngine.active && l.isNotEmpty() && l.all { it.ready }
         if (!all) {
             if (goAt != 0L && now < goAt) { goAt = 0; main.removeCallbacks(countdown); changed.fire() } // someone changed their mind
             return
@@ -650,9 +672,9 @@ object Convoy {
             if (mine) NavEngine.remainingDistance else -1.0,
             myState(), false,
             NavEngine.lastTrip?.arrivedAt ?: 0, meReady, myId, meAlong)
-        val others = members.values.map { Row(it.name, it.color, false, it.kmh, it.eta, it.progress, it.left, it.state, it.stale, it.arrivedAt, it.ready, it.id, it.along) }
+        val others = members.values.filter { !it.sharing }.map { Row(it.name, it.color, false, it.kmh, it.eta, it.progress, it.left, it.state, it.stale, it.arrivedAt, it.ready, it.id, it.along) }
         // the racers first, furthest along first; anyone driving along after them
-        return (others + me).sortedWith(compareBy<Row> { it.along }.thenByDescending { it.progress }.thenBy { it.eta })
+        return (if (meSharing) others else others + me).sortedWith(compareBy<Row> { it.along }.thenByDescending { it.progress }.thenBy { it.eta })
     }
 
     /** "1.3 km ahead" / "0.8 km behind" relative to me. */
@@ -675,10 +697,10 @@ object Convoy {
 
     /** Finishing order once everyone (or me) has arrived: (place, total). */
     fun myPlace(): Pair<Int, Int>? {
-        if (!active || meAlong) return null
+        if (!active || meAlong || meSharing) return null
         // only the racers are ranked
         val done = rows(0).filter { it.state == "arrived" && !it.along }.sortedBy { it.arrivedAt }
         val i = done.indexOfFirst { it.me }
-        return if (i < 0) null else (i + 1) to (members.values.count { !it.along } + 1)
+        return if (i < 0) null else (i + 1) to (members.values.count { !it.along && !it.sharing } + 1)
     }
 }

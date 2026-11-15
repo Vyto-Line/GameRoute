@@ -2910,6 +2910,32 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             row.setOnClickListener { showFriend(r.id) }
             sheetHost.addView(row)
         }
+        // only sharing their location: a group of their own at the bottom (and me, if I am)
+        val sharers = Convoy.sharers()
+        if (sharers.isNotEmpty() || Convoy.meSharing) {
+            sheetHost.addView(label("📍 SHARING LOCATION", 11.5f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.1f; setPadding(0, p, 0, p / 4) })
+            val here = LocationTracker.position
+            val people = (if (Convoy.meSharing) listOf<Convoy.Member?>(null) else emptyList()) + sharers
+            for (m in people) {
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, p / 2) }
+                val col = if (m == null) Convoy.rows(accent).firstOrNull { it.me }?.color ?: accent else m.color
+                row.addView(View(this).apply { background = bg(if (m?.stale == true) Color.GRAY else col, radius = 6f) }, LinearLayout.LayoutParams((11 * d).toInt(), (11 * d).toInt()).apply { marginEnd = p })
+                row.addView(label("${m?.name ?: "You"}  ", 16f, bold = true).apply { setTextColor(ink) })
+                val sub = when {
+                    m == null -> "sharing your location"
+                    m.stale -> "no signal"
+                    here != null && m.pos != null -> L.t("${NavEngine.formatDistance(Geo.distance(here, m.pos!!))} from you") + " · " + L.t("not driving")
+                    else -> "not driving"
+                }
+                row.addView(label(sub, 13f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                if (m != null) {
+                    friendMark(m.id)?.let { row.addView(it) }
+                    row.isClickable = true
+                    row.setOnClickListener { showFriend(m.id) }
+                }
+                sheetHost.addView(row)
+            }
+        }
         if (Convoy.members.isEmpty()) sheetHost.addView(label("Nobody else yet: send the code or the invite link.", 14f).apply { setTextColor(dim()); setPadding(0, p / 2, 0, 0) })
         sheetHost.addView(label("The others see you as \"${Convoy.myName.ifBlank { "Driver" }}\"  ·  Change name", 13f, bold = true).apply {
             setTextColor(readable(accent)); setPadding(0, p / 2, 0, 0); setOnClickListener { editConvoyName() }
@@ -2931,7 +2957,27 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }.apply {
             setTextColor(onAccent(accent)); background = bg(accent, radius = 22f); maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p })
-        if (choosing) {
+        if (Convoy.meSharing && !NavEngine.active) {
+            // only sharing my location: no route, no race; switch any time before the 3-2-1
+            sheetHost.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val q = (12 * d).toInt(); setPadding(q, q, q, q)
+                background = bg(Color.argb(40, 77, 171, 247), Color.rgb(77, 171, 247), 1.5f, 12f)
+                addView(label("📍 You're sharing your location", 15f, bold = true).apply { setTextColor(ink) })
+                addView(label("The others see you on their map. You're not in the race and no route starts.", 13f).apply { setTextColor(dim()) })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p })
+            if (dest != null && !underway) sheetHost.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(pill("🏁 Race instead") { Convoy.setSharing(false) }.apply { setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 22f) },
+                    LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p / 2 })
+                addView(pill("🚗 Drive along instead") { Convoy.setAlong(true) }.apply { setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 22f) },
+                    LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 })
+            else sheetHost.addView(label("Stop sharing only: drive with the group", 13f, bold = true).apply {
+                setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, p / 2, 0, 0)
+                setOnClickListener { Convoy.setSharing(false) }
+            })
+        } else if (choosing) {
             val along = Convoy.meAlong
             val counting = Convoy.counting
             // Race or Drive along (free to switch until the countdown)
@@ -2960,6 +3006,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 else -> "🏁 Racing: ${racers.joinToString(", ")}"
             }
             sheetHost.addView(label(line, 13f, bold = true).apply { setTextColor(dim()); setPadding(0, p / 2, 0, 0) })
+            sheetHost.addView(label("📍 Not driving? Just share my location", 14f, bold = true).apply {
+                setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, p / 2, 0, p / 4)
+                setOnClickListener { if (!Convoy.counting) Convoy.setSharing(true) }
+            })
             if (along) {
                 sheetHost.addView(pill("Start · no race") { closeSheet(); NavEngine.start(this, dest!!); MapState.recenter() }.apply {
                     textSize = 17f; setTextColor(onAccent(accent)); background = bg(accent, radius = 22f)
@@ -2988,6 +3038,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 })
             }
         }
+        if (!choosing && !Convoy.meSharing && !NavEngine.active && dest != null) sheetHost.addView(label("📍 Not driving? Just share my location", 14f, bold = true).apply {
+            setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, p / 2, 0, 0)
+            setOnClickListener { Convoy.setSharing(true) }
+        })
         sheetHost.addView(buttons)
         sheetHost.addView(label("Positions update every second while moving, end-to-end encrypted: only people with the code can see them.", 12f).apply {
             setTextColor(dim()); setPadding(0, p, 0, 0)
