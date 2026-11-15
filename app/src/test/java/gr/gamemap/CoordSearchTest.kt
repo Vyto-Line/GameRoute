@@ -55,6 +55,8 @@ class CoordSearchTest {
             log.append("find '$q': ${r?.map { it.name + " | " + it.address + " @ " + SharedLocation.format(it.pos) }}\n")
             assertNotNull(r); assertTrue(r!!.isNotEmpty())
         }
+        val named0 = Places.find("https://www.google.com/maps/place/Acropolis+Museum/@37.968,23.7285,17z", home, full = true)!!.first()
+        assertEquals("Acropolis Museum", named0.name)
         // a link that only names the place: searched by name
         val named = Places.find("https://www.google.com/maps/search/?api=1&query=Acropolis+Museum", home, full = true)
         log.append("find (link with a name only): ${named?.take(2)?.map { it.name + " @ " + SharedLocation.format(it.pos) }}\n")

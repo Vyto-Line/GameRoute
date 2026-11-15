@@ -18,7 +18,7 @@ object SharedLocation {
 
     /** Finds a location in [text]; follows short links (network: call off the main thread). */
     fun find(text: String): Found? {
-        coordinates(text)?.let { return Found(it, null, null) }
+        if (!hasLink(text)) coordinates(text)?.let { return Found(it, null, null) } // (a link: keep the place's name from it)
         val link = Regex("(geo:[^\\s]+|https?://[^\\s]+)").find(text)?.value
         if (link != null) {
             parse(link)?.let { return it }
