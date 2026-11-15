@@ -33,7 +33,7 @@ class SearchFixProbeTest {
                     log.append(" tt${if (ta) "-ta" else ""} ${r.optString("type")}/${r.optString("entityType")} '${r.optJSONObject("poi")?.optString("name") ?: ""}' ${r.optJSONObject("address")?.optString("freeformAddress")} ${d(LatLng(p.getDouble("lat"), p.getDouble("lon")))}\n")
                 }
             }
-            for (pr in Places.photon(q, near, townsOnly = true)) log.append(" photonTowns '${pr.name}' t${pr.town} ${pr.address} ${d(pr.pos)}\n")
+            for (pr in (try { Places.photon(q, near, townsOnly = true) } catch (e: Exception) { log.append(" photonTowns ERR $e\n"); emptyList() })) log.append(" photonTowns '${pr.name}' t${pr.town} ${pr.address} ${d(pr.pos)}\n")
             for (pr in Places.tomtom(q, near, true)) log.append(" ttApp '${pr.name}' t${pr.town} ${pr.icon} ${pr.address} ${d(pr.pos)}\n")
             val j = get("https://photon.komoot.io/api/?q=${enc(q)}&limit=8&lat=${near.lat}&lon=${near.lon}&zoom=12&location_bias_scale=0.3")
             if (j.startsWith("ERR")) log.append(" photon: ${j.take(200)}\n") else {
