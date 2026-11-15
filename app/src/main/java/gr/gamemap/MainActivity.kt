@@ -2896,7 +2896,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             row.addView(label("${if (r.me) "You" else r.name}  ", 16f, bold = true).apply { setTextColor(ink) })
             row.addView(label(Convoy.relative(r), 13f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             // at the start: who races and who drives along
-            if (choosing && !r.me) row.addView(label(if (r.along) "Driving along" else "🏁 Race", 12f, bold = true).apply {
+            if (choosing) row.addView(label(if (r.along) "Driving along" else "🏁 Race", 12f, bold = true).apply {
                 val q = (4 * d).toInt(); setPadding(q * 2, q, q * 2, q)
                 if (r.along) { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(140), 1.5f, 6f) }
                 else { setTextColor(onAccent(accent)); background = bg(accent, radius = 6f) }
@@ -2904,7 +2904,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             else row.addView(label(if (r.state == "arrived") "✓" else "${r.kmh} km/h", 14f, bold = true).apply {
                 setTextColor(if (r.kmh == 0 && r.state == "driving") readable(Color.rgb(230, 60, 60)) else ink); setPadding(p, 0, p, 0)
             })
-            row.addView(label(if (r.eta > 0) NavEngine.clock(r.eta) else "–", 15f, bold = true).apply { setTextColor(readable(Color.rgb(47, 180, 100))) })
+            if (!choosing) row.addView(label(if (r.eta > 0) NavEngine.clock(r.eta) else "–", 15f, bold = true).apply { setTextColor(readable(Color.rgb(47, 180, 100))) })
             if (!r.me) friendMark(r.id)?.let { row.addView(it) } // add as a friend, any time
             row.isClickable = true
             row.setOnClickListener { showFriend(r.id) }
