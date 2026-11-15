@@ -181,12 +181,14 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
 
     /** Fetches and handles everything new (requests to my code, my inbox). */
     fun check(): News {
-        val since = store.get("since") ?: "12h"
+        // the last message seen; after ~12 h ntfy has forgotten it, so ask for the last 12 h then
+        val at = store.get("sinceAt")?.toLongOrNull() ?: 0L
+        val since = store.get("since")?.takeIf { clock() - at < 11 * 3600_000L } ?: "12h"
         val list = wire.poll(listOf(inboxTopic(secret), requestTopic(norm(code))), since)
         val reqs = ArrayList<Request>(); val invs = ArrayList<Invite>(); val acc = ArrayList<Friend>()
         var any = false
         for ((id, topic, body) in list) {
-            store.put("since", id)
+            store.put("since", id); store.put("sinceAt", clock().toString())
             val r = take(topic, body) ?: continue
             any = true
             when (r) { is Request -> reqs += r; is Invite -> invs += r; is Friend -> acc += r }
