@@ -7,7 +7,8 @@
    (friends stay).
 2. Convoy invites to friends: one tap, Sent → Seen → Joined / Not now, ~15 min background
    check, expire after 2 h or when the convoy ends (never shown), grouped.
-3. After a convoy: "Drove with you" → Add.
+3. Add people you drive with: in the convoy list at any time (add button next to anyone who
+   isn't a friend; no pop-ups while driving) and on the finish card ("Drove with you").
 4. Settings › Friends: "Show me as online", "Friends can invite me to convoys", code, blocked.
 5. Settings › Backup & restore: Move to a new phone
    (QR + matching numbers; the old phone stops showing friends), backup file with password,
