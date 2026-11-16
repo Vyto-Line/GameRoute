@@ -628,8 +628,8 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 ?: l.directions.firstOrNull { l.valid && it != "none" } ?: l.directions.firstOrNull() ?: "straight"
             p.color = if (l.valid) Color.WHITE else Color.argb(110, 255, 255, 255)
             val x = i * cell + cell / 2f; val y = h / 2f; val s = 22f
+            if (dir == "uturn") { gr.gamemap.drawUTurn(c, x, y, s, p); return@forEachIndexed }
             val ang = when {
-                dir == "uturn" -> 180.0
                 dir.contains("sharp left") -> -135.0
                 dir.contains("slight left") -> -40.0
                 dir.contains("left") -> -90.0

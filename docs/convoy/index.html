@@ -45,7 +45,15 @@ async function openMsg(key, msg) {
 let chain = Promise.resolve();
 function feed(m) { chain = chain.then(() => take(m)).catch(() => {}); } // keep messages in order
 const code = (location.hash || "").slice(1).replace(/[^a-z0-9]/gi, "").toLowerCase();
-document.getElementById("join").href = "gamemap://convoy/" + code;
+// Android: an intent link (Chrome opens the app straight away, or the download page if it isn't
+// installed); elsewhere the app's own link
+const android = /Android/i.test(navigator.userAgent);
+const appLink = android
+  ? "intent://convoy/" + code + "#Intent;scheme=gamemap;package=gr.gamemap;S.browser_fallback_url=" + encodeURIComponent("https://github.com/Vyto-Line/GameRoute/releases/latest") + ";end"
+  : "gamemap://convoy/" + code;
+document.getElementById("join").href = appLink;
+// opened from a QR code or a message on a phone with GameRoute: straight into the app
+if (android && code) setTimeout(() => { location.href = appLink; }, 400);
 const map = L.map("map", { zoomControl: false }).setView([37.98, 23.73], 11);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
 const palette = ["#2FD27A", "#FF922B", "#4DABF7", "#FF6B9A", "#FFD43B", "#22D3EE", "#9775FA", "#FA5252", "#94D82D", "#C8A078"];

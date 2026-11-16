@@ -355,6 +355,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(homeSheet, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
             addView(topArea, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
             addView(controls, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
+            // recenter: bottom right, just above whatever card is at the bottom (a target icon)
+            addView(recenterBtn, FrameLayout.LayoutParams((56 * d).toInt(), (56 * d).toInt(), Gravity.END or Gravity.BOTTOM).apply { marginEnd = (14 * d).toInt() })
             addView(navCard, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
             addView(preview, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
             addView(offerCard, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
@@ -977,7 +979,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(styleBtn); addView(trafficBtn); addView(reportBtn); addView(muteBtn); addView(overviewBtn); addView(recenterBtn); addView(navMenuBtn)
+            addView(styleBtn); addView(trafficBtn); addView(reportBtn); addView(muteBtn); addView(overviewBtn); addView(navMenuBtn)
         }
         askText = label("", 16f, bold = true)
         askCard = LinearLayout(this).apply {
@@ -1842,6 +1844,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             homeSheet.visibility == View.VISIBLE -> homeSheet.height
             else -> insets.bottom
         }
+        recenterBtn.translationY = -(bottom + 14 * d)
         if (map.insetTop != top || map.insetBottom != bottom) {
             map.insetTop = top
             map.insetBottom = bottom
@@ -3313,7 +3316,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setPadding(p, p, p, p); background = bg(dim(22), radius = 14f)
             addView(android.widget.ImageView(context).apply {
                 setImageBitmap(qr(Friends.link(), (128 * d).toInt())); contentDescription = L.t("QR code for ${c.code}")
-                background = bg(Color.WHITE, radius = 8f); val q = (6 * d).toInt(); setPadding(q, q, q, q)
+                // (the white border is in the code itself; no scaling, sharp modules)
+                background = bg(Color.WHITE, radius = 8f); scaleType = android.widget.ImageView.ScaleType.CENTER
             }, LinearLayout.LayoutParams((128 * d).toInt(), (128 * d).toInt()).apply { marginEnd = p })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
@@ -3373,12 +3377,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     /** A QR code (black on white, so every camera reads it, in every theme). */
-    private fun qr(text: String, size: Int): android.graphics.Bitmap {
-        val m = com.google.zxing.qrcode.QRCodeWriter().encode(text, com.google.zxing.BarcodeFormat.QR_CODE, size, size,
-            mapOf(com.google.zxing.EncodeHintType.MARGIN to 0))
-        val px = IntArray(m.width * m.height) { if (m.get(it % m.width, it / m.width)) Color.BLACK else Color.WHITE }
-        return android.graphics.Bitmap.createBitmap(px, m.width, m.height, android.graphics.Bitmap.Config.ARGB_8888)
-    }
+    /**
+     * A QR code that cameras read: black on white with the 4-module white border scanners need
+     * (without it many don't see the code at all), whole pixels per module (sharp edges).
+     */
+    private fun qr(text: String, size: Int): android.graphics.Bitmap = qrBitmap(text, size)
 
     private fun sendFriendRequest(code: String, name: String, then: () -> Unit) {
         Friends.start()
@@ -3538,8 +3541,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         val side = minOf(resources.displayMetrics.widthPixels - 3 * p, (320 * d).toInt())
         box.addView(android.widget.ImageView(this).apply {
-            setImageBitmap(qr(link, side)); contentDescription = L.t("QR code for the convoy ${Convoy.pretty()}")
-            val q = (16 * d).toInt(); setPadding(q, q, q, q); background = bg(Color.WHITE, radius = 16f)
+            setImageBitmap(qr(link, side + (32 * d).toInt())); contentDescription = L.t("QR code for the convoy ${Convoy.pretty()}")
+            background = bg(Color.WHITE, radius = 16f); scaleType = android.widget.ImageView.ScaleType.CENTER
         }, LinearLayout.LayoutParams(side + (32 * d).toInt(), side + (32 * d).toInt()))
         box.addView(label("CODE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.12f; setPadding(0, p, 0, 0) })
         box.addView(label(Convoy.pretty() ?: "", 40f, bold = true).apply { setTextColor(ink); letterSpacing = 0.16f; typeface = Typeface.MONOSPACE })

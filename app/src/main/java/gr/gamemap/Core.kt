@@ -226,8 +226,17 @@ class MapView(private val zoomKey: String) {
     /** When the map was last moved by hand; it comes back to the car 8 s later while navigating. */
     @Volatile var touchedAt = 0L
 
+    private var lastAuto = 0.0
+
     private fun autoZoom(): Double {
         if (!NavEngine.active || NavEngine.arrived || !following || overview || gesture) return 0.0
+        // you zoomed yourself a moment ago: the automatic zoom holds still for 20 s, so it doesn't
+        // undo your zoom (on a highway it would otherwise pull straight back out)
+        if (SystemClock.uptimeMillis() - userZoomAt < 20_000) return lastAuto
+        return autoZoomNow().also { lastAuto = it }
+    }
+
+    private fun autoZoomNow(): Double {
         val kmh = LocationTracker.speedMps * 3.6
         val fast = -((kmh - 35) / 65).coerceIn(0.0, 1.0) * 1.1          // 35 km/h: 0, 100 km/h: -1.1
         // the kind of road: out on a highway (even in a jam), in on a small street
@@ -250,7 +259,7 @@ class MapView(private val zoomKey: String) {
         return Math.round(v * 10) / 10.0 // steps of 0.1, so the zoom isn't always moving
     }
 
-    internal fun autoZoomForTest() = autoZoom()
+    internal fun autoZoomForTest() = autoZoomNow()
 
     /** Advances the zoom animation. Returns true while animating. */
     fun tick(): Boolean {
@@ -289,6 +298,10 @@ class MapView(private val zoomKey: String) {
         overview = false
         fitRequest = null
         savedZoom?.let { targetZoom = it; savedZoom = null }
+        // zoomed far out (looking around): back in to a driving / street view
+        val near = if (NavEngine.active) 16.0 else 15.5
+        if (targetZoom < near - 0.5) targetZoom = near
+        userZoomAt = SystemClock.uptimeMillis()
         MapState.changed.fire()
     }
 

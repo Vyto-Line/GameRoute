@@ -1062,8 +1062,16 @@ class MapRenderer(private val car: Boolean = false) {
                 p.lineTo(cx + h, cy - h * 0.85f); p.lineTo(cx + h, cy + h * 0.6f); p.lineTo(cx + h * 0.35f, cy + h * 0.85f)
                 p.lineTo(cx - h * 0.35f, cy + h * 0.6f); p.lineTo(cx - h, cy + h * 0.85f); p.close()
                 p.moveTo(cx - h * 0.35f, cy - h * 0.85f); p.lineTo(cx - h * 0.35f, cy + h * 0.6f); p.moveTo(cx + h * 0.35f, cy - h * 0.6f); p.lineTo(cx + h * 0.35f, cy + h * 0.85f) }
-            "recenter" -> { iconPaint.style = Paint.Style.FILL
-                p.moveTo(cx, cy - h); p.lineTo(cx + h * 0.7f, cy + h); p.lineTo(cx, cy + h * 0.55f); p.lineTo(cx - h * 0.7f, cy + h); p.close() }
+            "recenter" -> {
+                // a target: ring, centre dot, four ticks
+                p.addCircle(cx, cy, h * 0.62f, Path.Direction.CW)
+                p.moveTo(cx, cy - h); p.lineTo(cx, cy - h * 0.78f); p.moveTo(cx, cy + h); p.lineTo(cx, cy + h * 0.78f)
+                p.moveTo(cx - h, cy); p.lineTo(cx - h * 0.78f, cy); p.moveTo(cx + h, cy); p.lineTo(cx + h * 0.78f, cy)
+                val keep = iconPaint.color
+                c.drawPath(p, iconPaint); p.reset()
+                iconPaint.style = Paint.Style.FILL; iconPaint.color = keep
+                c.drawCircle(cx, cy, h * 0.24f, iconPaint)
+                iconPaint.style = Paint.Style.STROKE }
             "search" -> { p.addCircle(cx - h * 0.15f, cy - h * 0.15f, h * 0.6f, Path.Direction.CW); p.moveTo(cx + h * 0.3f, cy + h * 0.3f); p.lineTo(cx + h * 0.85f, cy + h * 0.85f) }
             "home" -> { p.moveTo(cx - h, cy - h * 0.05f); p.lineTo(cx, cy - h * 0.85f); p.lineTo(cx + h, cy - h * 0.05f)
                 p.moveTo(cx - h * 0.7f, cy - h * 0.25f); p.lineTo(cx - h * 0.7f, cy + h * 0.8f); p.lineTo(cx + h * 0.7f, cy + h * 0.8f); p.lineTo(cx + h * 0.7f, cy - h * 0.25f) }
@@ -1838,8 +1846,8 @@ class MapRenderer(private val car: Boolean = false) {
 
     private fun drawLaneArrow(c: Canvas, x: Float, y: Float, s: Float, dir: String, color: Int, d: Float) {
         stroke.color = color; stroke.strokeWidth = 3 * d; stroke.strokeCap = Paint.Cap.ROUND; stroke.strokeJoin = Paint.Join.ROUND
+        if (dir == "uturn") { drawUTurn(c, x, y, s, stroke); stroke.strokeCap = Paint.Cap.BUTT; stroke.strokeJoin = Paint.Join.MITER; return }
         val ang = when {
-            dir == "uturn" -> 180f
             dir.contains("sharp left") -> -135f
             dir.contains("slight left") -> -40f
             dir.contains("left") -> -90f
@@ -2018,8 +2026,13 @@ class MapRenderer(private val car: Boolean = false) {
             stroke.color = t.route; stroke.strokeWidth = s * 0.15f; c.drawCircle(x, y, s * 0.9f, stroke)
             return
         }
+        if (dir == "uturn") {
+            // a real U-turn arrow (not a straight one pointing down)
+            stroke.color = t.route; stroke.strokeWidth = s * 0.42f
+            drawUTurn(c, x, y, s, stroke)
+            return
+        }
         val angle = when {
-            dir == "uturn" -> 180f
             dir.contains("sharp left") -> -135f
             dir.contains("slight left") -> -45f
             dir.contains("left") -> -90f

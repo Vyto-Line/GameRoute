@@ -96,11 +96,15 @@ object NavEngine {
     fun updateRoadKinds() {
         val r = current ?: run { roadHere = null; roadNext = null; return }
         if (r === roadRoute && Math.abs(along - roadAlong) < 40 && nextStep == roadStepAt) return
+        if (r !== roadRoute) { roadHere = null; roadPending = null }
         roadRoute = r; roadAlong = along; roadStepAt = nextStep
         // a new kind of road counts once it's seen twice in a row (~80 m): a side street or a
         // slip road brushing past doesn't make the camera zoom in and out
+        // (not known here, the map data still loading: keep the last kind, so the zoom doesn't jump)
         val k = try { RoadKind.along(r, along + 15) } catch (e: Exception) { null }
-        if (k == roadHere || roadHere == null || k == roadPending) { roadHere = k; roadPending = null } else roadPending = k
+        if (k != null) {
+            if (k == roadHere || roadHere == null || k == roadPending) { roadHere = k; roadPending = null } else roadPending = k
+        }
         roadNext = try {
             steps.getOrNull(nextStep)?.takeIf { it.direction != "arrive" && it.routeIndex in r.cum.indices }
                 ?.let { RoadKind.along(r, r.cum[it.routeIndex] + 35) }

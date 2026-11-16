@@ -151,3 +151,33 @@ object Ui {
         return ink(t)
     }
 }
+
+/**
+ * A U-turn arrow (up, over the top and back down on the left: a U-turn to the left, as driven in
+ * Greece) centred on ([x], [y]), [s] = half its height. [stroke] draws the shaft at its own width;
+ * the head is filled with [stroke]'s colour.
+ */
+fun drawUTurn(c: android.graphics.Canvas, x: Float, y: Float, s: Float, stroke: android.graphics.Paint) {
+    val r = s * 0.42f
+    val top = y - s * 0.2f
+    val shaft = android.graphics.Path().apply {
+        moveTo(x + r, y + s)
+        lineTo(x + r, top)
+        arcTo(x - r, top - r, x + r, top + r, 0f, -180f, false)
+        lineTo(x - r, y + s * 0.3f)
+    }
+    val oldStyle = stroke.style; val oldCap = stroke.strokeCap; val oldJoin = stroke.strokeJoin
+    stroke.style = android.graphics.Paint.Style.STROKE
+    stroke.strokeCap = android.graphics.Paint.Cap.ROUND; stroke.strokeJoin = android.graphics.Paint.Join.ROUND
+    c.drawPath(shaft, stroke)
+    val hw = maxOf(s * 0.38f, stroke.strokeWidth * 1.3f)
+    val head = android.graphics.Path().apply {
+        moveTo(x - r - hw, y + s * 0.2f)
+        lineTo(x - r + hw, y + s * 0.2f)
+        lineTo(x - r, y + s)
+        close()
+    }
+    stroke.style = android.graphics.Paint.Style.FILL_AND_STROKE
+    c.drawPath(head, stroke)
+    stroke.style = oldStyle; stroke.strokeCap = oldCap; stroke.strokeJoin = oldJoin
+}

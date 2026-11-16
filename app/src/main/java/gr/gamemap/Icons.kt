@@ -28,7 +28,7 @@ object Icons {
         "🔗" to R.drawable.ic_i_link, "▦" to R.drawable.ic_i_qr, "🕘" to R.drawable.ic_i_clock, "⛔" to R.drawable.ic_i_none, "🚫" to R.drawable.ic_i_none,
         "🔊" to R.drawable.ic_volume_on, "🔇" to R.drawable.ic_volume_off, "🎮" to R.drawable.ic_theme, "🗺" to R.drawable.ic_set_map,
         "👑" to R.drawable.ic_i_trophy, "❤" to R.drawable.ic_i_heart, "👪" to R.drawable.ic_i_family, "⚽" to R.drawable.ic_i_ball,
-        "💇" to R.drawable.ic_i_scissors, "🅿" to R.drawable.ic_i_parking, "✕" to R.drawable.ic_i_close, "＋" to R.drawable.ic_i_plus,
+        "💇" to R.drawable.ic_i_scissors, "🅿" to R.drawable.ic_i_parking, "✕" to R.drawable.ic_i_close, "＋" to R.drawable.ic_i_plus, "◎" to R.drawable.ic_target,
     )
 
     /** The icon for an emoji (or null: it stays as it is). */

@@ -17,13 +17,27 @@ import kotlin.math.tan
 object RoadKind {
     /** The road under [p] running along [bearing] (degrees), within ~25 m; null if not known. */
     fun at(p: LatLng, bearing: Double): String? {
-        val z = VectorSource.MAX_Z
+        // the most detailed map data on the phone for this spot (zoomed out, the detailed squares
+        // may not be loaded; big roads are in the coarser ones too). Missing: ask for it.
+        for (z in VectorSource.MAX_Z downTo VectorSource.MAX_Z - 3) {
+            val k = atZoom(p, bearing, z)
+            if (k != NOT_LOADED) return k
+        }
+        return null
+    }
+
+    private const val NOT_LOADED = "\u0000"
+
+    private fun atZoom(p: LatLng, bearing: Double, z: Int): String? {
         val n = (1 shl z).toDouble()
         val wx = (p.lon + 180) / 360 * n
         val latR = p.lat * PI / 180
         val wy = (1 - ln(tan(latR) + 1 / cos(latR)) / PI) / 2 * n
         val tx = floor(wx).toInt(); val ty = floor(wy).toInt()
-        val vt = VectorSource.peek(z, tx, ty) ?: return null
+        val vt = VectorSource.peek(z, tx, ty) ?: run {
+            if (z == VectorSource.MAX_Z) try { VectorSource.prefetch(z, tx, ty) } catch (_: Exception) {}
+            return NOT_LOADED
+        }
         val extent = vt.features.firstOrNull()?.extent ?: 4096
         val px = ((wx - tx) * extent).toFloat(); val py = ((wy - ty) * extent).toFloat()
         // metres per tile unit here

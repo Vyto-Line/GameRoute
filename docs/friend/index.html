@@ -33,9 +33,15 @@
   if (m) {
     var pretty = m[1] + "-" + m[2];
     document.getElementById("code").textContent = pretty;
-    document.getElementById("open").href = "gamemap://friend/" + pretty;
-    // try once by itself (works when the app is installed)
-    setTimeout(function () { location.href = "gamemap://friend/" + pretty; }, 300);
+    // Android: an intent link (Chrome opens the app straight away, or the download page if it
+    // isn't installed); elsewhere the app's own link
+    var android = /Android/i.test(navigator.userAgent);
+    var fallback = encodeURIComponent("https://github.com/Vyto-Line/GameRoute/releases/latest");
+    var link = android ? "intent://friend/" + pretty + "#Intent;scheme=gamemap;package=gr.gamemap;S.browser_fallback_url=" + fallback + ";end"
+                       : "gamemap://friend/" + pretty;
+    document.getElementById("open").href = link;
+    // try once by itself (browsers may want a tap: then the button does it)
+    setTimeout(function () { location.href = link; }, 400);
   } else {
     document.getElementById("code").textContent = "No code in this link";
   }
