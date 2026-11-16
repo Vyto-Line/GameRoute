@@ -44,10 +44,24 @@ Mockups: the GameRoute mockups canvas, rows 18 (Friends) and 19 (Backup & restor
 - Location is **never** shared with friends: only inside a convoy you join, as today.
 - Positions stay end-to-end encrypted, like convoys.
 
+## Next (planned 16 Nov 2026, mockups rows 25–27)
+
+1. **Violet Rain** map style (27): purple neon roads, amber route, faint rain and haze, lit windows.
+2. **Declutter** (26): chips Home, Work + the 2 places you go to most at this hour + More
+   (fuel, parking, chargers, convoy, saved places); while driving only turn, speed and arrival
+   (buttons back for 5 s on a tap); non-urgent messages wait in a "for when you stop" counter
+   (safety and convoy news still show; convoy invites still pop up in the car); short arrival card
+   (XP as one line); settings search + Advanced group.
+3. **XP and levels** (25): XP for new roads, clean drives, convoys, race places (only if you kept
+   near the limits), daily streak, weekly challenges. Levels unlock cosmetics in a Garage
+   (arrow, route colour, destination flag, arrival effect; no trails), a title ladder per style,
+   a milestone every 10 levels, prestige at 50. Level ring on the home screen, Progress and Garage
+   in the menu. Level-up only after you park.
+4. **You screen** (26c, later): one button for progress, Garage, friends, trips and settings.
+
 ## Later
 
 - **Play Store**: add "Automatic: Android backup" back to Backup & restore (restore on a new
   phone only works reliably for Play Store installs).
 - Maybe: UnifiedPush (ntfy) for instant invites with the app closed.
-- **XP and levels**: something to do with them (to talk through first). Today every trip gives
-  the same trip XP (none under 200 m), races give no extra, and levels only come from trip XP.
+- The illegal right turn from the test drive: check the spot once we know where it was.
