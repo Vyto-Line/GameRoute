@@ -173,6 +173,7 @@ object VectorRenderer {
         if (tunnels.isNotEmpty()) {
             for ((cls, kind) in visible) {
                 if (cls == "rail" || cls == "transit" || cls == "path" || cls == "track") continue
+                if (roadColor(cls) == 0) continue // a style that draws its roads another way (8-Bit)
                 val mine = tunnels.filter { it["class"] == cls }
                 if (mine.isEmpty()) continue
                 val w = width(kind)
