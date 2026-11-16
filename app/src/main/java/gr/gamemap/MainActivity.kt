@@ -604,8 +604,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 val p = (12 * d).toInt()
-                setPadding(p + p / 4, 0, p + p / 4, 0)
+                setPadding(p + p / 4, (8 * d).toInt(), p + p / 4, (8 * d).toInt())
                 minHeight = (40 * d).toInt()
+                maxLines = 1
                 elevation = 3 * d
                 when (style) {
                     // the convoy: always there, easy to spot on any map
@@ -618,7 +619,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 setOnClickListener { onClick() }
                 if (onLong != null) setOnLongClickListener { onLong(); true }
             }
-            chips.addView(v, LinearLayout.LayoutParams(WRAP_CONTENT, (40 * d).toInt()).apply { marginEnd = (8 * d).toInt() })
+            chips.addView(v, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = (8 * d).toInt(); gravity = Gravity.CENTER_VERTICAL })
             return v
         }
         // ≡ More: always first, in the same place on every phone (fuel, parking, food, convoy, saved places)
@@ -628,7 +629,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background = bg(solid, dim(80), 1f, 20f, pill = true)
             contentDescription = L.t("More: fuel, parking, food, convoy, saved places")
             setOnClickListener { openSheet("more") }
-        }, LinearLayout.LayoutParams((46 * d).toInt(), (40 * d).toInt()).apply { marginEnd = (8 * d).toInt() })
+            minHeight = (40 * d).toInt(); minWidth = (46 * d).toInt(); includeFontPadding = false
+        }, LinearLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT).apply { marginEnd = (8 * d).toInt() })
         // the convoy, right after it: its live status while I'm in one
         if (Convoy.active) {
             val n = Convoy.members.values.count { it.state != "left" } + 1
@@ -3553,8 +3555,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     addView(LinearLayout(context).apply {
                         orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
                         isClickable = true; setOnClickListener { showFriendCard(f) }
-                        addView(avatar(c.shownName(f), f.fid, on, 46))
-                        addView(label(c.shownName(f), 13.5f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER })
+                        addView(avatar(c.shownName(f), f.fid, on, 46), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.CENTER_HORIZONTAL })
+                        addView(label(c.shownName(f), 13.5f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                         addView(label(if (on) L.t("online") else L.t("offline"), 11.5f).apply { setTextColor(if (on) readable(Color.rgb(47, 180, 100)) else dim()); gravity = Gravity.CENTER })
                     }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 }
@@ -3564,8 +3566,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     addView(label("＋", 20f).apply {
                         gravity = Gravity.CENTER; setTextColor(readable(accent))
                         background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setStroke((1.5f * d).toInt(), accent, 5 * d, 4 * d) }
-                    }, LinearLayout.LayoutParams((46 * d).toInt(), (46 * d).toInt()))
-                    addView(label("Add", 13.5f, bold = true).apply { setTextColor(ink) })
+                    }, LinearLayout.LayoutParams((46 * d).toInt(), (46 * d).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL })
+                    addView(label("Add", 13.5f, bold = true).apply { setTextColor(ink); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 repeat((4 - c.friends.size).coerceAtLeast(0)) { addView(View(context), LinearLayout.LayoutParams(0, 1, 1f)) }
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 3 })
