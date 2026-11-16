@@ -36,6 +36,7 @@ class DialogsTest {
         for ((th, dark) in listOf(Theme.VIOLET_RAIN to true, Theme.RALLY to true, Theme.BLUEPRINT to true, Theme.OPEN_WORLD to false)) {
             MapState.setTheme(th); MapState.setLightMode(if (dark) MapState.LightMode.DARK else MapState.LightMode.LIGHT)
             activity.refreshForTest(); looper.idle()
+            activity.popupsForTest().forEach { it.dismiss() } // anything the app showed at start
             call("chooseStatus"); shot("status_${th.name.lowercase()}")
             log.append("${th.name}: status pop-ups open=${activity.popupsForTest().size}, Android dialogs=${ShadowDialog.getShownDialogs().size}\n")
             assertTrue("our own pop-up shows", activity.popupsForTest().size == 1)
@@ -44,6 +45,7 @@ class DialogsTest {
             activity.popupsForTest().forEach { it.dismiss() }
         }
         // the back button closes the pop-up first
+        activity.popupsForTest().forEach { it.dismiss() }
         call("confirmLeaveConvoy")
         activity.onBackPressedDispatcher.onBackPressed(); looper.idle()
         log.append("after back: open=${activity.popupsForTest().size}\n")
