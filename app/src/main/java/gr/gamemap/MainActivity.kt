@@ -4242,6 +4242,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val chosen = Xp.chosen(garageTab)
         var row: LinearLayout? = null
         list.forEachIndexed { i, it ->
+            val item = it
             if (i % 2 == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 }) }
             val readable = Xp.readableOn(it, look)
             val usable = it.unlocked && readable
@@ -4260,7 +4261,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     else -> L.t("Tap to use")
                 }, 12.5f, bold = sel).apply { setTextColor(if (sel) readable(accent) else dim()) })
                 isClickable = usable
-                setOnClickListener { if (usable) { Xp.choose(it); MapState.changed.fire(); renderGarage() } }
+                setOnClickListener { if (usable) { Xp.choose(item); MapState.changed.fire(); renderGarage() } }
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { if (i % 2 == 0) marginEnd = p / 2 })
         }
         if (list.size % 2 == 1) row?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
