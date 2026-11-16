@@ -55,9 +55,8 @@ class ConvoyCreateTest {
         val tap = map.javaClass.getMethod("getOnFriendTap").invoke(map) as ((Convoy.Member) -> Unit)
         tap(Convoy.members.values.first { it.name == "Maria" }); shot("create_5_friend")
         // a friend chooses a new destination: I'm asked (dialog), and the car shows Go / ✕
-        val take = Convoy::class.java.getDeclaredMethod("take", org.json.JSONObject::class.java).apply { isAccessible = true }
         val nikos = Convoy.members.values.first { it.name == "Nikos" }
-        take.invoke(Convoy, org.json.JSONObject().put("t", "pos").put("id", nikos.id).put("n", "Nikos").put("st", "ready")
+        Convoy.take(org.json.JSONObject().put("t", "pos").put("id", nikos.id).put("n", "Nikos").put("st", "ready")
             .put("ts", System.currentTimeMillis()).put("dn", "Acropolis Museum").put("da", "Dionysiou Areopagitou 15")
             .put("dlat", 37.9685).put("dlon", 23.7285).put("dt", System.currentTimeMillis() + 5000))
         shot("create_6_proposal")
@@ -74,7 +73,7 @@ class ConvoyCreateTest {
         val mine = "after None: destination=${Convoy.destination?.name}, message says removed=${hello.optBoolean("dx")} dt=${hello.optLong("dt") > 0}"
         // someone else removes it: I'm asked; OK removes it for me too
         Convoy.setDestination(Place("Acropolis Museum", "", LatLng(37.9685, 23.7285)))
-        take.invoke(Convoy, org.json.JSONObject().put("t", "pos").put("id", nikos.id).put("n", "Nikos").put("st", "ready")
+        Convoy.take(org.json.JSONObject().put("t", "pos").put("id", nikos.id).put("n", "Nikos").put("st", "ready")
             .put("ts", System.currentTimeMillis() + 1).put("dt", System.currentTimeMillis() + 9000).put("dx", true))
         val asked = Convoy.proposal?.let { "asked: from ${it.from}, removal=${it.place == null}" } ?: "NOT asked"
         car.draw(Canvas(cb), 1920, 720, android.graphics.Rect(0, 0, 1920, 720), 1.6f, true)
