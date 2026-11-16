@@ -1,4 +1,4 @@
-# Update 100 — the plan
+# Update 100 — the plan (released as build-100, 16 Nov 2026)
 
 Agreed with the owner on 16 Nov 2026. Mockups: the "GameRoute — UI & experience mockups" canvas, rows 31–39
 (board numbers below). Built in 4 stages, each with its own test build; release 100 goes out when all 4 pass.

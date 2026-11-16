@@ -16,7 +16,7 @@ Android · Android Auto · English and Ελληνικά
 </div>
 
 > [!TIP]
-> **New:** XP and levels with a Garage, 14 map styles, a rebuilt convoy with READY UP, offline routing, and a calmer screen while you drive.
+> **New in build 100:** prestige ranks from Bronze to Diamond, a celebration every 5 levels, your monthly recap, a new turn box with a sketch of every junction, clearer spoken directions, better GPS, your status (Online / Do not disturb / Invisible), friends and convoys in Android Auto, a smoother map with a Performance page, a home screen widget, and backup & restore.
 
 ## ✨ At a glance
 
@@ -25,7 +25,7 @@ Android · Android Auto · English and Ελληνικά
 - 📴 **Works offline:** maps, places and routes with no signal
 - 👥 **Convoy:** drive together, race with a 3-2-1
 - 🤝 **Friends:** invite them in one tap
-- 🏆 **XP, levels and a Garage** of unlocks
+- 🏆 **XP, levels, prestige ranks** and a Garage of unlocks
 - 🎨 **14 map styles**, each with day and night
 - 🚘 **Android Auto**, with its own style
 
@@ -43,8 +43,10 @@ Pick from up to **three routes**, each timed with live traffic, with the jams an
 
 <img src="docs/screenshots/drive.webp" alt="Driving in Violet Rain, and the calm driving screen with messages waiting" width="100%">
 
-A big turn card with lanes, your speed next to the limit, and warnings for jams and cameras.
+A **turn box like a rally roadbook**: the distance, a sketch of the junction with your way out marked, and the next turn underneath, in every style. The road you're on shows at the bottom.
 
+- **Clear voice:** "In 200 metres, turn right", then "Turn right" at the right moment (1 km and 500 m on the motorway). Choose how much it talks
+- **Better GPS:** the arrow stays on the road, ignores jumps between tall buildings, and tells you when the signal is weak
 - **Calm while moving:** the buttons fade; tap the map to bring them back
 - **Nothing pops up at speed:** landmarks and friend news wait for when you stop
 - **Tunnels** stay drawn, and **no signal** keeps the route going
@@ -66,13 +68,17 @@ Download a region in **Settings ▸ Offline maps** and the map and places work w
 
 <img src="docs/screenshots/race.webp" alt="The invite screen with QR code, and the 3-2-1 start" width="100%">
 
-**Invite** with a QR code, a link, or your friends in one tap. Everyone's arrow, name and speed update every second.
+**Invite** with a QR code, a link, or your friends in one tap. Everyone's arrow, name and speed update every second, distances match on every phone, and the 3-2-1 starts at the same moment for all.
+
+**Quick messages:** "Need fuel", "Stopping soon", "Go ahead", "Wait for me": one tap, read aloud to everyone driving.
 
 ## 🤝 You and your friends
 
 <img src="docs/screenshots/friends.webp" alt="The You screen, and the friends list" width="100%">
 
 **One button** for everything that's yours: your level, the Garage, friends, trips and settings. Friend requests and convoy invites wait on top.
+
+**Your status:** Online, **Do not disturb** (invites wait quietly) or **Invisible** (you look offline), back to Online by itself when you choose.
 
 **Your location is never shared with friends,** only inside a convoy you both join.
 
@@ -84,7 +90,9 @@ Earn XP for every trip, **new roads**, **clean drives**, convoys, a **daily stre
 
 <img src="docs/screenshots/garage.webp" alt="The Garage, and the style picker" width="100%">
 
-Levels unlock **arrows, route colours, destination flags and arrival effects**, and each style has its own titles. Prestige at level 50. Your level stays private unless you choose to show it.
+Levels unlock **arrows, route colours, destination flags and arrival effects**, and each style has its own titles, with a **celebration every 5 levels** in your style's look. At level 50, **prestige** to Bronze, Silver, Gold, Platinum and Diamond: more XP for good and rewards in each rank's colour. Your level stays private unless you choose to show it.
+
+**Your recap:** your month or year on the road as a card to share (never Home or Work).
 
 ## 📍 Places and fuel
 
@@ -97,6 +105,9 @@ Fuel, parking and food on the map. Fuel sorted by price for your fuel; chargers 
 <img src="docs/screenshots/car-drive.webp" alt="Driving on Android Auto" width="100%">
 
 The same map on the car screen, with the convoy box, places to tap, and its own style. It turns dark with your headlights.
+
+- **Turns on the car's own display** behind the wheel and the head-up display, where the car supports it
+- **Friends in the car:** see who's online, invite in one tap, start a convoy, READY UP in the lobby, send a quick message
 
 <details>
 <summary><b>More car screens</b></summary>
@@ -135,6 +146,12 @@ Light, dark, or switching by itself at sunset.
 </details>
 
 ---
+
+## ⚡ Performance and your data
+
+**Settings ▸ Performance:** Auto, Smooth or Battery; map effects, animations and smoothness your way. The map draws about a third faster than before, keeps finished map squares on the phone, and rests the GPS at red lights.
+
+**Backup & restore** keeps your level, prestige, Garage, trips, places and friends in one file when you change phones. A **home screen widget** shows Home and Work with the drive time.
 
 ## 📲 Install
 
