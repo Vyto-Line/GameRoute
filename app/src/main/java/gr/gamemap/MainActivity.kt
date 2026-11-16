@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var suggestList: LinearLayout
     private lateinit var controls: LinearLayout
     private lateinit var laterPill: TextView
+    private lateinit var youBtn: View
     /** While driving the buttons fade; a tap on the map brings them back until then. */
     private var controlsUntil = 0L
     private lateinit var styleBtn: TextView
@@ -566,8 +567,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(searchIcon)
             addView(search, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(clearBtn)
-            addView(peopleBtn)
-            addView(menuBtn)
+            // one button for everything that's yours (progress, Garage, friends, trips, settings)
+            youBtn = YouRing(context).apply {
+                contentDescription = L.t("You: progress, Garage, friends, trips and settings")
+                setOnClickListener { openSheet("you") }
+            }
+            addView(youBtn, LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()).apply { marginEnd = (5 * d).toInt() })
         }
         chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, (10 * d).toInt(), 0, (6 * d).toInt()) }
         chipsScroll = HorizontalScrollView(this).apply {
@@ -1844,6 +1849,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         peopleDot.background = bg(Color.rgb(72, 199, 116), panel, 1.5f, 6f)
         // while typing, the box gets the room
         peopleBtn.visibility = if (searching || pickFor != null) View.GONE else View.VISIBLE
+        youBtn.visibility = peopleBtn.visibility
+        youBtn.invalidate()
         updatePeopleBadge()
         if (pickFor == null) search.hint = "Where to?"
         for (f in fabs) {
@@ -1937,6 +1944,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             "convoy" -> if (Convoy.counting) closeSheet() else renderConvoy() // the countdown shows on the map
             "quick" -> renderQuick()
             "more" -> renderMore()
+            "you" -> renderYou()
             "progress" -> renderProgress()
             "garage" -> renderGarage()
             "convoyinvite" -> renderConvoyInvite()
@@ -2243,7 +2251,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun openSheet(kind: String) {
         if (kind != sheetKind) { settingsPage = null; settingsQuery = "" }
         // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
-        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""; progressKey = ""; garageKey = ""
+        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""; progressKey = ""; garageKey = ""; youKey = ""
         if ((kind == "friends" || kind == "addfriend") && Friends.ready && Friends.core.started) Friends.kick()
         sheetKind = kind
         if (sheetOverlay.visibility != View.VISIBLE) {
@@ -3427,6 +3435,175 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     // ------------------------------------------------------------------ friends
 
+    /** The You button: your level as a ring, with a dot when something's waiting. */
+    private inner class YouRing(ctx: android.content.Context, val big: Boolean = false) : View(ctx) {
+        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private val icon = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.ic_i_person)?.mutate()
+        override fun onDraw(c: Canvas) {
+            val w = width.toFloat(); val h = height.toFloat()
+            val r = minOf(w, h) / 2 - 3 * d; val cx = w / 2; val cy = h / 2
+            val (have, of) = Explorer.progress()
+            pt.style = android.graphics.Paint.Style.FILL; pt.color = dim(36); c.drawCircle(cx, cy, r, pt)
+            pt.style = android.graphics.Paint.Style.STROKE; pt.strokeWidth = (if (big) 5f else 3.5f) * d; pt.strokeCap = android.graphics.Paint.Cap.ROUND
+            pt.color = dim(60); c.drawCircle(cx, cy, r, pt)
+            pt.color = accent; c.drawArc(cx - r, cy - r, cx + r, cy + r, -90f, 360f * have / maxOf(of, 1), false, pt)
+            icon?.let { ic ->
+                val s = (r * 1.0f).toInt()
+                ic.setTint(ink); ic.setBounds((cx - s / 2).toInt(), (cy - s / 2).toInt(), (cx + s / 2).toInt(), (cy + s / 2).toInt()); ic.draw(c)
+            }
+            // the level, small, bottom right
+            pt.style = android.graphics.Paint.Style.FILL
+            val lv = "${Explorer.level}"
+            pt.textSize = (if (big) 13f else 10f) * d; pt.typeface = Typeface.DEFAULT_BOLD; pt.textAlign = android.graphics.Paint.Align.CENTER
+            val bw = maxOf(pt.measureText(lv) + 8 * d, (if (big) 22f else 17f) * d); val bh = (if (big) 19f else 15f) * d
+            val bx = w - bw / 2 - 1 * d; val by = h - bh / 2 - 1 * d
+            pt.color = accent; c.drawRoundRect(bx - bw / 2, by - bh / 2, bx + bw / 2, by + bh / 2, bh / 2, bh / 2, pt)
+            pt.color = onAccent(accent); c.drawText(lv, bx, by + pt.textSize * 0.36f, pt)
+            // something waiting (a friend request, an invite): a dot top right
+            if (!big && friendsWaiting() > 0) {
+                pt.color = Color.rgb(72, 199, 116); c.drawCircle(w - 6 * d, 6 * d, 5.5f * d, pt)
+                pt.style = android.graphics.Paint.Style.STROKE; pt.strokeWidth = 2 * d; pt.color = opaque(panel); c.drawCircle(w - 6 * d, 6 * d, 5.5f * d, pt)
+            }
+        }
+    }
+
+    private var youKey = ""
+
+    /** You: progress, Garage, friends, trips, and the app's settings, in one place. */
+    private fun renderYou() {
+        val c = if (Friends.ready && Friends.core.started) Friends.core else null
+        val key = "${Explorer.xp}|${Xp.prestige}|${theme.name}|${MapState.dark}|${Xp.streak}|${c?.friends?.joinToString { it.fid + c.isOnline(it.fid) + c.nickname(it.fid) }}|" +
+            "${c?.requests?.size}|${c?.invites?.size}|${Xp.challenges().joinToString { "${it.have}" }}|${Offline.areas().size}"
+        if (key == youKey && sheetHost.childCount > 0) return
+        youKey = key
+        sheetHost.removeAllViews()
+        sheetHost.background = bg(panel, radius = 22f, topOnly = true)
+        val p = (12 * d).toInt()
+        val (have, of) = Explorer.progress()
+        // who I am: the ring, my title, level and streak
+        sheetHost.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, p / 2)
+            addView(YouRing(context, big = true).apply { setOnClickListener { openSheet("progress") } }, LinearLayout.LayoutParams((64 * d).toInt(), (64 * d).toInt()).apply { marginEnd = p })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(Xp.stars + L.t(Xp.title()), 19f, bold = true).apply { setTextColor(ink); typeface = theme.typeface; maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                addView(label(L.t("Level ${Explorer.level}") + " · $have / $of XP", 13.5f).apply { setTextColor(dim()) })
+                if (Xp.streak > 0) addView(label("🔥 " + L.t(if (Xp.streak == 1) "1-day streak" else "${Xp.streak}-day streak"), 13.5f, bold = true).apply { setTextColor(readable(Color.rgb(255, 176, 40))) })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
+        })
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.7).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // four tiles
+        val waiting = friendsWaiting()
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, p / 2, 0, 0)
+            listOf(Triple("✓", "Progress", "progress"), Triple("🏠", "Garage", "garage"), Triple("👥", "Friends", "friends"), Triple("🕘", "Trips", "trips")).forEachIndexed { i, (ic, t, k) ->
+                addView(android.widget.FrameLayout(context).apply {
+                    background = bg(dim(22), if (k == "friends" && waiting > 0) accent else dim(60), if (k == "friends" && waiting > 0) 1.8f else 1f, 14f)
+                    isClickable = true; setOnClickListener { openSheet(k) }
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, p * 3 / 4, 0, p * 2 / 3)
+                        addView(label(ic, 22f).apply { setTextColor(readable(accent)); gravity = Gravity.CENTER }, LinearLayout.LayoutParams((28 * d).toInt(), (28 * d).toInt()))
+                        addView(label(t, 14f, bold = true).apply { setTextColor(ink); setPadding(0, p / 3, 0, 0) })
+                    }, android.widget.FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                    if (k == "friends" && waiting > 0) addView(label("$waiting", 11.5f, bold = true).apply {
+                        setTextColor(Color.WHITE); gravity = Gravity.CENTER; background = bg(Color.rgb(230, 60, 60), radius = 9f)
+                    }, android.widget.FrameLayout.LayoutParams((20 * d).toInt(), (18 * d).toInt(), Gravity.END or Gravity.TOP).apply { topMargin = (5 * d).toInt(); rightMargin = (5 * d).toInt() })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { if (i < 3) marginEnd = p / 2 })
+            }
+        })
+        // friends: what's waiting first, then everyone as circles
+        if (c != null) {
+            val online = c.friends.count { c.isOnline(it.fid) }
+            body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                addView(sectionTitle(L.t("FRIENDS") + if (online > 0) " · " + L.t("$online ONLINE") else ""), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                if (c.friends.isNotEmpty()) addView(label(L.t("See all ${c.friends.size}") + " ›", 14f, bold = true).apply {
+                    setTextColor(readable(accent)); setPadding(0, (14 * d).toInt(), 0, 0); setOnClickListener { openSheet("friends") }
+                })
+            })
+            for (rq in c.requests.take(2)) body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(p, p * 2 / 3, p / 2, p * 2 / 3); background = bg(Color.argb(30, Color.red(accent), Color.green(accent), Color.blue(accent)), accent, 1.5f, 14f)
+                addView(avatar(rq.name, rq.fid, false, 38), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(label(L.t("${rq.name} wants to be friends"), 15.5f, bold = true).apply { setTextColor(ink); maxLines = 2 })
+                    addView(label(since(rq.at), 12.5f).apply { setTextColor(dim()) })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(pill("✕") { Friends.decline(rq) }.apply { setTextColor(dim()); contentDescription = L.t("Not now") })
+                addView(pill("Accept") { Friends.accept(rq) }.apply { textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 12f) })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
+            for (inv in c.invites.filter { it.convoy != Convoy.code }.take(1)) body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(p, p * 2 / 3, p / 2, p * 2 / 3); background = bg(Color.argb(30, Color.red(accent), Color.green(accent), Color.blue(accent)), accent, 1.5f, 14f)
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(label(L.t("${inv.from} invites you to a convoy"), 15.5f, bold = true).apply { setTextColor(ink); maxLines = 2 })
+                    addView(label(inv.dest.ifBlank { L.t("No destination yet") }, 12.5f).apply { setTextColor(dim()); maxLines = 1 })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(pill("✕") { Friends.answer(inv.convoy, "no") }.apply { setTextColor(dim()); contentDescription = L.t("Not now") })
+                addView(pill("Join") { closeSheet(); joinConvoy(inv.convoy) }.apply { textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 12f) })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
+            body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                for (f in c.friends.sortedByDescending { c.isOnline(it.fid) }.take(4)) {
+                    val on = c.isOnline(f.fid)
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+                        isClickable = true; setOnClickListener { showFriendCard(f) }
+                        addView(avatar(c.shownName(f), f.fid, on, 46))
+                        addView(label(c.shownName(f), 13.5f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER })
+                        addView(label(if (on) L.t("online") else L.t("offline"), 11.5f).apply { setTextColor(if (on) readable(Color.rgb(47, 180, 100)) else dim()); gravity = Gravity.CENTER })
+                    }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                }
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+                    isClickable = true; setOnClickListener { openSheet("addfriend") }
+                    addView(label("＋", 20f).apply {
+                        gravity = Gravity.CENTER; setTextColor(readable(accent))
+                        background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setStroke((1.5f * d).toInt(), accent, 5 * d, 4 * d) }
+                    }, LinearLayout.LayoutParams((46 * d).toInt(), (46 * d).toInt()))
+                    addView(label("Add", 13.5f, bold = true).apply { setTextColor(ink) })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                repeat((4 - c.friends.size).coerceAtLeast(0)) { addView(View(context), LinearLayout.LayoutParams(0, 1, 1f)) }
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 3 })
+            if (c.friends.isNotEmpty()) body.addView(label("Tap a friend to invite them to a convoy.", 12.5f).apply { setTextColor(dim()); setPadding(p / 4, p / 2, 0, 0) })
+        }
+        // this week: the next challenge
+        Xp.challenges().firstOrNull { !it.done }?.let { ch ->
+            body.addView(sectionTitle(L.t("THIS WEEK")))
+            body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(p, p * 2 / 3, p, p * 2 / 3); background = bg(dim(20), radius = 12f)
+                isClickable = true; setOnClickListener { openSheet("progress") }
+                addView(label(L.t(ch.title), 15.5f, bold = true).apply { setTextColor(ink) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(label("${ch.have}/${ch.of} · ${ch.reward} XP", 14f, bold = true).apply { setTextColor(readable(Color.rgb(255, 176, 40))) })
+            })
+        }
+        // the app
+        body.addView(sectionTitle(L.t("APP")))
+        fun row(icon: Int, title: String, sub: String?, onClick: () -> Unit) = body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(p / 4, p * 2 / 3, 0, p * 2 / 3)
+            isClickable = true; setOnClickListener { onClick() }
+            addView(android.widget.ImageView(context).apply {
+                setImageResource(icon); imageTintList = android.content.res.ColorStateList.valueOf(readable(accent))
+                val q = (7 * d).toInt(); setPadding(q, q, q, q); background = bg(Color.argb(36, Color.red(accent), Color.green(accent), Color.blue(accent)), radius = 10f)
+            }, LinearLayout.LayoutParams((36 * d).toInt(), (36 * d).toInt()).apply { marginEnd = p })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(title, 16f, bold = true).apply { setTextColor(ink) })
+                if (sub != null) addView(label(sub, 13f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(label("›", 20f).apply { setTextColor(dim()) })
+        })
+        row(R.drawable.ic_set_map, "Offline maps", Offline.areas().let { a -> if (a.isEmpty()) L.t("Download regions and roads") else "${a.size} · ${Offline.size(a.sumOf { it.bytes })}" }) { openSheet("offline") }
+        row(R.drawable.ic_theme, "Map style", L.t(theme.title)) { openSheet("style") }
+        row(R.drawable.ic_set_app, "Settings", null) { showSettings() }
+        row(R.drawable.ic_set_adv, "Help & about", null) { showAbout() }
+    }
+
     private var friendsKey = ""
 
     /** Requests and invites waiting (not the convoy I'm in already). */
@@ -3610,7 +3787,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 addView(avatar(f.name, f.fid, online), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
-                    addView(label(f.name, 15f, bold = true).apply { setTextColor(ink) })
+                    addView(label(c.shownName(f), 15f, bold = true).apply { setTextColor(ink) })
                     Friends.levelOf(f.fid).takeIf { it.isNotBlank() }?.let { addView(label(it, 12.5f, bold = true).apply { setTextColor(readable(accent)) }) }
                     addView(label(if (online) "Online" else "Offline", 13f).apply { setTextColor(if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
@@ -3770,18 +3947,29 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(avatar(f.name, f.fid, online, 54), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(label(f.name, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+                addView(label(Friends.core.shownName(f), 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+                if (Friends.core.nickname(f.fid).isNotBlank()) addView(label(L.t("Calls themselves ${f.name}"), 12.5f).apply { setTextColor(dim()) })
                 Friends.levelOf(f.fid).takeIf { it.isNotBlank() }?.let { addView(label(it, 14f, bold = true).apply { setTextColor(readable(accent)) }) }
                 addView(label(if (online) "Online" else "Offline", 14f, bold = online).apply { setTextColor(if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
             })
         })
         val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(f.since))
-        box.addView(label(L.t("Friends since") + " " + date, 13.5f).apply { setTextColor(dim()); setPadding(0, p, 0, p) })
+        val drives = Friends.core.drivesWith(f.fid)
+        box.addView(label(L.t("Friends since") + " " + date + (if (drives > 0) " · " + L.t(if (drives == 1) "1 drive together" else "$drives drives together") else ""), 13.5f).apply { setTextColor(dim()); setPadding(0, p, 0, p) })
         box.addView(pill("👥 Invite to a convoy") { dlg.dismiss(); inviteFriend(f) }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 16f) },
             LinearLayout.LayoutParams(MATCH_PARENT, (52 * d).toInt()))
         box.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; setPadding(0, p * 3 / 4, 0, 0)
-            addView(pill("Remove friend") {
+            addView(pill("Rename") {
+                dlg.dismiss()
+                val input = EditText(this@MainActivity).apply { setText(Friends.core.shownName(f)); setSingleLine(); selectAll() }
+                AlertDialog.Builder(this@MainActivity).setTitle(L.t("Your name for ${f.name}")).setMessage(L.t("Only you see it."))
+                    .setView(LinearLayout(this@MainActivity).apply { val q = (20 * d).toInt(); setPadding(q, 0, q, 0); addView(input, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) })
+                    .setPositiveButton("Save") { _, _ -> Friends.core.setNickname(f.fid, input.text.toString().takeIf { it != f.name }.orEmpty()); friendsKey = ""; youKey = ""; refreshChrome() }
+                    .setNegativeButton("Cancel", null).showT()
+            }.apply { textSize = 14.5f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 14f) },
+                LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p / 2 })
+            addView(pill("Remove") {
                 dlg.dismiss()
                 AlertDialog.Builder(this@MainActivity).setTitle(L.t("Remove ${f.name}?")).setMessage("You can add each other again later.")
                     .setPositiveButton("Remove") { _, _ -> Friends.remove(f) }.setNegativeButton("Cancel", null).showT()

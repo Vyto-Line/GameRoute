@@ -174,9 +174,28 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     fun unblock(fid: String) = removeWhere("blocked") { it.getString("fid") == fid }
     fun blockedNames(): List<Pair<String, String>> = arr("blocked").map { it.getString("fid") to it.optString("n", "Driver") }
 
+    /** How many convoys I was in with [fid] (counted on this phone only). */
+    fun drivesWith(fid: String): Int = try { JSONObject(store.get("drives") ?: "{}").optInt(fid, 0) } catch (e: Exception) { 0 }
+
+    /** My own name for a friend (only on my phone): blank = the name they chose. */
+    fun nickname(fid: String): String = try { JSONObject(store.get("nicks") ?: "{}").optString(fid) } catch (e: Exception) { "" }
+    fun setNickname(fid: String, nick: String) {
+        val o = try { JSONObject(store.get("nicks") ?: "{}") } catch (e: Exception) { JSONObject() }
+        if (nick.isBlank()) o.remove(fid) else o.put(fid, nick.trim().take(30))
+        store.put("nicks", o.toString())
+    }
+    /** What I call a friend: my nickname, or their name. */
+    fun shownName(f: Friend): String = nickname(f.fid).ifBlank { f.name }
+
     /** Someone in my convoy (who uses friends): kept for "Drove with you". */
     fun droveWith(fid: String, name: String, code: String, dest: String) {
         if (fid == this.fid || code.isBlank()) return
+        // one more drive together (once per convoy)
+        val seen = arr("recent").any { it.getString("fid") == fid && it.optString("c") == code }
+        if (!seen) {
+            val o = try { JSONObject(store.get("drives") ?: "{}") } catch (e: Exception) { JSONObject() }
+            o.put(fid, o.optInt(fid, 0) + 1); store.put("drives", o.toString())
+        }
         removeWhere("recent") { it.getString("fid") == fid }
         edit("recent") { a -> a.put(JSONObject().put("fid", fid).put("n", name).put("c", code).put("d", dest).put("at", clock())) }
         val a = arr("recent"); if (a.size > 12) store.put("recent", JSONArray(a.takeLast(12)).toString())

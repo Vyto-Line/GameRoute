@@ -47,6 +47,7 @@ class DeclutterTest {
         Convoy.myName = "Alex"
         activity.refreshForTest(); shot("home")
         activity.openSheetForTest("more"); shot("more"); call("closeSheet")
+        activity.openSheetForTest("you"); shot("you"); call("closeSheet")
         activity.openSheetForTest("convoy"); shot("convoy_start"); call("closeSheet")
         // a convoy at the start: me (host) racing, Maria ready, Nikos driving along
         val dest = Place("Glyfada Marina", "Glyfada", r.points.last())
