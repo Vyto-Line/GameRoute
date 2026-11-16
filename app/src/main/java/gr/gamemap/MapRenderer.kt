@@ -1264,7 +1264,7 @@ class MapRenderer(private val car: Boolean = false) {
         val sr = RectF(left, sTop, left + w, sTop + startH)
         val ready = !loading
         // the route's colour, unless it hardly shows on this map (8-Bit): then the panel's, outlined
-        val sf = if (Ui.contrast(t.route, t.background) >= 1.8) t.route else Ui.panel(t)
+        val sf = if (t.pixel <= 1 && Ui.contrast(t.route, t.background) >= 1.8) t.route else Ui.panel(t)
         glassButton(c, sr, d, t, if (ready) withAlpha(sf, 245) else withAlpha(dim, 120))
         if (ready && sf != t.route) { stroke.color = accent; stroke.strokeWidth = 2.5f * d; c.drawRoundRect(sr, 6 * d, 6 * d, stroke) }
         text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 21 * d
