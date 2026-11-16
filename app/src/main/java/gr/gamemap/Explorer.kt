@@ -176,11 +176,13 @@ object Explorer {
     private fun discover(l: Landmark) {
         found += l.id
         prefs().edit().putStringSet("landmarksFound", HashSet(found)).apply()
-        lastFound = l
-        lastFoundAt = SystemClock.uptimeMillis()
         tripFound++
         version++
         addXp(25)
+        // driving: it waits until you stop (no banner, no voice at speed)
+        if (Later.driving) { Later.add("🏛 " + gr.gamemap.L.t("Landmark discovered: ${l.name}") + " · +25 XP"); return }
+        lastFound = l
+        lastFoundAt = SystemClock.uptimeMillis()
         Voice.say(if (Voice.lang == Phrases.GREEK) "Νέο αξιοθέατο: ${l.name}" else "Landmark discovered: ${l.name}")
     }
 }

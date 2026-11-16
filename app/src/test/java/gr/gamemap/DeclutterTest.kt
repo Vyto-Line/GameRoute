@@ -60,6 +60,17 @@ class DeclutterTest {
         Convoy.debugHost(false)
         activity.openSheetForTest("convoy"); shot("lobby_guest"); call("closeSheet")
         activity.openSheetForTest("convoyinvite"); shot("invite"); call("closeSheet")
+        // settings with its search box, and a search
+        Convoy.leave(quiet = true)
+        activity.showSettings(); shot("settings")
+        // driving with a message waiting: the buttons fade, the counter shows
+        Later.add("🏛 Landmark discovered: Panathenaic Stadium · +25 XP"); Later.add("👥 1 friend request: open Together")
+        call("closeSheet")
+        NavEngine.debugDrive(Place("Museum", "", r.points.last()), r, 60)
+        val q = r.points[r.points.size / 2]; val q2 = r.points[r.points.size / 2 + 1]
+        LocationTracker.onLocationChanged(Location("gps").apply { latitude = q.lat; longitude = q.lon; speed = 13f; bearing = Geo.bearing(q, q2); accuracy = 5f; time = System.currentTimeMillis() })
+        activity.refreshForTest(); shot("drive_quiet")
+        Convoy.debugStart(dest)
         // Greek
         L.setMode("el")
         activity.openSheetForTest("convoy"); shot("lobby_el"); call("closeSheet")

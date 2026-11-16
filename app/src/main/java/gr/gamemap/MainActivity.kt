@@ -67,6 +67,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var suggestScroll: ScrollView
     private lateinit var suggestList: LinearLayout
     private lateinit var controls: LinearLayout
+    private lateinit var laterPill: TextView
+    /** While driving the buttons fade; a tap on the map brings them back until then. */
+    private var controlsUntil = 0L
     private lateinit var styleBtn: TextView
     private lateinit var recenterBtn: TextView
     private lateinit var muteBtn: TextView
@@ -345,7 +348,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             orientation = LinearLayout.VERTICAL; isClickable = true; elevation = 20 * d; visibility = View.GONE
         }
         map.onPlaceTap = { if (!NavEngine.planning) showPlace(it, dropped = false) }
-        map.onMapTap = { if (placeShown != null) closePlace() }
+        map.onMapTap = {
+            if (placeShown != null) closePlace()
+            // driving: a tap brings the buttons back for a few seconds
+            if (NavEngine.active) { controlsUntil = System.currentTimeMillis() + 5000; refreshChrome(); main.postDelayed({ refreshChrome() }, 5100) }
+        }
         map.onLongPress = { p -> if (!NavEngine.planning) dropPin(p) }
         map.onConvoyTap = { openSheet("convoy") }
         map.onFriendTap = { m -> if (!NavEngine.planning) showFriend(m.id) }
@@ -357,6 +364,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(controls, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
             // recenter: bottom right, just above whatever card is at the bottom (a target icon)
             addView(recenterBtn, FrameLayout.LayoutParams((56 * d).toInt(), (56 * d).toInt(), Gravity.END or Gravity.BOTTOM).apply { marginEnd = (14 * d).toInt() })
+            laterPill = TextView(this@MainActivity).apply {
+                textSize = 14f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; visibility = View.GONE
+                val q = (12 * d).toInt(); setPadding(q, 0, q, 0); elevation = 6 * d
+                setOnClickListener { if (!Later.driving) showLater() }
+            }
+            addView(laterPill, FrameLayout.LayoutParams(WRAP_CONTENT, (38 * d).toInt(), Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM))
             addView(navCard, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
             addView(preview, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
             addView(offerCard, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
@@ -706,7 +719,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     background = bg(dim(22), dim(60), 1f, 14f)
                     isClickable = true
                     setOnClickListener { act() }
-                    addView(label(icon, 22f))
+                    addView(label(icon, 22f).apply { setTextColor(readable(accent)) }, LinearLayout.LayoutParams((30 * d).toInt(), (30 * d).toInt()))
                     addView(label(title, 15f, bold = true).apply { setTextColor(ink); setPadding(0, p / 3, 0, 0); maxLines = 2 })
                 }, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { if (i < items.size - 1) marginEnd = p * 2 / 3 })
             }
@@ -733,7 +746,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(p / 2, p * 2 / 3, p / 2, p * 2 / 3); isClickable = true
             setOnClickListener { closeSheet(); NavEngine.plan(this@MainActivity, pl) }
-            addView(label(icon, 18f).apply { setPadding(0, 0, p, 0) })
+            addView(label(icon, 18f).apply { gravity = Gravity.CENTER; setTextColor(readable(accent)) }, LinearLayout.LayoutParams((26 * d).toInt(), (26 * d).toInt()).apply { marginEnd = p })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(label(pl.name, 16f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
@@ -1881,6 +1894,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         controls.visibility = if (planning || searching) View.GONE else View.VISIBLE
+        // driving: only the turn, speed and arrival; the buttons fade (a tap on the map brings them back)
+        val quiet = nav && !NavEngine.arrived && Later.driving && System.currentTimeMillis() > controlsUntil
+        val ctlAlpha = if (quiet) 0f else 1f
+        if (controls.alpha != ctlAlpha && controls.animate() != null) controls.animate().alpha(ctlAlpha).setDuration(if (quiet) 600 else 150).start()
+        for (i in 0 until controls.childCount) controls.getChildAt(i).isClickable = !quiet
+        if (nav && !quiet && Later.driving) { main.removeCallbacks(quietTick); main.postDelayed(quietTick, (controlsUntil - System.currentTimeMillis()).coerceIn(500, 5100)) }
+        // messages kept for when you stop
+        val held = Later.count
+        laterPill.visibility = if (held > 0 && (nav || !Later.driving) && sheetOverlay.visibility != View.VISIBLE) View.VISIBLE else View.GONE
+        if (held > 0) {
+            laterPill.text = if (Later.driving) "✉ " + L.t(if (held == 1) "1 message for when you stop" else "$held messages for when you stop") else "✉ " + L.t(if (held == 1) "1 message · tap to read" else "$held messages · tap to read")
+            laterPill.setTextColor(ink); laterPill.background = bg(opaque(panel), Color.rgb(255, 194, 61), 1.5f, 19f, pill = true)
+        }
+        // stopped (the trip is over, or arrived and the card is closed): show what waited
+        if (held > 0 && !Later.driving && (!nav || NavEngine.arrived) && NavEngine.lastTrip == null && sheetOverlay.visibility != View.VISIBLE) main.post { showLater() }
         val homeKey = "${t.name}|${MapState.dark}|${MapState.imperial}|$etaVersion|${Explorer.version}|${Explorer.xp}|${Places.recents().joinToString { it.name }}|" +
             "${Places.saved("home")?.name}|${Places.saved("work")?.name}|${LocationTracker.position != null}|${Parked.get()?.at}|${Convoy.active}|${Convoy.members.size}|${Convoy.destination?.name}|${Convoy.onConvoyRoute}|${Convoy.status()}|${java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)}|${Places.labelled().joinToString { it.label + it.icon }}|" +
             (if (Friends.ready && Friends.core.started) "${Friends.core.invites.joinToString { it.convoy + it.count }}|${Friends.core.requests.size}" else "")
@@ -1962,6 +1990,22 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         updateMapInsets()
     }
 
+    private val quietTick = Runnable { refreshChrome() }
+    private var laterShowing = false
+
+    /** What waited while you drove, one list. */
+    private fun showLater() {
+        if (laterShowing || isFinishing) return
+        val items = Later.take()
+        if (items.isEmpty()) return
+        laterShowing = true
+        AlertDialog.Builder(this).setTitle(L.t("While you were driving"))
+            .setMessage(items.joinToString("\n\n"))
+            .setPositiveButton("OK", null)
+            .setOnDismissListener { laterShowing = false; refreshChrome() }
+            .showT()
+    }
+
     private fun updateMapInsets() {
         val top = when {
             offerCard.visibility == View.VISIBLE -> offerCard.bottom
@@ -1977,6 +2021,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             else -> insets.bottom
         }
         recenterBtn.translationY = -(bottom + 14 * d)
+        laterPill.translationY = -(bottom + 22 * d)
         if (map.insetTop != top || map.insetBottom != bottom) {
             map.insetTop = top
             map.insetBottom = bottom
@@ -2190,7 +2235,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     // ------------------------------------------------------------------ bottom sheets
 
     private fun openSheet(kind: String) {
-        if (kind != sheetKind) settingsPage = null
+        if (kind != sheetKind) { settingsPage = null; settingsQuery = "" }
         // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
         quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""
         if ((kind == "friends" || kind == "addfriend") && Friends.ready && Friends.core.started) Friends.kick()
@@ -2458,10 +2503,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         SettingsGroup("alerts", "Alerts", "Speed and red-light cameras, accidents, cameras you marked", R.drawable.ic_set_alert, Color.rgb(194, 65, 12)),
         SettingsGroup("sharing", "Sharing", "Your name, convoy, live arrival", R.drawable.ic_set_share, Color.rgb(124, 58, 237)),
         SettingsGroup("app", "App", "Trip history, explorer profile, privacy, about" + if (Updater.ENABLED) ", updates" else "", R.drawable.ic_set_app, Color.rgb(13, 110, 97)),
-        SettingsGroup("advanced", "Advanced", "Star ratings and reviews, welcome screens", R.drawable.ic_set_adv, Color.rgb(100, 100, 110)),
+        SettingsGroup("advanced", "Advanced", "Units, map links, star ratings and reviews, welcome screens", R.drawable.ic_set_adv, Color.rgb(100, 100, 110)),
     )
 
     private fun renderSettings() {
+        // typing in the search box: don't rebuild under the keyboard
+        if (settingsPage == null && sheetHost.findFocus() is EditText) return
         sheetHost.removeAllViews()
         sheetHost.background = bg(panel, radius = 24f, topOnly = true)
         val maxH = minOf((resources.displayMetrics.heightPixels * 0.72f).toInt(), (640 * d).toInt())
@@ -2469,7 +2516,42 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         if (page == null) {
             sheetHost.addView(sheetHeader("Settings"))
-            for (g in settingsGroups()) body.addView(settingsEntry(g), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (8 * d).toInt() })
+            // search every setting by its name (English or Greek)
+            val found = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            val groupsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            fun fill(q: String) {
+                found.removeAllViews()
+                val qq = q.trim().lowercase()
+                groupsBox.visibility = if (qq.isEmpty()) View.VISIBLE else View.GONE
+                if (qq.isEmpty()) return
+                for (g in settingsGroups()) {
+                    val hits = settingsRowsFor(g.key).filter { row ->
+                        val t = (row as? ViewGroup)?.let { firstText(it) }.orEmpty()
+                        t.lowercase().contains(qq) || L.t(t).lowercase().contains(qq)
+                    }
+                    if (hits.isEmpty()) continue
+                    found.addView(label(L.t(g.title).uppercase(), 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding((4 * d).toInt(), (12 * d).toInt(), 0, (4 * d).toInt()) })
+                    group("", *hits.toTypedArray()).forEach { found.addView(it) }
+                }
+                if (found.childCount == 0) found.addView(label(L.t("No setting called \"$q\""), 14f).apply { setTextColor(dim()); setPadding((4 * d).toInt(), (12 * d).toInt(), 0, 0) })
+                L.translateTree(found); Icons.applyTree(found)
+            }
+            body.addView(EditText(this).apply {
+                hint = L.t("Search settings"); setSingleLine(); textSize = 16f
+                setTextColor(ink); setHintTextColor(dim(130))
+                background = bg(dim(22), dim(80), 1f, 22f, pill = true)
+                val q = (12 * d).toInt(); setPadding(q + q / 2, q, q, q)
+                setText(settingsQuery)
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                    override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                    override fun afterTextChanged(e: Editable?) { settingsQuery = e?.toString().orEmpty(); fill(settingsQuery) }
+                })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (6 * d).toInt() })
+            body.addView(found)
+            body.addView(groupsBox)
+            for (g in settingsGroups()) groupsBox.addView(settingsEntry(g), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (8 * d).toInt() })
+            fill(settingsQuery)
             body.addView(label("GameRoute build ${Updater.currentVersion(this)}", 12f).apply {
                 setTextColor(dim(150)); gravity = Gravity.CENTER; setPadding(0, (14 * d).toInt(), 0, (4 * d).toInt())
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -2483,15 +2565,34 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(label(g.title, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
         })
+        val rows = settingsRowsFor(page)
+        group("", *rows.toTypedArray()).forEach { body.addView(it) }
+        sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { height = WRAP_CONTENT })
+        body.post { (body.parent as? View)?.let { sv -> if (body.height > maxH) { sv.layoutParams.height = maxH; sv.requestLayout() } } }
+    }
+
+    private var settingsQuery = ""
+
+    /** The first text in a settings row (its name). */
+    private fun firstText(v: ViewGroup): String? {
+        for (i in 0 until v.childCount) {
+            val c = v.getChildAt(i)
+            if (c is TextView && c.text.isNotBlank()) return c.text.toString()
+            if (c is ViewGroup) firstText(c)?.let { return it }
+        }
+        return null
+    }
+
+    /** The rows of one settings page (also searched from the main page). */
+    private fun settingsRowsFor(page: String): List<View> {
         val voice = if (Voice.muted) "Off" else if (Voice.lang == Phrases.GREEK) "Ελληνικά" else "English"
-        val rows: List<View> = when (page) {
+        return when (page) {
             "map" -> listOf(
                 settingRow("Map style", theme.title) { openSheet("style") },
                 settingRow("Light / dark", MapState.lightMode.label) { chooseLightMode() },
                 settingRow("Android Auto style", MapState.carTheme?.title ?: "Same as phone") { chooseCarStyle() },
                 switchRow("Car: dark map when headlights are on", MapState.followHeadlights) { MapState.followHeadlights = it },
                 switchRow("Places on the map (fuel, parking, food…)", MapState.showPlaces) { MapState.showPlaces = it },
-                settingRow("Units", if (MapState.imperial) "Miles" else "Kilometres") { MapState.setImperial(!MapState.imperial) },
                 settingRow("Offline maps", Offline.areas().let { a -> if (a.isEmpty()) "Regions, Wi-Fi only, updates" else "${a.size} · ${Offline.size(a.sumOf { it.bytes })}" }) { openSheet("offline") },
             )
             "nav" -> listOf(
@@ -2537,20 +2638,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Explorer profile", "Level ${Explorer.level} · ${Explorer.xp} XP") { showProfile() },
                 if (Updater.ENABLED) settingRow("Check for updates", "build ${Updater.currentVersion(this)}") { checkForUpdates(manual = true) } else null,
                 settingRow("Language", L.label) { chooseLanguage() },
-                settingRow("Open map links in GameRoute", if (mapLinksOn()) "On" else "Off") { explainMapLinks() },
                 settingRow("Privacy policy", null) {
                     try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://vyto-line.github.io/GameRoute/privacy/"))) } catch (_: Exception) {}
                 },
                 settingRow("About & map credits", null) { showAbout() },
             )
             else -> listOf(
+                settingRow("Units", if (MapState.imperial) "Miles" else "Kilometres") { MapState.setImperial(!MapState.imperial) },
+                settingRow("Open map links in GameRoute", if (mapLinksOn()) "On" else "Off") { explainMapLinks() },
                 settingRow("Star ratings & reviews", if (Reviews.enabled) "Google key set" else "Off: Reviews opens Google Maps") { chooseGoogleKey() },
                 settingRow("Show the welcome screens again", null) { closeSheet(); showWelcome() },
             )
         }
-        group("", *rows.toTypedArray()).forEach { body.addView(it) }
-        sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { height = WRAP_CONTENT })
-        body.post { (body.parent as? View)?.let { sv -> if (body.height > maxH) { sv.layoutParams.height = maxH; sv.requestLayout() } } }
     }
 
     /** One group in the settings list: coloured icon, name, what's inside, ›. */
@@ -2977,7 +3076,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         body.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(p, p * 3 / 4, p / 2, p * 3 / 4); background = bg(dim(22), dim(70), 1f, 14f)
-            addView(label("🏁", 20f).apply { setPadding(0, 0, p, 0) })
+            addView(label("🏁", 20f).apply { gravity = Gravity.CENTER; setTextColor(readable(accent)) }, LinearLayout.LayoutParams((28 * d).toInt(), (28 * d).toInt()).apply { marginEnd = p })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(label(dest?.name ?: L.t("No destination yet"), 17f, bold = true).apply {
@@ -3159,7 +3258,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background = if (primary) bg(accent, radius = 16f) else bg(dim(22), accent, 1.5f, 16f)
             setOnClickListener { onClick() }
             val fg = if (primary) onAccent(accent) else ink
-            addView(label(icon, 24f).apply { setPadding(0, 0, p, 0) })
+            addView(label(icon, 24f).apply { gravity = Gravity.CENTER; setTextColor(fg) }, LinearLayout.LayoutParams((32 * d).toInt(), (32 * d).toInt()).apply { marginEnd = p })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(label(title, 17f, bold = true).apply { setTextColor(fg); typeface = theme.typeface })
@@ -3367,7 +3466,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sheetHost.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (6 * d).toInt(); bottomMargin = (6 * d).toInt() })
     }
     private val friendsListener: () -> Unit = { runOnUiThread { friendsKey = ""; refreshChrome() } }
-    private val friendsArrived: () -> Unit = { runOnUiThread { maybeAskInvite() } }
+    private val friendsArrived: () -> Unit = { runOnUiThread {
+        // driving: friends' news waits (the request or invite is in Together when you stop)
+        if (Later.driving && Friends.ready && Friends.core.started) {
+            val req = Friends.core.requests.size
+            if (req > 0) Later.add("👥 " + L.t(if (req == 1) "1 friend request: open Together" else "$req friend requests: open Together"))
+        }
+        maybeAskInvite()
+    } }
     private var inviteAsked = ""
 
     private fun since(at: Long): String {
@@ -4073,6 +4179,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         MapState.changed += stateListener
         Voice.changed += stateListener
         Explorer.changed += stateListener
+        Later.changed += stateListener
         Parked.changed += stateListener
         Alerts.changed += stateListener
         Convoy.changed += stateListener
@@ -4090,6 +4197,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         MapState.changed -= stateListener
         Voice.changed -= stateListener
         Explorer.changed -= stateListener
+        Later.changed -= stateListener
         Parked.changed -= stateListener
         Alerts.changed -= stateListener
         Convoy.changed -= stateListener
