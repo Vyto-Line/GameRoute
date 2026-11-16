@@ -65,6 +65,7 @@ class GameMapApp : Application() {
         Startup.step("voice") { Voice.init(this) }
         Startup.step("explorer") { Explorer.init(this) }
         Startup.step("xp") { Xp.init(this) }
+        Startup.step("performance") { Perf.init(this) }
         Startup.step("alerts") { Alerts.init(this) }
         CrashLog.note("start: " + Startup.steps.filter { it.second >= 5 }.joinToString { "${it.first} ${it.second} ms" })
     }

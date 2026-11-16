@@ -1,0 +1,36 @@
+name: Speed check
+# On every push that changes the app: a driving frame must still draw within its budget
+# (FrameBudgetTest). A red check here means a change made the map slower.
+on:
+  push:
+    branches: [main]
+    paths: ["app/src/main/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frames:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - name: Fetch real map data
+        run: |
+          mkdir -p previewdata
+          T=$(curl -s https://tiles.openfreemap.org/planet | python3 -c "import sys,json;print(json.load(sys.stdin)['tiles'][0])")
+          for x in 9270 9271 9272; do for y in 6320 6321 6322; do
+            curl -s --compressed -o previewdata/${x}_${y}.pbf "$(echo $T | sed "s/{z}/14/;s/{x}/$x/;s/{y}/$y/")"
+          done; done
+          curl -s -m 30 -o previewdata/route.json "https://router.project-osrm.org/route/v1/driving/23.7268,37.9812;23.7329,37.9990?overview=full&geometries=geojson&steps=true&alternatives=3"
+      - name: Frame budget
+        run: |
+          export JAVA_HOME="${JAVA_HOME_17_X64:-$JAVA_HOME}"
+          gradle testGithubDebugUnitTest --no-daemon -PbuildNumber=1 --tests "gr.gamemap.FrameBudgetTest" \
+            -DpreviewData=$PWD/previewdata -DpreviewOut=$PWD/out
+          cat out/frame_budget.txt

@@ -27,7 +27,7 @@ object VectorSource {
         private set
     private lateinit var appContext: Context
     /** Parsed tiles, as many as a sixth of the app's memory allows. */
-    private val parsed = object : LruCache<String, VectorTile>((Runtime.getRuntime().maxMemory() / 6).toInt()) {
+    private val parsed = object : LruCache<String, VectorTile>((Runtime.getRuntime().maxMemory() / (if (Runtime.getRuntime().maxMemory() < 200L * 1024 * 1024) 10 else 6)).toInt()) {
         override fun sizeOf(key: String, value: VectorTile) = value.approxBytes
     }
     private val prefetcher = Bg.pool("prefetch", 1)

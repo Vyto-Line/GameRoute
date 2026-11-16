@@ -269,6 +269,8 @@ object Friends {
 
         fun start() {
             if (!ready || !core.started) return
+            // Settings › Performance › Live friend updates off: the 15-minute check still brings requests
+            if (!Perf.liveFriends) { stop(); return }
             wanted = true
             if (thread?.isAlive == true) return
             thread = Thread {

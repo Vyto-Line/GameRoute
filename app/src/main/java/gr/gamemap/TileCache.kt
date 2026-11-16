@@ -10,7 +10,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Themed map tiles, drawn on background threads from OpenFreeMap vector data and kept in
- * memory. Map data © OpenStreetMap contributors.
+ * memory, and on the phone too (a finished square is saved, so after a restart it shows straight
+ * away instead of being drawn again). Map data © OpenStreetMap contributors.
  */
 object TileCache {
     val loaded = Signal()
@@ -19,7 +20,10 @@ object TileCache {
     var tilePx = 512
         private set
 
-    private val mem = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 5).toInt()) {
+    /** Phones with little memory for the app: smaller caches, fewer slowdowns and out-of-memory crashes. */
+    internal val lowMemory = Runtime.getRuntime().maxMemory() < 200L * 1024 * 1024
+
+    private val mem = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / (if (lowMemory) 8 else 5)).toInt()) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
     private val inFlight = ConcurrentHashMap.newKeySet<String>()
@@ -35,7 +39,63 @@ object TileCache {
     private val threads = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 3)
     private val pool = ThreadPoolExecutor(threads, threads, 30, TimeUnit.SECONDS, Lifo(), Bg.factory("tiles"))
 
+    // ---- finished squares kept on the phone
+    private var diskDir: java.io.File? = null
+    private val saver = Bg.pool("tile-save", 1)
+    /** Saved squares stay until the app's styles change (a new version) or 30 days pass. */
+    private const val DISK_MAX = 200L * 1024 * 1024
+    private const val DISK_DAYS = 30L
+
+    private fun diskFile(k: String) = diskDir?.let { java.io.File(it, k.replace('/', '_') + ".webp") }
+
+    private fun loadDisk(k: String): Bitmap? {
+        val f = diskFile(k) ?: return null
+        if (!f.exists()) return null
+        if (System.currentTimeMillis() - f.lastModified() > DISK_DAYS * 86_400_000L) { f.delete(); return null }
+        val theme = try { Theme.valueOf(k.substringBefore('/')) } catch (_: Exception) { return null }
+        return try {
+            val o = android.graphics.BitmapFactory.Options().apply {
+                // the same kind of picture the drawing makes (half the memory for smooth styles)
+                inPreferredConfig = if (theme.pixel == 1 && theme != Theme.BLOCKY) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
+            }
+            android.graphics.BitmapFactory.decodeFile(f.path, o)?.takeIf { it.width == tilePx / theme.pixel || theme == Theme.BLOCKY }
+        } catch (_: Throwable) { null }
+    }
+
+    private fun saveDisk(k: String, bmp: Bitmap) {
+        val f = diskFile(k) ?: return
+        saver.execute {
+            try {
+                val tmp = java.io.File(f.path + ".tmp")
+                tmp.outputStream().use { o ->
+                    val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSY else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
+                    bmp.compress(fmt, 90, o)
+                }
+                tmp.renameTo(f)
+            } catch (_: Throwable) {}
+        }
+    }
+
+    /** Keeps the saved squares under DISK_MAX: the ones unused longest go first. */
+    private fun trimDisk(dir: java.io.File) {
+        val files = dir.listFiles() ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= DISK_MAX) return
+        for (f in files.sortedBy { it.lastModified() }) {
+            if (total <= DISK_MAX * 3 / 4) break
+            total -= f.length(); f.delete()
+        }
+    }
+
     fun init(ctx: Context) {
+        val version = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).let { if (android.os.Build.VERSION.SDK_INT >= 28) it.longVersionCode else @Suppress("DEPRECATION") it.versionCode.toLong() } } catch (_: Exception) { 0L }
+        val root = java.io.File(ctx.cacheDir, "squares")
+        val dir = java.io.File(root, "v$version")
+        // squares drawn by an older version (its styles may have changed) are dropped
+        root.listFiles()?.filter { it != dir }?.forEach { it.deleteRecursively() }
+        dir.mkdirs()
+        diskDir = dir
+        saver.execute { trimDisk(dir) }
         VectorSource.init(ctx)
         Countries.init(ctx)
         Traffic.init(ctx)
@@ -63,9 +123,16 @@ object TileCache {
             pool.execute {
                 try {
                     if (System.currentTimeMillis() - (wanted[k] ?: 0) > 3000) return@execute
+                    // saved on the phone earlier: no drawing needed
+                    loadDisk(k)?.let { saved ->
+                        diskFile(k)?.setLastModified(System.currentTimeMillis())
+                        mem.put(k, saved); failed.remove(k); loaded.fire()
+                        return@execute
+                    }
                     val bmp = if (theme == Theme.BLOCKY) BlockWorld.tile(z, x, y, tilePx, k.contains("/d/"))
                     else VectorRenderer.render(theme, z, x, y, tilePx, k.contains("/d/"))
                     if (bmp != null) {
+                        saveDisk(k, bmp)
                         mem.put(k, bmp)
                         failed.remove(k)
                         loaded.fire()
@@ -80,6 +147,17 @@ object TileCache {
             }
         }
         return null
+    }
+
+    /**
+     * Draw ahead: asks for a square only while the workers have nothing else to do, so the
+     * squares on screen always come first. Returns true if it was asked for (or is ready).
+     */
+    fun prefetch(theme: Theme, z: Int, x: Int, y: Int): Boolean {
+        if (mem.get(key(theme, z, x, y)) != null) return true
+        if (pool.queue.isNotEmpty() || inFlight.size >= threads) return false
+        get(theme, z, x, y)
+        return true
     }
 
     /** Only what is already in memory (used for stand-ins while a tile is drawn). */

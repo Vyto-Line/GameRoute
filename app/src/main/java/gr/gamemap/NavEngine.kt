@@ -420,6 +420,7 @@ object NavEngine {
         lastTrip = null
         tripStart = System.currentTimeMillis(); tripMeters = 0.0; tripSaved = 0; tripBonus = 0; lastPos = null; tripPlanned = -1.0
         Xp.startTrip()
+        Perf.driveStarted()
         Explorer.tripFound = 0
         parkingReady = false
         destination = place.goal // the entrance on the street, when known
@@ -506,6 +507,7 @@ object NavEngine {
      */
     fun stop(keepResume: Boolean = false) {
         CrashLog.note(if (keepResume) "navigation stopped by the car" else "stop navigation")
+        Perf.driveEnded()
         if (!keepResume) clearResume()
         endNote = null
         noSignal = false

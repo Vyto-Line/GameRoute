@@ -101,6 +101,32 @@ object LocationTracker : LocationListener {
     }
     private var appCtx: Context? = null
 
+    /**
+     * Save GPS when stopped (Settings › Performance): standing still for 15 s at a red light or in a
+     * jam, the GPS reports every 3 s instead of every second; the first fix that moves brings it back.
+     */
+    @Volatile var restingGps = false
+        private set
+    private var stillSince = 0L
+
+    private fun checkResting(l: Location) {
+        if (l.provider == ESTIMATE) return
+        val now = System.currentTimeMillis()
+        val still = l.hasSpeed() && l.speed < 0.5f
+        if (!still) stillSince = 0L else if (stillSince == 0L) stillSince = now
+        val rest = Perf.saveGpsStopped && precise && still && now - stillSince > 15_000
+        if (rest != restingGps && (rest || (l.hasSpeed() && l.speed > 1.5f) || !Perf.saveGpsStopped)) {
+            restingGps = rest
+            CrashLog.note(if (rest) "gps resting (stopped)" else "gps every second")
+            val ctx = appCtx ?: return
+            if (started) {
+                try { ctx.getSystemService(LocationManager::class.java)?.removeUpdates(this) } catch (_: Exception) {}
+                started = false
+            }
+            if (users.isNotEmpty()) startUpdates(ctx)
+        }
+    }
+
     /** Called when navigation starts/stops or the car connects/disconnects. */
     fun updateMode() {
         val want = NavEngine.active || NavEngine.planning || "car" in users || "nav" in users || (Convoy.active && !convoyIdle)
@@ -134,7 +160,7 @@ object LocationTracker : LocationListener {
         val plan: List<Triple<String, Long, Float>> = when {
             // GPS every second; the fused/network one only as a backup (indoors, a cold start):
             // its fixes are dropped anyway while GPS ones come, so asking every second was waste
-            precise -> listOfNotNull(Triple(LocationManager.GPS_PROVIDER, 1000L, 0f),
+            precise -> listOfNotNull(Triple(LocationManager.GPS_PROVIDER, if (restingGps) 3000L else 1000L, 0f),
                 (fused ?: LocationManager.NETWORK_PROVIDER).let { Triple(it, 5000L, 0f) })
             fused != null -> listOf(Triple(fused, 3000L, 5f))
             else -> listOf(Triple(LocationManager.GPS_PROVIDER, 3000L, 5f), Triple(LocationManager.NETWORK_PROVIDER, 5000L, 10f))
@@ -224,7 +250,7 @@ object LocationTracker : LocationListener {
         if (NavEngine.estimating) return false
         if (!NavEngine.active && speed < 2f) return false
         val age = System.currentTimeMillis() - r.time
-        return (r.hasAccuracy() && r.accuracy > 30f) || age in 4_000..90_000
+        return (r.hasAccuracy() && r.accuracy > 30f) || age in (if (restingGps) 7_000L else 4_000L)..90_000L
     }
 
     /** True if [l] is farther from [prev] than a car could have got in the time between them. */
@@ -265,7 +291,7 @@ object LocationTracker : LocationListener {
 
         last = location
         speed = if (location.hasSpeed()) location.speed else 0f
-        if (location.provider != ESTIMATE) checkConvoyPace(location)
+        if (location.provider != ESTIMATE) { checkConvoyPace(location); checkResting(location) }
         var p = LatLng(location.latitude, location.longitude)
         val bearing = if (location.hasBearing() && speed > 3f) location.bearing else null
         // stopped (a red light): the fixes wander a few metres; keep the arrow still

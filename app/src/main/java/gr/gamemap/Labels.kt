@@ -38,6 +38,7 @@ class Labels {
     private val flipped = HashMap<String, Boolean>()
     private val order = ArrayList<Cand>(256)
     private var frameNow = 0L
+    private var lastFullPass = 0L
 
     private var cacheKey = ""
     private var cands: List<Cand> = emptyList()
@@ -102,7 +103,8 @@ class Labels {
             tiles += Triple(ax, ay, vt); keyB.append(ax).append(',').append(ay).append(';')
         }
         val key = keyB.toString()
-        if (key != cacheKey) { cacheKey = key; cands = (if (overview) countries(z, cam.world) else emptyList()) + collect(tiles, z, dz, dataPx) }
+        val newData = key != cacheKey
+        if (newData) { cacheKey = key; cands = (if (overview) countries(z, cam.world) else emptyList()) + collect(tiles, z, dz, dataPx) }
 
         text.typeface = if (theme.serif) Typeface.create(Typeface.SERIF, Typeface.BOLD_ITALIC)
         else Typeface.create("sans-serif-condensed", Typeface.BOLD)
@@ -120,9 +122,14 @@ class Labels {
         val vMinX = cam.px - reach; val vMaxX = cam.px + reach; val vMinY = cam.py - reach; val vMaxY = cam.py + reach
         var count = 0
         frameNow = android.os.SystemClock.uptimeMillis()
+        // The full search for room (every name in the data, hundreds) runs 8 times a second; the
+        // frames between only redraw the names already shown, at their new place. New names wait at
+        // most an eighth of a second; the work per frame drops to a few dozen names.
+        val fullPass = newData || frameNow - lastFullPass >= 120 || frameNow < lastFullPass
+        if (fullPass) lastFullPass = frameNow
         order.clear()
         for (cd in cands) if (shownAt.containsKey(cd.id)) order += cd
-        for (cd in cands) if (!shownAt.containsKey(cd.id)) order += cd
+        if (fullPass) for (cd in cands) if (!shownAt.containsKey(cd.id)) order += cd
         nowShown.clear()
 
         for (cd in order) {

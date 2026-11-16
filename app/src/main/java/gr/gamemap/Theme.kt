@@ -99,6 +99,8 @@ enum class Theme(
     val rain: Boolean = false,
     /** A drafting grid over the map (Blueprint). */
     val drafting: Boolean = false,
+    /** Light snow drifting over the map (Arctic). */
+    val snow: Boolean = false,
 ) {
     OPEN_WORLD(
         "Free Roam",
@@ -514,6 +516,7 @@ enum class Theme(
             player = rgb(255, 80, 100), playerOutline = Color.WHITE,
             hudText = rgb(225, 238, 250), hudPanel = argb(228, 14, 26, 42),
         ),
+        snow = true,
     ),
     HIGH_CONTRAST(
         "High Contrast",

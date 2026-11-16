@@ -246,7 +246,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 1 -> { if (wantedPermissions.isNotEmpty()) permissions.launch(wantedPermissions); showWelcome(2) }
                 else -> {
                     getSharedPreferences("gamemap", MODE_PRIVATE).edit().putBoolean("welcomeDone", true).apply()
-                    welcome.animate().alpha(0f).setDuration(350).withEndAction {
+                    welcome.animate().alpha(0f).setDuration(animMs(350)).withEndAction {
                         welcome.visibility = View.GONE; welcome.removeAllViews(); welcome.alpha = 1f
                     }.start()
                     refreshChrome()
@@ -281,18 +281,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val ease = android.view.animation.DecelerateInterpolator(2.2f)
         val dir = if (page >= prevPage) 1f else -1f
         if (old != null) {
-            old.animate().translationX(-dir * w * 0.45f).alpha(0f).setDuration(340).setInterpolator(ease)
+            old.animate().translationX(-dir * w * 0.45f).alpha(0f).setDuration(animMs(340)).setInterpolator(ease)
                 .withEndAction { welcome.removeView(old) }.start()
             col.translationX = dir * w
-            col.animate().translationX(0f).setDuration(420).setInterpolator(ease).start()
+            col.animate().translationX(0f).setDuration(animMs(420)).setInterpolator(ease).start()
             top.translationX = dir * w * 0.35f
-            top.animate().translationX(0f).setDuration(620).setInterpolator(ease).start()
+            top.animate().translationX(0f).setDuration(animMs(620)).setInterpolator(ease).start()
         } else if (firstShow) {
             top.alpha = 0f; top.translationY = 60 * d
-            top.animate().alpha(1f).translationY(0f).setDuration(700).setInterpolator(ease).start()
+            top.animate().alpha(1f).translationY(0f).setDuration(animMs(700)).setInterpolator(ease).start()
         }
         text.alpha = 0f; text.translationY = 28 * d
-        text.animate().alpha(1f).translationY(0f).setStartDelay(if (old != null) 160 else 260).setDuration(460).setInterpolator(ease).start()
+        text.animate().alpha(1f).translationY(0f).setStartDelay(if (old != null) 160 else 260).setDuration(animMs(460)).setInterpolator(ease).start()
         if (page == 0) (top as? ViewGroup)?.getChildAt(0)?.let { wall ->
             wallAnim = android.animation.ObjectAnimator.ofFloat(wall, "translationX", -18 * d, 18 * d).apply {
                 duration = 6000; repeatMode = android.animation.ValueAnimator.REVERSE
@@ -1064,7 +1064,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     setPadding((8 * d).toInt(), 0, 0, 0)
                     setOnClickListener {
                         Places.removeRecent(pl)
-                        card.animate().alpha(0f).scaleX(0.85f).scaleY(0.85f).setDuration(180).withEndAction { lastHomeKey = ""; refreshChrome() }.start()
+                        card.animate().alpha(0f).scaleX(0.85f).scaleY(0.85f).setDuration(animMs(180)).withEndAction { lastHomeKey = ""; refreshChrome() }.start()
                     }
                 })
             })
@@ -1786,7 +1786,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (up) pendingLevelFrom = trip.levelBefore
         // the Garage's arrival effect (you've stopped: the card only shows once you arrive)
         val fx = Xp.chosen("arrival").id
-        if (fx != "arrival_classic" && tripFxFor !== trip) {
+        if (fx != "arrival_classic" && tripFxFor !== trip && Perf.anim == Perf.FULL) {
             tripFxFor = trip
             tripOverlay.addView(ArrivalFx(this, fx), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         }
@@ -2200,7 +2200,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         if (removable) row.addView(removeX("Remove from recent") {
             Places.removeRecent(pl)
-            row.animate().alpha(0f).translationX(row.width * 0.3f).setDuration(180).withEndAction { showRecents() }.start()
+            row.animate().alpha(0f).translationX(row.width * 0.3f).setDuration(animMs(180)).withEndAction { showRecents() }.start()
         })
         return row
     }
@@ -2285,9 +2285,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (sheetOverlay.visibility != View.VISIBLE) {
             // the sheet slides up over a fading-in shade
             sheetOverlay.alpha = 0f; sheetOverlay.visibility = View.VISIBLE
-            sheetOverlay.animate().alpha(1f).setDuration(160).start()
+            sheetOverlay.animate().alpha(1f).setDuration(animMs(160)).start()
             sheetHost.translationY = 60 * d
-            sheetHost.animate().translationY(0f).setDuration(240).setInterpolator(android.view.animation.DecelerateInterpolator(1.8f)).start()
+            sheetHost.animate().translationY(0f).setDuration(animMs(240)).setInterpolator(android.view.animation.DecelerateInterpolator(1.8f)).start()
         }
         refreshChrome()
         if (kind == "fuelfilters") renderFuelFilters()
@@ -2327,7 +2327,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (v.visibility == View.VISIBLE) return
         v.visibility = View.VISIBLE
         v.alpha = 0f; v.translationY = from * d
-        v.animate().alpha(1f).translationY(0f).setDuration(200).setInterpolator(android.view.animation.DecelerateInterpolator(1.6f)).start()
+        v.animate().alpha(1f).translationY(0f).setDuration(animMs(200)).setInterpolator(android.view.animation.DecelerateInterpolator(1.6f)).start()
     }
 
     internal fun showStylePicker() = openSheet("style")
@@ -2546,6 +2546,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     internal fun showSettings() = openSheet("settings")
+
+    /** Settings › Performance › Animations: Full as designed, Reduced quicker, Off none. */
+    private fun animMs(ms: Long): Long = when (Perf.anim) { Perf.FULL -> ms; Perf.REDUCED -> ms / 2; else -> 0L }
     internal fun openReportForTest() = openSheet("report")
     internal fun openSheetForTest(kind: String) = openSheet(kind)
     internal fun refreshForTest() { lastHomeKey = ""; refreshChrome() }
@@ -2561,6 +2564,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         SettingsGroup("alerts", "Alerts", "Speed and red-light cameras, accidents, cameras you marked", R.drawable.ic_set_alert, Color.rgb(194, 65, 12)),
         SettingsGroup("sharing", "Sharing", "Your name, convoy, live arrival", R.drawable.ic_set_share, Color.rgb(124, 58, 237)),
         SettingsGroup("app", "App", "Your progress, Garage, trip history, privacy, about" + if (Updater.ENABLED) ", updates" else "", R.drawable.ic_set_app, Color.rgb(13, 110, 97)),
+        SettingsGroup("perf", "Performance", "Smooth or battery, map effects, animations, map smoothness", R.drawable.ic_set_perf, Color.rgb(202, 138, 4)),
         SettingsGroup("advanced", "Advanced", "Units, map links, star ratings and reviews, welcome screens", R.drawable.ic_set_adv, Color.rgb(100, 100, 110)),
     )
 
@@ -2699,6 +2703,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 },
                 settingRow("About & map credits", null) { showAbout() },
             )
+            "perf" -> listOfNotNull(
+                settingRow("Mode", L.t(PERF_MODE[Perf.mode]) + if (Perf.mode == Perf.AUTO) " · " + L.t(if (Perf.saving) "saving battery now" else "smooth now") else "") { choosePerf("mode") },
+                switchRow("Map effects: rain, snow, glow, scanlines, drafting grid", Perf.effects) { Perf.effects = it },
+                settingRow("Animations", L.t(PERF_ANIM[Perf.animations])) { choosePerf("anim") },
+                settingRow("Map smoothness while driving", L.t(PERF_SMOOTH[Perf.smoothness])) { choosePerf("smooth") },
+                switchRow("Live friend updates (off: checked every 15 min)", Perf.liveFriends) { Perf.liveFriends = it; Friends.Live.start() },
+                switchRow("Save GPS when stopped", Perf.saveGpsStopped) { Perf.saveGpsStopped = it },
+                settingRow("Last drive", Perf.lastDrive() ?: L.t("Measured on your next drive of 5 minutes or more")) {},
+                if (Perf.struggling) settingRow("Effects paused", L.t("The map was slow on this phone, so effects are off until the app restarts")) {} else null,
+            )
             else -> listOf(
                 settingRow("Units", if (MapState.imperial) "Miles" else "Kilometres") { MapState.setImperial(!MapState.imperial) },
                 settingRow("Open map links in GameRoute", if (mapLinksOn()) "On" else "Off") { explainMapLinks() },
@@ -2779,6 +2793,31 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private val TALK = arrayOf("Normal", "Fewer", "Turns only")
+    private val PERF_MODE = arrayOf("Auto", "Smooth", "Battery")
+    private val PERF_ANIM = arrayOf("Full", "Reduced", "Off")
+    private val PERF_SMOOTH = arrayOf("High", "Normal", "Low")
+
+    private fun choosePerf(what: String) {
+        val (title, opts, cur) = when (what) {
+            "mode" -> Triple("Mode", arrayOf(
+                L.t("Auto") + "\n" + L.t("Smooth, saves battery when Battery Saver is on or below 20%"),
+                L.t("Smooth") + "\n" + L.t("Always smooth"),
+                L.t("Battery") + "\n" + L.t("Always saves battery: no effects, fewer frames")), Perf.mode)
+            "anim" -> Triple("Animations", arrayOf(
+                L.t("Full") + "\n" + L.t("Celebrations in your style, smooth screen changes"),
+                L.t("Reduced") + "\n" + L.t("Simple cards, quick fades"),
+                L.t("Off") + "\n" + L.t("Nothing moves, everything appears at once")), Perf.animations)
+            else -> Triple("Map smoothness while driving", arrayOf(
+                L.t("High") + "\n" + L.t("Up to 60 frames a second, smoothest"),
+                L.t("Normal") + "\n" + L.t("30 while driving, 20 when slow"),
+                L.t("Low") + "\n" + L.t("15, best for older phones and long trips")), Perf.smoothness)
+        }
+        AlertDialog.Builder(this).setTitle(L.t(title))
+            .setSingleChoiceItems(opts, cur) { dlg, k ->
+                when (what) { "mode" -> Perf.mode = k; "anim" -> Perf.animations = k; else -> Perf.smoothness = k }
+                dlg.dismiss(); showSettings()
+            }.showT()
+    }
 
     /** Normal: every heads-up and the turn. Fewer: one heads-up and the turn. Turns only: just the turn. */
     private fun chooseTalk() {
@@ -4989,14 +5028,17 @@ class GameMapView(ctx: Context) : View(ctx) {
 
     override fun onDraw(canvas: Canvas) {
         area.set(0, insetTop, width, height - insetBottom)
+        val t0 = android.os.SystemClock.uptimeMillis()
         renderer.draw(canvas, width, height, area, resources.displayMetrics.density, hud = true)
-        // full frame rate under the fingers; 30 fps is plenty for the gliding arrow and zooms
+        Perf.frameDrawn(android.os.SystemClock.uptimeMillis() - t0)
+        // full frame rate under the fingers; otherwise Settings › Performance sets the pace
         // (a 120 Hz phone would otherwise draw the whole map 120 times a second while driving)
         if (renderer.animating) {
-            // fingers on the map or a zoom gliding: full rate. Otherwise the arrow gliding between
-            // GPS fixes looks the same at 25 fps (fast) / 16 fps (slow): far fewer frames, less battery
             if (MapState.gesture || renderer.interacting) postInvalidateOnAnimation()
-            else postInvalidateDelayed(if (LocationTracker.speedMps > 1f) 33 else 50)
+            else postInvalidateDelayed(Perf.frameDelay(LocationTracker.speedMps > 1f))
+        } else if (renderer.effectsMoving) {
+            // standing still with only the rain or snow moving: a few frames a second
+            postInvalidateDelayed(Perf.EFFECTS_ONLY_DELAY)
         }
     }
 }

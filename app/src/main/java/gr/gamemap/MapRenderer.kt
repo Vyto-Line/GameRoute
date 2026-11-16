@@ -53,6 +53,8 @@ class MapRenderer(private val car: Boolean = false) {
 
     /** True if the last frame was mid-animation and another frame should follow. */
     var animating = false
+    /** Rain or snow is falling (keeps a slow redraw going even when nothing else moves). */
+    var effectsMoving = false
         private set
 
     private val tilePaint = Paint().apply { isFilterBitmap = true }
@@ -235,13 +237,19 @@ class MapRenderer(private val car: Boolean = false) {
         // ---- theme overlays ----
         // style overlays cover the whole screen, like the map (no hard edge where buttons start)
         val full = Rect(0, 0, w, h)
+        effectsMoving = false
         if (!lite) {
             if (theme.grid) drawGrid(c, full, d)
-            if (theme.scanlines) drawScanlines(c, full, d, theme)
             if (theme.paper) drawPaper(c, full)
-            if (theme.sunGlow) drawSunGlow(c, full)
-            if (theme.rain) drawRain(c, full, d)
-            if (theme.drafting) drawDrafting(c, full, d)
+            // Settings › Performance › Map effects (off in Battery mode and on phones that struggle)
+            if (Perf.effectsOn) {
+                if (theme.scanlines) drawScanlines(c, full, d, theme)
+                if (theme.sunGlow) drawSunGlow(c, full)
+                if (theme.rain) drawRain(c, full, d)
+                if (theme.snow) drawSnow(c, full, d)
+                if (theme.drafting) drawDrafting(c, full, d)
+                effectsMoving = theme.rain || theme.snow
+            }
         }
         if (theme.radar) drawRadarFrame(c, cx, cy, radius, bearing, d)
         prof("overlays", tp0); tp0 = System.nanoTime()
@@ -392,13 +400,16 @@ class MapRenderer(private val car: Boolean = false) {
         var asked = 0
         var last = -1L
         var i = from
-        while (i < pts.size && r.cum[i] - startM < 1500 && asked < 6) {
+        // about two minutes of driving ahead (1.5 to 5 km), asked for only while the workers are idle,
+        // so the squares on screen always come first and the map never shows blanks at speed
+        val ahead = (LocationTracker.speedMps * 120.0).coerceIn(1500.0, 5000.0)
+        while (i < pts.size && r.cum[i] - startM < ahead && asked < 6) {
             val tx = floor(Geo.x(pts[i].lon, world) / TileCache.tilePx).toInt()
             val ty = floor(Geo.y(pts[i].lat, world) / TileCache.tilePx).toInt()
             val k = (tx.toLong() shl 32) or (ty.toLong() and 0xffffffffL)
             if (k != last && ty in 0 until n && onScreen.none { it[0] == tx && it[1] == ty }) {
                 last = k
-                if (TileCache.peek(theme, z, tx.mod(n), ty) == null) { TileCache.get(theme, z, tx.mod(n), ty); asked++ }
+                if (TileCache.peek(theme, z, tx.mod(n), ty) == null) { if (!TileCache.prefetch(theme, z, tx.mod(n), ty)) break; asked++ }
             }
             i++
         }
@@ -1026,6 +1037,39 @@ class MapRenderer(private val car: Boolean = false) {
             val y = a.top + ((drops[i + 1] + t * 3f) % 1f) * h
             c.drawLine(x, y, x + len * 0.22f, y + len, stroke)
             i += 3
+        }
+    }
+
+    private val snowFlakes by lazy {
+        val r = java.util.Random(11)
+        FloatArray(70 * 4) { i -> when (i % 4) { 0, 1 -> r.nextFloat(); 2 -> 0.6f + r.nextFloat() * 0.8f; else -> r.nextFloat() * 6.28f } }
+    }
+
+    /**
+     * Arctic: light snow drifting down and swaying, and a frosty haze at the top. Drawn faint and
+     * under everything that matters (route, arrow, turn box come after it).
+     */
+    private fun drawSnow(c: Canvas, a: Rect, d: Float) {
+        val dark = MapState.dark
+        val top = a.top.toFloat(); val hh = a.height() * 0.3f
+        fill.shader = LinearGradient(0f, top, 0f, top + hh,
+            intArrayOf(if (dark) Color.argb(110, 200, 220, 240) else Color.argb(150, 235, 244, 252), Color.TRANSPARENT),
+            null, Shader.TileMode.CLAMP)
+        c.drawRect(a.left.toFloat(), top, a.right.toFloat(), top + hh, fill)
+        fill.shader = null
+        val t = (android.os.SystemClock.uptimeMillis() % 120_000L) / 1000f
+        val w = a.width().toFloat(); val h = a.height().toFloat()
+        val f = snowFlakes
+        var i = 0
+        while (i < f.size) {
+            val size = f[i + 2]
+            val fall = (f[i + 1] + t * (0.035f + size * 0.025f)) % 1f   // big flakes fall a little faster
+            val x = a.left + ((f[i] * w + kotlin.math.sin(t * 0.8f + f[i + 3]) * 14 * d) % w + w) % w
+            val y = a.top + fall * h
+            fill.color = if (dark) Color.argb(170, 235, 242, 250) else Color.argb(235, 255, 255, 255)
+            c.drawCircle(x, y, (1.6f + size * 1.6f) * d, fill)
+            if (!dark) { stroke.color = Color.argb(90, 70, 110, 150); stroke.strokeWidth = 0.8f * d; c.drawCircle(x, y, (1.6f + size * 1.6f) * d, stroke) }
+            i += 4
         }
     }
 

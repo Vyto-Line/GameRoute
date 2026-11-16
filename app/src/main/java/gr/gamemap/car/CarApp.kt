@@ -232,7 +232,9 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
                 return
             }
             try {
+                val t0 = android.os.SystemClock.uptimeMillis()
                 renderer.draw(c, w, h, if (visible.isEmpty) Rect(0, 0, w, h) else Rect(visible), density, hud = true)
+                gr.gamemap.Perf.frameDrawn(android.os.SystemClock.uptimeMillis() - t0)
             } catch (e: Exception) {
                 // a frame drawn while the data changed under it: skip it, the next one is fine
             } catch (e: OutOfMemoryError) {
@@ -246,7 +248,10 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
         // Keep animating (gliding arrow, smooth zoom) at ~30 fps while something moves.
         if (renderer.animating) {
             rh.removeCallbacks(draw)
-            rh.postDelayed(draw, when { renderer.interacting -> 16L; LocationTracker.speedMps > 1f -> 33L; else -> 50L }) // 30 fps moving, 20 otherwise
+            rh.postDelayed(draw, if (renderer.interacting) 16L else gr.gamemap.Perf.frameDelay(LocationTracker.speedMps > 1f))
+        } else if (renderer.effectsMoving) {
+            rh.removeCallbacks(draw)
+            rh.postDelayed(draw, gr.gamemap.Perf.EFFECTS_ONLY_DELAY)
         }
     }
 }
