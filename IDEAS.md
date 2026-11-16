@@ -53,6 +53,11 @@ Mockups: the GameRoute mockups canvas, rows 18 (Friends) and 19 (Backup & restor
    (buttons back for 5 s on a tap); non-urgent messages wait in a "for when you stop" counter
    (safety and convoy news still show; convoy invites still pop up in the car); short arrival card
    (XP as one line); settings search + Advanced group.
+2b. **Convoy, rebuilt** (29): a solid Convoy chip right after the More button (live status while in
+   one: "Convoy · 3 · waiting"); tap: Start a convoy / Join (QR or code) / invite an online friend;
+   lobby: destination + Change, who's in with badges, one Invite (QR, code, link, friends with
+   Sent/Seen/Joined), Race · Drive along · Just share switch, host START, others READY UP, then
+   3-2-1; a card on the home screen to get back. Every chip gets a solid background in every style.
 3. **XP and levels** (25): XP for new roads, clean drives, convoys, race places (only if you kept
    near the limits), daily streak, weekly challenges. Levels unlock cosmetics in a Garage
    (arrow, route colour, destination flag, arrival effect; no trails), a title ladder per style,
