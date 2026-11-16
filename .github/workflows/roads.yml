@@ -1,0 +1,27 @@
+name: Offline roads
+on:
+  schedule:
+    - cron: "17 3 5 * *"   # monthly
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  roads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - run: "pip install --only-binary=:all: osmium numpy"
+      - name: OpenStreetMap Greece (Geofabrik)
+        run: curl -sSfL -o greece.osm.pbf https://download.geofabrik.de/europe/greece-latest.osm.pbf && ls -la greece.osm.pbf
+      - name: Road file
+        run: python3 tools/roadgraph.py greece.osm.pbf roads-gr.bin
+      - name: Publish (release "roads-data")
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gzip -9 -k roads-gr.bin
+          ls -la roads-gr.bin roads-gr.bin.gz
+          echo "{\"size\": $(stat -c %s roads-gr.bin), \"gz\": $(stat -c %s roads-gr.bin.gz), \"date\": \"$(date -u +%F)\"}" > roads-gr.json
+          gh release view roads-data >/dev/null 2>&1 || gh release create roads-data --title "Offline roads (data)" --notes "Road file for offline routing (OpenStreetMap, Geofabrik). Built monthly." --prerelease
+          gh release upload roads-data roads-gr.bin.gz roads-gr.json --clobber
