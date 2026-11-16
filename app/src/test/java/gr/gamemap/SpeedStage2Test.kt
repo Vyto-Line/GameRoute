@@ -128,7 +128,8 @@ class SpeedStage2Test {
         log.append("squares saved on the phone: ${saved.size} (${saved.sumOf { it.length() } / 1024} KB)\n")
         assertTrue("finished squares are saved", saved.isNotEmpty())
         TileCache.clear()
-        val k = saved.first().name.removeSuffix(".webp").split('_')
+        val parts = saved.first().name.removeSuffix(".webp").split('_')
+        val k = listOf(parts.dropLast(4).joinToString("_")) + parts.takeLast(4) // THEME_NAME, d/l, z, x, y
         val theme = Theme.valueOf(k[0])
         val t0 = System.nanoTime()
         var back: Bitmap? = null
