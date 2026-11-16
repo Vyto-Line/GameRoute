@@ -45,6 +45,8 @@ object Convoy {
         @Volatile var along = false
         /** Only shares their location: not on the trip (not in the lists' race, not on the car screen). */
         @Volatile var sharing = false
+        /** Their level and title, if they chose to show it. */
+        @Volatile var lv = ""
         /** 0 at the start … 1 at the destination. */
         val progress: Double get() = if (state == "arrived") 1.0 else if (total > 0 && left >= 0) (1 - left / total).coerceIn(0.0, 1.0) else 0.0
         /** Updates come every second while moving (5 s when stopped), so 25 s without one = signal lost. */
@@ -370,6 +372,7 @@ object Convoy {
         if (meReady && state == "ready") o.put("rd", true).put("ra", meReadyAt)
         if (meAlong) o.put("al", true) // driving along, not racing (kept all the way)
         if (meSharing) o.put("sh", true) // only sharing my location
+        if (Xp.showToFriends) o.put("lv", Xp.badge()) // my level, only if I chose to show it
         // a route of my own: where to, so the others can join me
         if (NavEngine.active && !onConvoyRoute) NavEngine.destination?.let {
             o.put("on", NavEngine.destinationName).put("olat", it.lat).put("olon", it.lon)
@@ -531,6 +534,7 @@ object Convoy {
         m.readyAt = if (m.ready) o.optLong("ra", ts) else 0
         m.along = o.optBoolean("al", false)
         m.sharing = o.optBoolean("sh", false)
+        m.lv = o.optString("lv")
         m.seen = o.optLong("ts", System.currentTimeMillis()).coerceAtMost(System.currentTimeMillis())
         soon()
     }

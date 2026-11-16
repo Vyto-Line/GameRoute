@@ -1744,49 +1744,46 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 })
             }
         }
-        tripCard.addView(View(this).apply { setBackgroundColor(dim(50)) }, LinearLayout.LayoutParams(MATCH_PARENT, 1).apply {
-            topMargin = (14 * d).toInt(); bottomMargin = (10 * d).toInt()
-        })
         val speed = if (MapState.imperial) "${(trip.avgKmh * 0.621).toInt()} mph" else "${trip.avgKmh} km/h"
-        val stats = listOf(
-            NavEngine.formatDuration(trip.seconds.toDouble()) to "journey",
-            NavEngine.formatDistance(trip.meters) to "travelled",
-            (if (trip.savedSeconds >= 60) "${trip.savedSeconds / 60} min" else speed) to (if (trip.savedSeconds >= 60) "saved dodging traffic" else "average speed"),
-            if (trip.xp == 0) "No XP" to "trips under 200 m"
-            else "+${trip.xp} XP" to (if (trip.landmarks > 0) "${trip.landmarks} new landmark" + (if (trip.landmarks > 1) "s" else "") else "experience"),
-        )
-        for (rowIdx in 0..1) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            for (k in 0..1) {
-                val (big, small) = stats[rowIdx * 2 + k]
-                row.addView(LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-                    setPadding(0, (6 * d).toInt(), 0, (6 * d).toInt())
-                    addView(label(big, 24f, bold = true).apply { setTextColor(ink); typeface = t.typeface })
-                    addView(label(small, 13f).apply { setTextColor(dim()) })
-                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            }
-            tripCard.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        }
-        // level bar
+        tripCard.addView(label(listOfNotNull(NavEngine.formatDuration(trip.seconds.toDouble()), NavEngine.formatDistance(trip.meters),
+            if (trip.savedSeconds >= 60) L.t("${trip.savedSeconds / 60} min saved") else L.t("avg $speed")).joinToString(" · "), 14f).apply {
+            setTextColor(dim()); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0)
+        })
+        // the XP: one line with the level bar; tap it for what each part earned
         val (have, of) = Explorer.progress()
         val up = Explorer.level > trip.levelBefore
+        val gained = (if (up) have else minOf(trip.xp, have)).toFloat() / maxOf(of, 1)
         tripCard.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, (12 * d).toInt(), 0, (6 * d).toInt())
-            addView(label(if (up) "Level up! Level ${Explorer.level}" else "Explorer · level ${Explorer.level}", 14f, bold = true).apply {
-                setTextColor(if (up) readable(accent) else ink)
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            val q = (12 * d).toInt(); setPadding(q, q * 3 / 4, q / 2, q * 3 / 4)
+            background = bg(Color.argb(30, Color.red(accent), Color.green(accent), Color.blue(accent)), Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent)), 1.2f, 14f)
+            isClickable = true; setOnClickListener { showXpParts(trip) }
+            contentDescription = L.t("+${trip.xp} XP. Tap for the details")
+            addView(label(if (trip.xp == 0) L.t("No XP") else "+${trip.xp} XP", 22f, bold = true).apply { setTextColor(readable(accent)); typeface = t.typeface; setPadding(0, 0, q, 0) })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(object : View(context) {
+                    private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                    override fun onDraw(c: Canvas) {
+                        val r = height / 2f; val f = have.toFloat() / maxOf(of, 1)
+                        pt.color = dim(50); c.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), r, r, pt)
+                        pt.color = accent; c.drawRoundRect(0f, 0f, width * (f - gained).coerceAtLeast(0f), height.toFloat(), r, r, pt)
+                        pt.color = Color.rgb(255, 46, 136); c.drawRoundRect(width * (f - gained).coerceAtLeast(0f), 0f, width * f, height.toFloat(), r, r, pt)
+                    }
+                }, LinearLayout.LayoutParams(MATCH_PARENT, (8 * d).toInt()))
+                addView(label(if (trip.xp == 0) L.t("trips under 200 m") else if (up) L.t("Level up! Level ${Explorer.level}") else L.t("Level ${Explorer.level} · ${of - have} to go"), 13f, bold = up).apply {
+                    setTextColor(if (up) readable(accent) else dim()); setPadding(0, (4 * d).toInt(), 0, 0)
+                })
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(label("$have / $of XP", 14f).apply { setTextColor(dim()) })
-        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        tripCard.addView(object : View(this) {
-            private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-            override fun onDraw(c: Canvas) {
-                val r = height / 2f
-                pt.color = dim(50); c.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), r, r, pt)
-                pt.color = accent; c.drawRoundRect(0f, 0f, width * (have.toFloat() / maxOf(of, 1)), height.toFloat(), r, r, pt)
-            }
-        }, LinearLayout.LayoutParams(MATCH_PARENT, (10 * d).toInt()))
+            addView(label("›", 22f).apply { setTextColor(dim()); setPadding(q / 2, 0, 0, 0) })
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (14 * d).toInt() })
+        if (up) pendingLevelFrom = trip.levelBefore
+        // the Garage's arrival effect (you've stopped: the card only shows once you arrive)
+        val fx = Xp.chosen("arrival").id
+        if (fx != "arrival_classic" && tripFxFor !== trip) {
+            tripFxFor = trip
+            tripOverlay.addView(ArrivalFx(this, fx), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        }
         tripCard.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(pill("🅿 Parking nearby") {
@@ -1804,6 +1801,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Colours everything to match the map theme and shows what fits the moment. */
     private var lastLookKey = ""
     private var tripLook = ""
+    /** A level-up waiting to be shown once the arrival card is closed. */
+    private var pendingLevelFrom = 0
+    private var tripFxFor: Explorer.Trip? = null
 
     private var screenKept = false
 
@@ -1937,6 +1937,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             "convoy" -> if (Convoy.counting) closeSheet() else renderConvoy() // the countdown shows on the map
             "quick" -> renderQuick()
             "more" -> renderMore()
+            "progress" -> renderProgress()
+            "garage" -> renderGarage()
             "convoyinvite" -> renderConvoyInvite()
             "friends" -> renderFriends()
             "addfriend" -> renderAddFriend()
@@ -1945,7 +1947,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val trip = NavEngine.lastTrip
         tripOverlay.visibility = if (trip != null) View.VISIBLE else View.GONE
         if (trip != null && (trip !== shownTrip || lookKey != tripLook)) { shownTrip = trip; tripLook = lookKey; renderTrip(trip) }
-        if (trip == null) shownTrip = null
+        if (trip == null) {
+            shownTrip = null
+            // the arrival card is closed: now the level-up (never while driving)
+            if (pendingLevelFrom > 0 && !Later.driving && (!NavEngine.active || NavEngine.arrived)) { val f = pendingLevelFrom; pendingLevelFrom = 0; main.post { showLevelUp(f) } }
+        }
         if (nav) {
             etaTraffic.text = ""
             when {
@@ -2237,7 +2243,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun openSheet(kind: String) {
         if (kind != sheetKind) { settingsPage = null; settingsQuery = "" }
         // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
-        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""
+        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""; progressKey = ""; garageKey = ""
         if ((kind == "friends" || kind == "addfriend") && Friends.ready && Friends.core.started) Friends.kick()
         sheetKind = kind
         if (sheetOverlay.visibility != View.VISIBLE) {
@@ -2502,7 +2508,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         SettingsGroup("nav", "Navigation", "Voice, faster routes, tolls and motorways, live traffic", R.drawable.ic_set_nav, Color.rgb(30, 158, 90)),
         SettingsGroup("alerts", "Alerts", "Speed and red-light cameras, accidents, cameras you marked", R.drawable.ic_set_alert, Color.rgb(194, 65, 12)),
         SettingsGroup("sharing", "Sharing", "Your name, convoy, live arrival", R.drawable.ic_set_share, Color.rgb(124, 58, 237)),
-        SettingsGroup("app", "App", "Trip history, explorer profile, privacy, about" + if (Updater.ENABLED) ", updates" else "", R.drawable.ic_set_app, Color.rgb(13, 110, 97)),
+        SettingsGroup("app", "App", "Your progress, Garage, trip history, privacy, about" + if (Updater.ENABLED) ", updates" else "", R.drawable.ic_set_app, Color.rgb(13, 110, 97)),
         SettingsGroup("advanced", "Advanced", "Units, map links, star ratings and reviews, welcome screens", R.drawable.ic_set_adv, Color.rgb(100, 100, 110)),
     )
 
@@ -2619,6 +2625,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Your name in convoys", Convoy.myName.ifBlank { "Not set" }) { editConvoyName { showSettings() } },
                 settingRow("Convoy", if (Convoy.active) "On · ${Convoy.members.size + 1} drivers" else "Start or join") { openSheet("convoy") },
                 settingRow("Friends", if (Friends.core.started) L.t("${Friends.core.friends.size} friends") else L.t("Add friends")) { openSheet("friends") },
+                switchRow("Show my level to friends", Xp.showToFriends) { Xp.showToFriends = it; Friends.Presence.refresh() },
             ) + (if (!Friends.core.started) emptyList() else listOf(
                 switchRow("Show me as online", Friends.core.showOnline) { Friends.setShowOnline(it) },
                 switchRow("Friends can invite me to convoys", Friends.core.allowInvites) { Friends.setAllowInvites(it) },
@@ -2635,7 +2642,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             ))
             "app" -> listOfNotNull(
                 settingRow("Trip history", "${Explorer.history().size} trips") { openSheet("trips") },
-                settingRow("Explorer profile", "Level ${Explorer.level} · ${Explorer.xp} XP") { showProfile() },
+                settingRow("Your progress", "${Xp.stars}${L.t(Xp.title())} · " + L.t("level ${Explorer.level}")) { openSheet("progress") },
+                settingRow("Garage", L.t("${Xp.items.count { it.unlocked }} of ${Xp.items.size} unlocked")) { openSheet("garage") },
                 if (Updater.ENABLED) settingRow("Check for updates", "build ${Updater.currentVersion(this)}") { checkForUpdates(manual = true) } else null,
                 settingRow("Language", L.label) { chooseLanguage() },
                 settingRow("Privacy policy", null) {
@@ -3121,6 +3129,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             row.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(label(if (r.me) L.t("You") + (if (Convoy.host) " · " + L.t("host") else "") else r.name, 16f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                val lv = if (r.me) (if (Xp.showToFriends) Xp.badge() else "") else Convoy.members[r.id]?.lv.orEmpty()
+                if (lv.isNotBlank()) addView(label(lv, 12.5f, bold = true).apply { setTextColor(readable(accent)); maxLines = 1 })
                 // at the start the badge says it all; on the way: how far ahead or behind
                 val atStartRow = r.state == "ready" && dest != null && !NavEngine.active
                 val sub = if (atStartRow) (if (r.stale) L.t("no signal") else "") else Convoy.relative(r)
@@ -3601,6 +3611,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(label(f.name, 15f, bold = true).apply { setTextColor(ink) })
+                    Friends.levelOf(f.fid).takeIf { it.isNotBlank() }?.let { addView(label(it, 12.5f, bold = true).apply { setTextColor(readable(accent)) }) }
                     addView(label(if (online) "Online" else "Offline", 13f).apply { setTextColor(if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 val st = cv?.let { c.sentTo(f.fid, it)?.status }
@@ -3760,6 +3771,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(label(f.name, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+                Friends.levelOf(f.fid).takeIf { it.isNotBlank() }?.let { addView(label(it, 14f, bold = true).apply { setTextColor(readable(accent)) }) }
                 addView(label(if (online) "Online" else "Offline", 14f, bold = online).apply { setTextColor(if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
             })
         })
@@ -4099,7 +4111,336 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             LinearLayout.LayoutParams(MATCH_PARENT, minOf((resources.displayMetrics.heightPixels * 0.62f).toInt(), (560 * d).toInt())))
     }
 
-    private fun showProfile() {
+    private var progressKey = ""
+
+    /** Your progress: level, title, streak, this week's challenges, the title ladder, prestige. */
+    private fun renderProgress() {
+        val key = "${Explorer.xp}|${Xp.prestige}|${theme.name}|${MapState.dark}|${Xp.streak}|${Xp.challenges().joinToString { "${it.have}" }}|${Xp.showToFriends}"
+        if (key == progressKey && sheetHost.childCount > 0) return
+        progressKey = key
+        sheetHost.removeAllViews()
+        sheetHost.background = bg(panel, radius = 22f, topOnly = true)
+        sheetHost.addView(sheetHeader("Your progress"))
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.74).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        val p = (12 * d).toInt()
+        val (have, of) = Explorer.progress()
+        val lvl = Explorer.level
+        // level, title and the bar
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, 0)
+            addView(label("${lvl}", 30f, bold = true).apply {
+                setTextColor(onAccent(accent)); gravity = Gravity.CENTER; typeface = theme.typeface; background = bg(accent, radius = 16f)
+            }, LinearLayout.LayoutParams((64 * d).toInt(), (64 * d).toInt()).apply { marginEnd = p })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(Xp.stars + L.t(Xp.title()), 20f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+                addView(label(L.t("Level $lvl · ${Explorer.xp} XP") + (if (Xp.prestige > 0) " · " + L.t("prestige ${Xp.prestige}") else ""), 13.5f).apply { setTextColor(dim()) })
+                addView(bar(have.toFloat() / maxOf(of, 1), accent), LinearLayout.LayoutParams(MATCH_PARENT, (9 * d).toInt()).apply { topMargin = p / 2 })
+                val next = Xp.nextUnlock(lvl)
+                addView(label(L.t("${of - have} XP to level ${lvl + 1}") + (next?.takeIf { it.level == lvl + 1 }?.let { " · " + L.t("unlocks ${it.name}") } ?: ""), 12.5f).apply { setTextColor(dim()); setPadding(0, p / 4, 0, 0) })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        })
+        // streak and the Garage
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
+            fun box(top: String, big: String, sub: String, col: Int, onClick: (() -> Unit)?) = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(p, p * 2 / 3, p, p * 2 / 3)
+                background = bg(Color.argb(30, Color.red(col), Color.green(col), Color.blue(col)), col, 1.5f, 14f)
+                addView(label(top, 11.5f, bold = true).apply { setTextColor(readable(col)); letterSpacing = 0.1f })
+                addView(label(big, 19f, bold = true).apply { setTextColor(ink) })
+                addView(label(sub, 12.5f).apply { setTextColor(dim()) })
+                if (onClick != null) { isClickable = true; setOnClickListener { onClick() } }
+            }
+            val st = Xp.streak
+            addView(box(L.t("STREAK"), if (st > 0) "🔥 " + L.t(if (st == 1) "1 day" else "$st days") else L.t("No streak"), L.t("+10 XP a day, up to +50"), Color.rgb(255, 176, 40), null),
+                LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginEnd = p * 2 / 3 })
+            addView(box(L.t("GARAGE"), L.t("${Xp.items.count { it.unlocked }} of ${Xp.items.size}"), L.t("Arrows, route colours, flags") + " ›", accent) { openSheet("garage") },
+                LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+        })
+        // this week
+        body.addView(sectionTitle(L.t("THIS WEEK · NEW EVERY MONDAY")))
+        for (c in Xp.challenges()) body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(p, p * 2 / 3, p, p * 2 / 3); background = bg(dim(20), radius = 12f)
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(L.t(c.title), 15.5f, bold = true).apply { setTextColor(ink) })
+                addView(bar(c.have.toFloat() / c.of, if (c.done) Color.rgb(47, 180, 100) else Color.rgb(255, 176, 40)), LinearLayout.LayoutParams(MATCH_PARENT, (6 * d).toInt()).apply { topMargin = p / 3 })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p })
+            addView(label(if (c.done) "✓ ${c.reward} XP" else "${c.have}/${c.of} · ${c.reward} XP", 14f, bold = true).apply {
+                setTextColor(readable(if (c.done) Color.rgb(47, 180, 100) else Color.rgb(255, 176, 40)))
+            })
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
+        // the titles of this style
+        body.addView(sectionTitle(L.t("TITLES IN ${L.t(theme.title).uppercase()}")))
+        Xp.ladder(theme).forEachIndexed { i, t ->
+            val at = Xp.titleLevels[i]
+            val now = Xp.title() == t && (i + 1 >= Xp.titleLevels.size || lvl < Xp.titleLevels[i + 1])
+            val got = lvl >= at
+            body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(p / 2, p / 3, 0, p / 3)
+                addView(View(context).apply { background = if (got) bg(if (now) accent else dim(160), radius = 7f) else bg(Color.TRANSPARENT, dim(120), 2f, 7f) },
+                    LinearLayout.LayoutParams((14 * d).toInt(), (14 * d).toInt()).apply { marginEnd = p })
+                addView(label("Lv $at", 13f, bold = true).apply { setTextColor(if (now) readable(accent) else dim()); minWidth = (52 * d).toInt() })
+                addView(label(L.t(t), 16f, bold = now).apply { setTextColor(if (got) ink else dim()) })
+            })
+        }
+        // prestige
+        body.addView(sectionTitle(L.t("PRESTIGE")))
+        body.addView(label(if (Xp.canPrestige) "You reached level 50: start again at level 1 with a ★ next to your title. You keep everything you unlocked."
+            else "At level 50 you can start again at level 1 with a ★ next to your title, and keep everything you unlocked.", 13.5f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p / 2) })
+        if (Xp.canPrestige) body.addView(pill("★  Prestige") {
+            AlertDialog.Builder(this).setTitle(L.t("Start again at level 1?")).setMessage(L.t("Your title gets a ★ and you keep everything in the Garage."))
+                .setPositiveButton("★ Prestige") { _, _ -> Xp.doPrestige(); progressKey = ""; refreshChrome() }.setNegativeButton("Cancel", null).showT()
+        }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) }, LinearLayout.LayoutParams(MATCH_PARENT, (50 * d).toInt()))
+        // friends
+        body.addView(switchRow("Show my level to friends", Xp.showToFriends) { Xp.showToFriends = it; Friends.Presence.refresh() })
+        body.addView(label("Off: only you see it. On: your level and title show next to your name for friends and in convoys (never your trips or where you've been).", 12.5f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p) })
+    }
+
+    /** A thin progress bar. */
+    private fun bar(f: Float, col: Int) = object : View(this) {
+        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        override fun onDraw(c: Canvas) {
+            val r = height / 2f
+            pt.color = dim(50); c.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), r, r, pt)
+            pt.color = col; c.drawRoundRect(0f, 0f, width * f.coerceIn(0f, 1f), height.toFloat(), r, r, pt)
+        }
+    }
+
+    private var garageKey = ""
+    private var garageTab = "arrow"
+
+    /** The Garage: pick your arrow, route colour, destination flag and arrival effect. */
+    private fun renderGarage() {
+        val key = "${Xp.version}|${Xp.maxLevel}|$garageTab|${theme.name}|${MapState.dark}"
+        if (key == garageKey && sheetHost.childCount > 0) return
+        garageKey = key
+        sheetHost.removeAllViews()
+        sheetHost.background = bg(panel, radius = 22f, topOnly = true)
+        sheetHost.addView(sheetHeader("Garage"))
+        val p = (12 * d).toInt()
+        sheetHost.addView(label(Xp.stars + L.t(Xp.title()) + " · " + L.t("level ${Explorer.level}") + " · " + L.t(theme.title), 13.5f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p / 2) })
+        // tabs
+        sheetHost.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            val q = (4 * d).toInt(); setPadding(q, q, q, q); background = bg(dim(26), radius = 14f)
+            for ((k, t) in listOf("arrow" to "Arrow", "route" to "Route", "flag" to "Flag", "arrival" to "Arrival")) {
+                val sel = k == garageTab
+                addView(TextView(context).apply {
+                    text = L.t(t); textSize = 14f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
+                    setTextColor(if (sel) onAccent(accent) else ink); if (sel) background = bg(accent, radius = 11f)
+                    setOnClickListener { garageTab = k; renderGarage() }
+                }, LinearLayout.LayoutParams(0, (40 * d).toInt(), 1f))
+            }
+        })
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.6).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 })
+        val look = theme.look
+        val list = Xp.kindItems(garageTab)
+        val chosen = Xp.chosen(garageTab)
+        var row: LinearLayout? = null
+        list.forEachIndexed { i, it ->
+            if (i % 2 == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 }) }
+            val readable = Xp.readableOn(it, look)
+            val usable = it.unlocked && readable
+            val sel = it.id == chosen.id
+            row?.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(p, p, p, p)
+                background = bg(dim(20), if (sel) accent else dim(60), if (sel) 2.5f else 1f, 14f)
+                alpha = if (usable) 1f else 0.5f
+                addView(GarageSwatch(context, it, look), LinearLayout.LayoutParams(MATCH_PARENT, (64 * d).toInt()))
+                addView(label(L.t(it.name), 15f, bold = true).apply { setTextColor(ink); setPadding(0, p / 2, 0, 0) })
+                addView(label(when {
+                    sel -> L.t("In use")
+                    !it.unlocked && it.level >= 50 -> L.t("Prestige")
+                    !it.unlocked -> "🔒 " + L.t("Level ${it.level}") + if (it.milestone) " · " + L.t("milestone") else ""
+                    !readable -> L.t("Hard to see on this style")
+                    else -> L.t("Tap to use")
+                }, 12.5f, bold = sel).apply { setTextColor(if (sel) readable(accent) else dim()) })
+                isClickable = usable
+                setOnClickListener { if (usable) { Xp.choose(it); MapState.changed.fire(); renderGarage() } }
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { if (i % 2 == 0) marginEnd = p / 2 })
+        }
+        if (list.size % 2 == 1) row?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        body.addView(label(when (garageTab) {
+            "route" -> "Only colours that stand out on the current style can be used, so the route is always easy to follow."
+            "arrival" -> "Plays on the arrival card, once you've stopped. Never while driving."
+            "flag" -> "Marks where you're going on the map."
+            else -> "Your arrow on the map. Every shape points the way you drive."
+        }, 12.5f).apply { setTextColor(dim()); setPadding(p / 4, p, 0, p / 2) })
+    }
+
+    /** A small drawing of a Garage item. */
+    private inner class GarageSwatch(ctx: android.content.Context, val item: Xp.Item, val look: Look) : View(ctx) {
+        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        override fun onDraw(c: Canvas) {
+            val w = width.toFloat(); val h = height.toFloat(); val cx = w / 2; val cy = h / 2
+            pt.style = android.graphics.Paint.Style.FILL; pt.color = look.style.land
+            c.drawRoundRect(0f, 0f, w, h, 10 * d, 10 * d, pt)
+            val s = h * 0.32f
+            when (item.kind) {
+                "arrow" -> {
+                    val pa = android.graphics.Path()
+                    when (item.id) {
+                        "arrow_chevron" -> { pa.moveTo(cx, cy - s); pa.lineTo(cx + s * 0.85f, cy + s * 0.55f); pa.lineTo(cx + s * 0.45f, cy + s * 0.78f); pa.lineTo(cx, cy + s * 0.08f); pa.lineTo(cx - s * 0.45f, cy + s * 0.78f); pa.lineTo(cx - s * 0.85f, cy + s * 0.55f) }
+                        "arrow_dart" -> { pa.moveTo(cx, cy - s * 1.15f); pa.lineTo(cx + s * 0.5f, cy + s * 0.85f); pa.lineTo(cx, cy + s * 0.5f); pa.lineTo(cx - s * 0.5f, cy + s * 0.85f) }
+                        "arrow_delta" -> { pa.moveTo(cx, cy - s); pa.lineTo(cx + s * 0.95f, cy + s * 0.85f); pa.lineTo(cx - s * 0.95f, cy + s * 0.85f) }
+                        "arrow_comet" -> { pa.moveTo(cx, cy - s * 1.05f); pa.lineTo(cx + s * 0.8f, cy - s * 0.35f); pa.lineTo(cx + s * 0.6f, cy + s * 0.55f); pa.lineTo(cx, cy + s * 0.95f); pa.lineTo(cx - s * 0.6f, cy + s * 0.55f); pa.lineTo(cx - s * 0.8f, cy - s * 0.35f) }
+                        else -> { pa.moveTo(cx, cy - s); pa.lineTo(cx + s * 0.75f, cy + s * 0.8f); pa.lineTo(cx, cy + s * 0.4f); pa.lineTo(cx - s * 0.75f, cy + s * 0.8f) }
+                    }
+                    pa.close()
+                    pt.color = if (item.color != 0) item.color else look.player; c.drawPath(pa, pt)
+                    pt.style = android.graphics.Paint.Style.STROKE; pt.strokeWidth = 2.2f * d
+                    pt.color = if (item.color != 0) Color.rgb(40, 28, 0) else look.playerOutline; c.drawPath(pa, pt)
+                }
+                "route" -> {
+                    val col = if (item.color != 0) item.color else look.route
+                    pt.style = android.graphics.Paint.Style.STROKE; pt.strokeCap = android.graphics.Paint.Cap.ROUND
+                    pt.color = Color.argb(90, Color.red(col), Color.green(col), Color.blue(col)); pt.strokeWidth = 16 * d
+                    c.drawLine(w * 0.15f, cy + s * 0.6f, w * 0.85f, cy - s * 0.6f, pt)
+                    pt.color = col; pt.strokeWidth = 7 * d
+                    c.drawLine(w * 0.15f, cy + s * 0.6f, w * 0.85f, cy - s * 0.6f, pt)
+                }
+                "flag" -> {
+                    pt.style = android.graphics.Paint.Style.FILL
+                    when (item.id) {
+                        "flag_checkered" -> { val q = s * 0.32f; val l = cx; val t = cy - s
+                            for (i in 0 until 4) for (j in 0 until 3) { pt.color = if ((i + j) % 2 == 0) Color.WHITE else Color.BLACK; c.drawRect(l + i * q, t + j * q, l + (i + 1) * q, t + (j + 1) * q, pt) }
+                            pt.color = Color.BLACK; c.drawRect(cx - 1.5f * d, cy - s, cx + 1.5f * d, cy + s, pt) }
+                        "flag_pennant" -> { val pa = android.graphics.Path().apply { moveTo(cx, cy - s); lineTo(cx + s * 1.3f, cy - s * 0.6f); lineTo(cx, cy - s * 0.15f); close() }
+                            pt.color = look.route; c.drawPath(pa, pt); pt.color = Color.BLACK; c.drawRect(cx - 1.5f * d, cy - s, cx + 1.5f * d, cy + s, pt) }
+                        "flag_trophy" -> { pt.color = Color.rgb(255, 196, 40)
+                            val pa = android.graphics.Path().apply { moveTo(cx - s * 0.7f, cy - s); lineTo(cx + s * 0.7f, cy - s); lineTo(cx + s * 0.45f, cy); quadTo(cx, cy + s * 0.3f, cx - s * 0.45f, cy); close() }
+                            c.drawPath(pa, pt); c.drawRect(cx - s * 0.12f, cy + s * 0.1f, cx + s * 0.12f, cy + s * 0.55f, pt); c.drawRect(cx - s * 0.5f, cy + s * 0.55f, cx + s * 0.5f, cy + s * 0.8f, pt) }
+                        else -> { pt.color = Color.rgb(255, 214, 0); c.drawCircle(cx, cy, s * 0.55f, pt)
+                            pt.style = android.graphics.Paint.Style.STROKE; pt.strokeWidth = 2 * d; pt.color = Color.BLACK; c.drawCircle(cx, cy, s * 0.55f, pt) }
+                    }
+                }
+                else -> { // arrival: a few dots in its colours
+                    val cols = when (item.id) {
+                        "arrival_confetti" -> intArrayOf(Color.rgb(255, 80, 120), Color.rgb(80, 200, 255), Color.rgb(255, 210, 60), Color.rgb(120, 230, 120))
+                        "arrival_fireworks" -> intArrayOf(Color.rgb(255, 160, 40), Color.rgb(255, 80, 200), Color.rgb(255, 240, 160))
+                        "arrival_lights" -> intArrayOf(look.route, Color.WHITE, look.player)
+                        else -> intArrayOf(look.route)
+                    }
+                    pt.style = android.graphics.Paint.Style.FILL
+                    val r = java.util.Random(item.id.hashCode().toLong())
+                    repeat(if (item.id == "arrival_classic") 1 else 14) { k ->
+                        pt.color = cols[k % cols.size]
+                        val x = if (item.id == "arrival_classic") cx else w * (0.1f + r.nextFloat() * 0.8f)
+                        val y = if (item.id == "arrival_classic") cy else h * (0.15f + r.nextFloat() * 0.7f)
+                        c.drawCircle(x, y, (if (item.id == "arrival_classic") 8f else 2.5f + r.nextFloat() * 3f) * d, pt)
+                    }
+                }
+            }
+        }
+    }
+
+    /** After a level-up (shown once you've parked): the new level, title and unlocks. */
+    private fun showLevelUp(from: Int) {
+        val to = Explorer.level
+        if (to <= from || isFinishing) return
+        val p = (20 * d).toInt()
+        lateinit var dlg: AlertDialog
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(p, p, p, p)
+            addView(label(L.t("LEVEL UP"), 14f, bold = true).apply { setTextColor(readable(accent)); letterSpacing = 0.3f })
+            addView(label("$to", 64f, bold = true).apply { setTextColor(ink); typeface = theme.typeface; gravity = Gravity.CENTER })
+            val oldT = Xp.title(theme, from); val newT = Xp.title(theme, to)
+            if (oldT != newT) {
+                addView(label(L.t("New title"), 13f).apply { setTextColor(dim()) })
+                addView(label(Xp.stars + L.t(newT), 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+                addView(label(L.t(oldT) + " → " + L.t(newT), 13f).apply { setTextColor(dim()) })
+            } else addView(label(Xp.stars + L.t(newT), 18f, bold = true).apply { setTextColor(ink) })
+            val unlocks = (from + 1..to).flatMap { Xp.unlockedAt(it) }
+            if (unlocks.isNotEmpty()) {
+                addView(label(L.t("UNLOCKED"), 12f, bold = true).apply { setTextColor(readable(accent)); letterSpacing = 0.12f; setPadding(0, p, 0, p / 3) })
+                for (u in unlocks) addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                    addView(GarageSwatch(context, u, theme.look), LinearLayout.LayoutParams((70 * d).toInt(), (48 * d).toInt()).apply { marginEnd = p / 2 })
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(label(L.t(u.name), 16f, bold = true).apply { setTextColor(ink) })
+                        addView(label(L.t(when (u.kind) { "arrow" -> "New arrow"; "route" -> "New route colour"; "flag" -> "New destination flag"; else -> "New arrival effect" }), 13f).apply { setTextColor(dim()) })
+                    })
+                }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 3 })
+            }
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
+                addView(pill("Later") { dlg.dismiss() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 14f) },
+                    LinearLayout.LayoutParams(0, (50 * d).toInt(), 1f).apply { marginEnd = p / 2 })
+                if (unlocks.isNotEmpty()) addView(pill("Use it now") {
+                    dlg.dismiss(); val u = unlocks.last(); if (Xp.readableOn(u, theme.look)) Xp.choose(u); garageTab = u.kind; openSheet("garage")
+                }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) }, LinearLayout.LayoutParams(0, (50 * d).toInt(), 1.3f))
+            })
+        }
+        L.translateTree(box); Icons.applyTree(box)
+        box.background = bg(panel, accent, 2f, 22f)
+        dlg = AlertDialog.Builder(this).setView(box).create()
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dlg.show()
+    }
+
+    /** What a trip earned, line by line. */
+    private fun showXpParts(trip: Explorer.Trip) {
+        val lines = if (trip.parts.isEmpty()) listOf("+${trip.xp} XP")
+            else trip.parts.map { "${if (it.xp > 0) "+${it.xp}" else "0"}  ${L.t(it.label)}" + (if (it.note.isNotBlank()) " · " + L.t(it.note) else "") }
+        AlertDialog.Builder(this).setTitle(L.t("+${trip.xp} XP on this trip"))
+            .setMessage(lines.joinToString("\n") + "\n\n" + L.t("No XP for speed: race places count only after a clean drive."))
+            .setPositiveButton("OK", null).showT()
+    }
+
+    /** The arrival effect from the Garage, over the arrival card, once (you've stopped). */
+    private inner class ArrivalFx(ctx: android.content.Context, val id: String) : View(ctx) {
+        private val start = android.os.SystemClock.uptimeMillis()
+        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private val rnd = java.util.Random(7)
+        private val parts = Array(if (id == "arrival_lights") 18 else 70) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat()) }
+        private val cols = when (id) {
+            "arrival_confetti" -> intArrayOf(Color.rgb(255, 80, 120), Color.rgb(80, 200, 255), Color.rgb(255, 210, 60), Color.rgb(120, 230, 120))
+            "arrival_fireworks" -> intArrayOf(Color.rgb(255, 160, 40), Color.rgb(255, 80, 200), Color.rgb(255, 240, 160))
+            else -> intArrayOf(accent, Color.WHITE, theme.player)
+        }
+        init { isClickable = false; isFocusable = false }
+        override fun onDraw(c: Canvas) {
+            val t = (android.os.SystemClock.uptimeMillis() - start) / 2600f
+            if (t >= 1f) { visibility = View.GONE; return }
+            val w = width.toFloat(); val h = height.toFloat()
+            pt.alpha = ((1f - t) * 255).toInt().coerceIn(0, 255)
+            when (id) {
+                "arrival_confetti" -> parts.forEachIndexed { i, p ->
+                    pt.color = cols[i % cols.size]; pt.alpha = ((1f - t) * 255).toInt()
+                    val x = w * p[0] + kotlin.math.sin((t * 6 + p[2] * 6).toDouble()).toFloat() * 14 * d
+                    val y = -20 * d + (h + 40 * d) * (t * (0.6f + p[1] * 0.6f))
+                    c.save(); c.rotate(t * 360 * (p[3] - 0.5f) * 4, x, y); c.drawRect(x - 4 * d, y - 2 * d, x + 4 * d, y + 2 * d, pt); c.restore()
+                }
+                "arrival_fireworks" -> for (b in 0 until 3) {
+                    val bt = ((t - b * 0.18f) / 0.6f).coerceIn(0f, 1f); if (bt <= 0f) continue
+                    val bx = w * (0.25f + b * 0.25f); val by = h * (0.25f + (b % 2) * 0.15f)
+                    for (k in 0 until 22) {
+                        val a = k * Math.PI * 2 / 22; val r = bt * w * 0.22f
+                        pt.color = cols[(k + b) % cols.size]; pt.alpha = ((1f - bt) * 255).toInt()
+                        c.drawCircle(bx + (r * kotlin.math.cos(a)).toFloat(), by + (r * kotlin.math.sin(a)).toFloat() + bt * bt * 30 * d, 3 * d, pt)
+                    }
+                }
+                else -> parts.forEachIndexed { i, p -> // light show: beams sweeping from the bottom
+                    pt.color = cols[i % cols.size]; pt.alpha = ((1f - t) * 90).toInt()
+                    pt.strokeWidth = 10 * d
+                    val a = Math.toRadians(-90.0 + kotlin.math.sin((t * 5 + p[0] * 6).toDouble()) * 50)
+                    val x0 = w * p[1]; val y0 = h
+                    c.drawLine(x0, y0, x0 + (h * kotlin.math.cos(a)).toFloat(), y0 + (h * kotlin.math.sin(a)).toFloat(), pt)
+                }
+            }
+            postInvalidateOnAnimation()
+        }
+    }
+
+    private fun showProfile() { openSheet("progress") }
+
+    @Suppress("unused")
+    private fun showProfileOld() {
         val (have, of) = Explorer.progress()
         AlertDialog.Builder(this)
             .setTitle("Explorer · level ${Explorer.level}")

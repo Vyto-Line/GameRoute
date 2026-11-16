@@ -22,6 +22,8 @@ object Explorer {
         val xp: Int,
         val landmarks: Int,
         val levelBefore: Int,
+        /** What it earned, line by line (newer trips only). */
+        val parts: List<Xp.Part> = emptyList(),
     ) {
         val avgKmh: Int get() = if (seconds > 0) (meters / seconds * 3.6).toInt() else 0
     }
@@ -44,7 +46,9 @@ object Explorer {
             val a = org.json.JSONArray(prefs().getString("tripHistory", "[]"))
             (0 until a.length()).map { i ->
                 val o = a.getJSONObject(i)
-                Trip(o.getString("p"), o.getLong("t"), o.getInt("s"), o.getDouble("m"), o.optInt("v"), o.optInt("x"), o.optInt("l"), o.optInt("b"))
+                val pa = o.optJSONArray("pt")
+                val parts = if (pa == null) emptyList() else (0 until pa.length()).map { k -> pa.getJSONArray(k).let { Xp.Part(it.getString(0), it.getInt(1), it.optString(2)) } }
+                Trip(o.getString("p"), o.getLong("t"), o.getInt("s"), o.getDouble("m"), o.optInt("v"), o.optInt("x"), o.optInt("l"), o.optInt("b"), parts)
             }.sortedByDescending { it.arrivedAt }
         } catch (e: Exception) { emptyList() }
     }
@@ -52,10 +56,12 @@ object Explorer {
     fun record(t: Trip) {
         if (!::appContext.isInitialized || t.meters < 200) return // not a trip, just a test
         val a = org.json.JSONArray()
-        a.put(org.json.JSONObject().put("p", t.place).put("t", t.arrivedAt).put("s", t.seconds).put("m", t.meters)
-            .put("v", t.savedSeconds).put("x", t.xp).put("l", t.landmarks).put("b", t.levelBefore))
-        for (old in history().take(199)) a.put(org.json.JSONObject().put("p", old.place).put("t", old.arrivedAt).put("s", old.seconds)
-            .put("m", old.meters).put("v", old.savedSeconds).put("x", old.xp).put("l", old.landmarks).put("b", old.levelBefore))
+        fun js(t: Trip) = org.json.JSONObject().put("p", t.place).put("t", t.arrivedAt).put("s", t.seconds).put("m", t.meters)
+            .put("v", t.savedSeconds).put("x", t.xp).put("l", t.landmarks).put("b", t.levelBefore).apply {
+                if (t.parts.isNotEmpty()) put("pt", org.json.JSONArray().apply { for (p in t.parts) put(org.json.JSONArray().put(p.label).put(p.xp).put(p.note)) })
+            }
+        a.put(js(t))
+        for (old in history().take(199)) a.put(js(old))
         prefs().edit().putString("tripHistory", a.toString()).apply()
     }
 

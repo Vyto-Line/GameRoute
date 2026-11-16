@@ -129,6 +129,7 @@ class MapRenderer(private val car: Boolean = false) {
         val following = view.following
         val center = if (following) me ?: fallback else view.freeCenter ?: me ?: fallback
         val bearing = if (following) view.userBearing ?: LocationTracker.heading else view.freeBearing
+        currentBearing = bearing
 
         val zoom = view.zoom
         // the tiles' level: going out, the level above is kept (drawn a little smaller) until 0.35
@@ -740,17 +741,22 @@ class MapRenderer(private val car: Boolean = false) {
 
     private fun withAlpha(col: Int, a: Int) = Color.argb(a, Color.red(col), Color.green(col), Color.blue(col))
 
+    /** The map's turn this frame (flags on the map stand upright against it). */
+    private var currentBearing = 0f
+
     private fun drawRoute(c: Canvas, theme: Theme, world: Double, px: Double, py: Double, scale: Float, d: Float) {
         val z = kotlin.math.round(kotlin.math.log2(world / TileCache.tilePx)).toInt()
         val pixel = theme.pixel != 1
+        // the Garage's route colour, when it's readable on this map (else the style's own)
+        val rc = Xp.routeColor(theme.look); val rg = Xp.routeGlow(theme.look)
         if (NavEngine.planning) {
             val opts = NavEngine.options
             opts.forEachIndexed { i, o ->
                 if (i != NavEngine.selected) strokeRoute(c, o.points, world, z, px, py, scale, d,
-                    withAlpha(theme.route, 120), 0, 6f, false, pixel)
+                    withAlpha(rc, 120), 0, 6f, false, pixel)
             }
             opts.getOrNull(NavEngine.selected)?.let {
-                strokeRoute(c, it.points, world, z, px, py, scale, d, theme.route, theme.routeGlow, 7f, theme.dashedRoute, pixel)
+                strokeRoute(c, it.points, world, z, px, py, scale, d, rc, rg, 7f, theme.dashedRoute, pixel)
             }
             NavEngine.planPlace?.let { drawDestination(c, it.pos, world, px, py, scale, d, theme) }
             return
@@ -759,11 +765,11 @@ class MapRenderer(private val car: Boolean = false) {
         val offer = NavEngine.offer
         if (route.size > 1) {
             if (offer != null) {
-                drawRouteAhead(c, route, world, z, px, py, scale, d, withAlpha(theme.route, 110), 0, 6f, false, pixel)
+                drawRouteAhead(c, route, world, z, px, py, scale, d, withAlpha(rc, 110), 0, 6f, false, pixel)
                 strokeRoute(c, offer.option.points, world, z, px, py, scale, d,
                     Color.rgb(61, 220, 132), Color.argb(90, 61, 220, 132), 8f, false, pixel)
             } else {
-                drawRouteAhead(c, route, world, z, px, py, scale, d, theme.route, theme.routeGlow, 7f, theme.dashedRoute, pixel)
+                drawRouteAhead(c, route, world, z, px, py, scale, d, rc, rg, 7f, theme.dashedRoute, pixel)
             }
         }
         NavEngine.destination?.let { drawDestination(c, it, world, px, py, scale, d, theme) }
@@ -771,9 +777,44 @@ class MapRenderer(private val car: Boolean = false) {
 
     private fun drawDestination(c: Canvas, dest: LatLng, world: Double, px: Double, py: Double, scale: Float, d: Float, theme: Theme) {
         val x = (Geo.x(dest.lon, world) - px).toFloat(); val y = (Geo.y(dest.lat, world) - py).toFloat()
-        fill.color = theme.routeGlow; c.drawCircle(x, y, 18 * d / scale, fill)
-        fill.color = Color.rgb(255, 214, 0); c.drawCircle(x, y, 9 * d / scale, fill)
-        stroke.color = Color.BLACK; stroke.strokeWidth = 2 * d / scale; c.drawCircle(x, y, 9 * d / scale, stroke)
+        val u = d / scale
+        fill.color = Xp.routeGlow(theme.look); c.drawCircle(x, y, 18 * u, fill)
+        // the Garage's destination flag (standing on the spot, upright whatever the map's turn)
+        when (Xp.chosen("flag").id) {
+            "flag_checkered" -> {
+                c.save(); c.rotate(currentBearing, x, y)
+                stroke.color = Color.BLACK; stroke.strokeWidth = 2.5f * u; c.drawLine(x, y, x, y - 30 * u, stroke)
+                val l = x + 1 * u; val t = y - 30 * u; val q = 4.5f * u
+                for (i in 0 until 4) for (j in 0 until 3) { fill.color = if ((i + j) % 2 == 0) Color.WHITE else Color.BLACK; c.drawRect(l + i * q, t + j * q, l + (i + 1) * q, t + (j + 1) * q, fill) }
+                stroke.strokeWidth = 1.2f * u; c.drawRect(l, t, l + 4 * q, t + 3 * q, stroke)
+                fill.color = Color.BLACK; c.drawCircle(x, y, 3 * u, fill)
+                c.restore()
+            }
+            "flag_pennant" -> {
+                c.save(); c.rotate(currentBearing, x, y)
+                stroke.color = Color.BLACK; stroke.strokeWidth = 2.5f * u; c.drawLine(x, y, x, y - 30 * u, stroke)
+                path.reset(); path.moveTo(x + 1 * u, y - 30 * u); path.lineTo(x + 20 * u, y - 24 * u); path.lineTo(x + 1 * u, y - 17 * u); path.close()
+                fill.color = Xp.routeColor(theme.look); c.drawPath(path, fill)
+                stroke.strokeWidth = 1.5f * u; c.drawPath(path, stroke)
+                fill.color = Color.BLACK; c.drawCircle(x, y, 3 * u, fill)
+                c.restore()
+            }
+            "flag_trophy" -> {
+                c.save(); c.rotate(currentBearing, x, y)
+                val gold = Color.rgb(255, 196, 40)
+                fill.color = gold; stroke.color = Color.rgb(90, 60, 0); stroke.strokeWidth = 1.6f * u
+                path.reset(); path.moveTo(x - 9 * u, y - 26 * u); path.lineTo(x + 9 * u, y - 26 * u); path.lineTo(x + 6 * u, y - 14 * u)
+                path.quadTo(x, y - 9 * u, x - 6 * u, y - 14 * u); path.close()
+                c.drawPath(path, fill); c.drawPath(path, stroke)
+                c.drawRect(x - 2 * u, y - 11 * u, x + 2 * u, y - 5 * u, fill)
+                c.drawRect(x - 7 * u, y - 5 * u, x + 7 * u, y - 2 * u, fill); c.drawRect(x - 7 * u, y - 5 * u, x + 7 * u, y - 2 * u, stroke)
+                c.restore()
+            }
+            else -> {
+                fill.color = Color.rgb(255, 214, 0); c.drawCircle(x, y, 9 * u, fill)
+                stroke.color = Color.BLACK; stroke.strokeWidth = 2 * u; c.drawCircle(x, y, 9 * u, stroke)
+            }
+        }
     }
 
     /** Works out the centre and zoom that fit [pts] into [area], and hands them to MapState. */
@@ -806,15 +847,36 @@ class MapRenderer(private val car: Boolean = false) {
         c.save()
         c.rotate(rotation, x, y)
         path.reset()
-        path.moveTo(x, y - s)
-        path.lineTo(x + s * 0.75f, y + s * 0.8f)
-        path.lineTo(x, y + s * 0.4f)
-        path.lineTo(x - s * 0.75f, y + s * 0.8f)
+        // the Garage's arrow: always pointing the way you drive, always outlined
+        val kind = Xp.chosen("arrow")
+        when (kind.id) {
+            "arrow_chevron" -> {
+                path.moveTo(x, y - s); path.lineTo(x + s * 0.85f, y + s * 0.55f); path.lineTo(x + s * 0.45f, y + s * 0.78f)
+                path.lineTo(x, y + s * 0.08f); path.lineTo(x - s * 0.45f, y + s * 0.78f); path.lineTo(x - s * 0.85f, y + s * 0.55f)
+            }
+            "arrow_dart" -> { path.moveTo(x, y - s * 1.15f); path.lineTo(x + s * 0.5f, y + s * 0.85f); path.lineTo(x, y + s * 0.5f); path.lineTo(x - s * 0.5f, y + s * 0.85f) }
+            "arrow_delta" -> { path.moveTo(x, y - s); path.lineTo(x + s * 0.95f, y + s * 0.85f); path.lineTo(x - s * 0.95f, y + s * 0.85f) }
+            "arrow_comet" -> { // a shield
+                path.moveTo(x, y - s * 1.05f); path.lineTo(x + s * 0.8f, y - s * 0.35f); path.lineTo(x + s * 0.6f, y + s * 0.55f)
+                path.lineTo(x, y + s * 0.95f); path.lineTo(x - s * 0.6f, y + s * 0.55f); path.lineTo(x - s * 0.8f, y - s * 0.35f)
+            }
+            else -> { path.moveTo(x, y - s); path.lineTo(x + s * 0.75f, y + s * 0.8f); path.lineTo(x, y + s * 0.4f); path.lineTo(x - s * 0.75f, y + s * 0.8f) }
+        }
         path.close()
         fill.isAntiAlias = t.pixel == 1
-        fill.color = t.routeGlow; c.drawCircle(x, y, s * 1.5f, fill)
-        fill.color = t.player; c.drawPath(path, fill)
-        stroke.color = t.playerOutline; stroke.strokeWidth = 2.5f * d; c.drawPath(path, stroke)
+        fill.color = Xp.routeGlow(t.look); c.drawCircle(x, y, s * 1.5f, fill)
+        fill.color = if (kind.color != 0) kind.color else t.player; c.drawPath(path, fill)
+        stroke.color = if (kind.color != 0) Color.rgb(40, 28, 0) else t.playerOutline; stroke.strokeWidth = 2.5f * d; c.drawPath(path, stroke)
+        if (kind.id == "arrow_comet") { // the shield's arrow mark
+            stroke.color = t.playerOutline; stroke.strokeWidth = 2.2f * d
+            c.drawLine(x, y + s * 0.45f, x, y - s * 0.5f, stroke); c.drawLine(x - s * 0.32f, y - s * 0.18f, x, y - s * 0.5f, stroke); c.drawLine(x + s * 0.32f, y - s * 0.18f, x, y - s * 0.5f, stroke)
+        }
+        if (kind.id == "arrow_star") { // prestige: a small star in the middle
+            fill.color = Color.WHITE
+            val st = Path(); for (k in 0 until 10) { val a = Math.toRadians(-90.0 + k * 36); val rr = if (k % 2 == 0) s * 0.32f else s * 0.14f
+                val px2 = x + (rr * cos(a)).toFloat(); val py2 = y + s * 0.1f + (rr * sin(a)).toFloat(); if (k == 0) st.moveTo(px2, py2) else st.lineTo(px2, py2) }
+            st.close(); c.drawPath(st, fill)
+        }
         fill.isAntiAlias = true
         c.restore()
     }

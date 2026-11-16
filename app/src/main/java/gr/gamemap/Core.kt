@@ -64,6 +64,7 @@ class GameMapApp : Application() {
         NavEngine.changed += { LocationTracker.updateMode() }
         Startup.step("voice") { Voice.init(this) }
         Startup.step("explorer") { Explorer.init(this) }
+        Startup.step("xp") { Xp.init(this) }
         Startup.step("alerts") { Alerts.init(this) }
         CrashLog.note("start: " + Startup.steps.filter { it.second >= 5 }.joinToString { "${it.first} ${it.second} ms" })
     }

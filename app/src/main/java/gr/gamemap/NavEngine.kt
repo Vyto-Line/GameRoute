@@ -203,11 +203,17 @@ object NavEngine {
         val levelBefore = Explorer.level
         // short by the route asked for, or by what was really driven (GPS wobble while parked adds a little)
         val tooShort = tripMeters < MIN_XP_METERS || (tripPlanned >= 0 && tripPlanned < MIN_XP_METERS)
-        val xp = if (tooShort) 0 else 10 + (tripMeters / 1000 * 5).toInt() + tripBonus
-        Explorer.addXp(xp)
+        // the convoy: arrived together on its route; my place among the racers (counted here: my
+        // own "arrived" goes out just after this)
+        val inConvoy = Convoy.active && Convoy.onConvoyRoute && !Convoy.meSharing && Convoy.members.isNotEmpty()
+        val racers = Convoy.members.values.filter { !it.along && !it.sharing && it.state != "left" }
+        val racing = inConvoy && !Convoy.meAlong && racers.isNotEmpty()
+        val place = if (racing) 1 + racers.count { it.state == "arrived" } else null
+        val parts = if (tooShort) emptyList() else Xp.finish(tripMeters, tripBonus, Explorer.tripFound, inConvoy, place, racers.size + 1)
+        val xp = if (tooShort) Explorer.tripFound * 25 else parts.sumOf { it.xp }
         lastTrip = Explorer.Trip(
             destinationName, System.currentTimeMillis(), secs, tripMeters, tripSaved,
-            xp + Explorer.tripFound * 25, Explorer.tripFound, levelBefore,
+            xp, Explorer.tripFound, levelBefore, parts,
         )
         lastTrip?.let { Explorer.record(it) }
     }
@@ -411,6 +417,7 @@ object NavEngine {
         Places.addRecent(place)
         lastTrip = null
         tripStart = System.currentTimeMillis(); tripMeters = 0.0; tripSaved = 0; tripBonus = 0; lastPos = null; tripPlanned = -1.0
+        Xp.startTrip()
         Explorer.tripFound = 0
         parkingReady = false
         destination = place.goal // the entrance on the street, when known
@@ -741,6 +748,7 @@ object NavEngine {
         val real = l.provider != LocationTracker.ESTIMATE
         lastPos?.let { lp -> Geo.distance(lp, pos).takeIf { it < 300 }?.let { tripMeters += it } }
         lastPos = pos
+        Xp.onFix(pos, l.speed, speedLimit, real)
         if (r == null || r.points.size < 2) {
             if (loading && error != null) fetchRoute() // was waiting for the first GPS fix
             return

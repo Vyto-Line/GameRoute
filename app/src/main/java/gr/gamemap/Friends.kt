@@ -342,6 +342,10 @@ object Friends {
      * my presence topic (every 2 min; the broker posts "gone" if the phone drops off). Friends'
      * topics are watched while the app is open. Only whether the app is open: never where.
      */
+    /** Friends' level and title, for those who chose to show it ("Lv 12 · Night Rider"). */
+    val levels = java.util.concurrent.ConcurrentHashMap<String, String>()
+    fun levelOf(fid: String): String = levels[fid].orEmpty()
+
     object Presence {
         private const val BROKER = "ssl://broker.emqx.io:8883"
         private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "friends-online").apply { isDaemon = true } }
@@ -350,7 +354,9 @@ object Friends {
         @Volatile private var on = false
 
         private fun me(online: Boolean): MqttMessage {
-            val body = JSONObject().put("on", online).put("at", System.currentTimeMillis()).toString()
+            val o = JSONObject().put("on", online).put("at", System.currentTimeMillis())
+            if (Xp.showToFriends) o.put("lv", Xp.badge()) // only if I chose to show it
+            val body = o.toString()
             return MqttMessage(Seal.seal(core.presenceKey(), body).toByteArray()).apply { qos = 0; isRetained = true }
         }
 
@@ -373,6 +379,7 @@ object Friends {
                             val f = watching[topic] ?: return
                             val o = Seal.open(core.presenceKey(f.secret), String(m.payload))?.let { JSONObject(it) }
                             core.setOnline(f.fid, if (o != null && o.optBoolean("on")) o.optLong("at") else null)
+                            levels[f.fid] = o?.optString("lv").orEmpty()
                             main.post { changed.fire() }
                         }
                     })
