@@ -18,6 +18,10 @@ on:
         description: "Release name instead of build-N (e.g. build-100 for the big release)"
         type: string
         default: ""
+      number:
+        description: "Build number (versionCode) instead of the run number, e.g. 106 to match the release name"
+        type: string
+        default: ""
 permissions:
   contents: write
 jobs:
@@ -53,7 +57,7 @@ jobs:
         run: |
           export JAVA_HOME="${JAVA_HOME_17_X64:-$JAVA_HOME}"
           # a release build (not debuggable): Android compiles and runs it faster
-          gradle assembleGithubRelease --no-daemon -PbuildNumber=${{ github.run_number }}
+          gradle assembleGithubRelease --no-daemon -PbuildNumber=${{ inputs.number || github.run_number }}
           mkdir -p ../out && cp app/build/outputs/apk/github/release/*.apk ../out/GameRoute.apk
       - name: Build Play Store bundle
         working-directory: src
@@ -68,7 +72,7 @@ jobs:
             echo "$PLAY_KEYSTORE" | base64 -d > "$RUNNER_TEMP/upload.jks"
             export PLAY_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks"
           fi
-          gradle bundlePlayRelease --no-daemon -PbuildNumber=${{ github.run_number }}
+          gradle bundlePlayRelease --no-daemon -PbuildNumber=${{ inputs.number || github.run_number }}
           rm -f "$RUNNER_TEMP/upload.jks"
           # only a signed bundle can go to Play; without the key this step just checks the Play version builds
           if [ -n "$PLAY_KEYSTORE" ]; then cp app/build/outputs/bundle/playRelease/*.aab ../out/GameRoute-play.aab
@@ -83,4 +87,4 @@ jobs:
           if [ "${{ inputs.test }}" = "true" ]; then TAG="test-${{ github.run_number }}"; PRE="--prerelease"
           elif [ -n "${{ inputs.tag }}" ]; then TAG="${{ inputs.tag }}"; fi
           gh release create "$TAG" out/GameRoute.apk $(ls out/GameRoute-play.aab 2>/dev/null) -R "${{ github.repository }}" $PRE \
-            --target "${{ github.sha }}" --title "GameRoute $TAG" --notes "Automatic build. versionCode: ${{ github.run_number }}"
+            --target "${{ github.sha }}" --title "GameRoute $TAG" --notes "Automatic build. versionCode: ${{ inputs.number || github.run_number }}"
