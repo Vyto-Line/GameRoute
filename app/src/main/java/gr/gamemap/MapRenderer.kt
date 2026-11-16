@@ -108,7 +108,8 @@ class MapRenderer(private val car: Boolean = false) {
         }
     }
 
-    private fun drawFrame(c: Canvas, w: Int, h: Int, area: Rect, d: Float, hud: Boolean) {
+    private fun drawFrame(c: Canvas, w: Int, h: Int, fullArea: Rect, d: Float, hud: Boolean) {
+        val area = fullArea
         compassBounds.setEmpty()
         val zoomAnim = view.tick()
         interacting = view.gesture || (zoomAnim && view.userZooming)
@@ -117,6 +118,10 @@ class MapRenderer(private val car: Boolean = false) {
         wasInteracting = zoomAnim || view.gesture
 
         val theme = if (car) MapState.carTheme ?: MapState.theme else MapState.theme
+        // choosing a route in the car: the routes go on the map beside the cards
+        val area = if (car && hud && carButtons && NavEngine.planning)
+            Rect(area.left + carRoutesWidth(area, d).toInt() + (28 * d).toInt(), area.top, area.right - (70 * d).toInt(), area.bottom).takeIf { it.width() > 100 } ?: area
+        else area
         view.fitRequest?.let { fit(it, area, d, theme) }
         c.drawColor(theme.background)
         text.typeface = theme.typeface
@@ -268,6 +273,7 @@ class MapRenderer(private val car: Boolean = false) {
         if (hud && Convoy.active && Convoy.onConvoyRoute && !NavEngine.arrived && !NavEngine.planning) {
             if (car) drawCarConvoy(c, area, d, theme) else drawConvoyStrip(c, area, d, theme)
         }
+        if (car && hud && carButtons && NavEngine.planning) drawCarRoutes(c, fullArea, d, theme)
         if (carTrip) drawCarTrip(c, area, d, theme)
         else if (car && carButtons && selectedPlace != null && !NavEngine.planning) drawCarPlace(c, area, d, theme)
         drawJamChip(c, area, d, theme, hud)
@@ -1158,6 +1164,114 @@ class MapRenderer(private val car: Boolean = false) {
                 cxp = cr.right + 10 * d
             }
         }
+        text.typeface = t.typeface
+    }
+
+    private fun carRoutesWidth(a: Rect, d: Float) = minOf(440 * d, a.width() * 0.42f)
+
+    /**
+     * Car, choosing a route: GameRoute's own cards (in the style's colours and font, like the
+     * phone's) instead of Android Auto's black list. Tap a card to pick it, Start to go, ✕ to
+     * close. (Older cars that can't report taps keep Android Auto's list.)
+     */
+    private fun drawCarRoutes(c: Canvas, a: Rect, d: Float, t: Theme) {
+        val opts = NavEngine.options
+        val w = carRoutesWidth(a, d)
+        val left = a.left + 14 * d
+        val ink = Ui.ink(t); val dim = Ui.dim(t, 200)
+        val accent = Ui.onPanel(t, t.route, 3.0)
+        val loading = opts.isEmpty() || opts.any { !NavEngine.timeKnown(it) }
+        val note = NavEngine.endNote
+        val cardH = 84 * d; val gap = 8 * d
+        val head = 64 * d
+        val shown = if (loading) 0 else minOf(opts.size, 3)
+        val noteH = if (note != null && !loading) 50 * d else 0f
+        val startH = 60 * d
+        val bodyH = if (loading) 56 * d else shown * (cardH + gap) + noteH
+        val box = RectF(left, a.top + 14 * d, left + w, a.top + 14 * d + head + bodyH + 6 * d)
+        // Start below the panel (or at the bottom, whichever is higher up)
+        val sTop = minOf(box.bottom + 10 * d, a.bottom - 14 * d - startH)
+        if (box.bottom > sTop - 10 * d) box.bottom = sTop - 10 * d
+        panel(c, box, d, t, outline = false)
+        // header: ✕, how many routes, where to
+        text.textAlign = Paint.Align.LEFT
+        text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 24 * d; text.color = accent
+        c.drawText("✕", box.left + 16 * d, box.top + 40 * d, text)
+        carHits += RectF(box.left, box.top, box.left + 58 * d, box.top + head) to "routecancel"
+        text.typeface = t.typeface; text.textSize = 19 * d; text.color = ink
+        val title = if (loading) gr.gamemap.L.t("Finding routes…") else gr.gamemap.L.t(if (opts.size == 1) "1 route" else "${opts.size} routes")
+        c.drawText(title, box.left + 54 * d, box.top + 30 * d, text)
+        text.typeface = Typeface.DEFAULT; text.textSize = 14 * d; text.color = dim
+        c.drawText(ellipsize(NavEngine.planPlace?.name.orEmpty(), w - 70 * d), box.left + 54 * d, box.top + 50 * d, text)
+        if (!loading) {
+            val fastest = NavEngine.fastestIndex()
+            val anyToll = opts.any { it.tollCost > 0 || it.hasToll }
+            var y = box.top + head
+            for (i in 0 until shown) {
+                val o = opts[i]
+                val r = RectF(box.left + 12 * d, y, box.right - 12 * d, y + cardH)
+                if (r.bottom > box.bottom) break
+                val on = i == NavEngine.selected
+                if (on) {
+                    fill.color = withAlpha(t.route, 40); c.drawRoundRect(r, 10 * d, 10 * d, fill)
+                    stroke.color = accent; stroke.strokeWidth = 2.5f * d; c.drawRoundRect(r, 10 * d, 10 * d, stroke)
+                } else {
+                    stroke.color = withAlpha(ink, 45); stroke.strokeWidth = 1.2f * d; c.drawRoundRect(r, 10 * d, 10 * d, stroke)
+                }
+                // 10 min   2.9 km · 23:22 · €2.40        FASTEST / +4 min traffic
+                text.typeface = t.typeface; text.textSize = 24 * d; text.color = ink
+                val tm = NavEngine.formatDuration(o.seconds)
+                c.drawText(tm, r.left + 14 * d, r.top + 32 * d, text)
+                val tw = text.measureText(tm)
+                val toll = when { o.tollCost > 0 -> Tolls.money(o.tollCost); o.hasToll -> gr.gamemap.L.t("tolls"); anyToll -> gr.gamemap.L.t("No tolls"); else -> null }
+                val sub = listOfNotNull(NavEngine.formatDistance(o.distance), NavEngine.optionArrival(o), toll).joinToString(" · ")
+                val badge = when {
+                    o.trafficSeconds != null && i == fastest && opts.size > 1 -> gr.gamemap.L.t("FASTEST")
+                    o.delaySeconds >= 60 -> gr.gamemap.L.t("+${o.delaySeconds / 60} min traffic")
+                    else -> null
+                }
+                text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 12.5f * d
+                val bw = badge?.let { text.measureText(it) } ?: 0f
+                if (badge != null) {
+                    text.color = if (i == fastest) accent else Color.rgb(229, 72, 77)
+                    text.textAlign = Paint.Align.RIGHT
+                    c.drawText(badge, r.right - 12 * d, r.top + 30 * d, text)
+                    text.textAlign = Paint.Align.LEFT
+                }
+                text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 14.5f * d; text.color = dim
+                c.drawText(ellipsize(sub, r.width() - tw - bw - 46 * d), r.left + 24 * d + tw, r.top + 31 * d, text)
+                text.typeface = Typeface.DEFAULT; text.textSize = 14 * d
+                val via = if (o.via.isNotBlank()) gr.gamemap.L.t("via ${o.via}") else gr.gamemap.L.t("route ${i + 1}")
+                c.drawText(ellipsize(via + if (o.tolls.size > 1) " · " + gr.gamemap.L.t("${o.tolls.size} toll stations") else "", r.width() - 28 * d), r.left + 14 * d, r.top + 54 * d, text)
+                // traffic along it
+                val bar = RectF(r.left + 14 * d, r.bottom - 17 * d, r.right - 14 * d, r.bottom - 11 * d)
+                fill.color = if (o.trafficSeconds != null) Color.rgb(47, 210, 122) else withAlpha(dim, 90)
+                c.drawRoundRect(bar, 3 * d, 3 * d, fill)
+                if (o.length > 0) for (st in o.traffic) {
+                    fill.color = when { st.value >= 4 -> Color.rgb(140, 20, 30); st.value == 3 -> Color.rgb(230, 50, 60); st.value == 2 -> Color.rgb(255, 140, 40); else -> Color.rgb(255, 200, 60) }
+                    val x0 = bar.left + (st.start / o.length * bar.width()).toFloat()
+                    val x1 = maxOf(bar.left + (st.end / o.length * bar.width()).toFloat(), x0 + bar.height())
+                    c.drawRect(x0, bar.top, minOf(x1, bar.right), bar.bottom, fill)
+                }
+                carHits += r to "route:$i"
+                y += cardH + gap
+            }
+            if (note != null && y + 40 * d <= box.bottom) {
+                text.typeface = Typeface.DEFAULT; text.textSize = 13.5f * d; text.color = Color.rgb(255, 170, 60)
+                c.drawText(ellipsize("⚠ $note", w - 28 * d), box.left + 14 * d, y + 20 * d, text)
+            }
+        }
+        // Start · 10 min
+        val sr = RectF(left, sTop, left + w, sTop + startH)
+        val ready = !loading
+        glassButton(c, sr, d, t, if (ready) withAlpha(t.route, 240) else withAlpha(dim, 120))
+        text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 21 * d
+        text.color = if (Ui.contrast(Color.WHITE, t.route) >= 3) Color.WHITE else Color.BLACK
+        val pick = opts.getOrNull(NavEngine.selected)
+        c.drawText(if (ready && pick != null) gr.gamemap.L.t("Start") + " · " + NavEngine.formatDuration(pick.seconds) else gr.gamemap.L.t("Start"),
+            sr.centerX(), sr.centerY() + 7 * d, text)
+        text.textAlign = Paint.Align.LEFT
+        if (ready) carHits += sr to "routestart"
         text.typeface = t.typeface
     }
 

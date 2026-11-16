@@ -298,8 +298,13 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         // a route preview started from the phone or the car search shows here too
         if (NavEngine.planning && !previewShown) {
             previewShown = true
-            screenManager.push(RoutePreviewScreen(carContext))
-        } else if (!NavEngine.planning) previewShown = false
+            // cars that report taps: GameRoute's own route cards on the map (in the style's
+            // colours); older ones: Android Auto's own list
+            if (surface.ownButtons) invalidate() else screenManager.push(RoutePreviewScreen(carContext))
+        } else if (!NavEngine.planning && previewShown) {
+            previewShown = false
+            if (surface.ownButtons) invalidate()
+        }
         syncOfferAlert()
         main.removeCallbacks(refresh)
         val wait = 1000 - (System.currentTimeMillis() - lastInvalidate)
@@ -445,6 +450,9 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
 
     /** A GameMap button drawn on the car map was tapped. */
     private fun onCarButton(id: String) {
+        if (id.startsWith("route:")) { NavEngine.select(id.removePrefix("route:").toIntOrNull() ?: return); surface.redraw(); return }
+        if (id == "routestart") { NavEngine.startPlanned(); surface.redraw(); return }
+        if (id == "routecancel") { NavEngine.cancelPlan(); surface.redraw(); return }
         if (id.startsWith("park:")) {
             val pick = gr.gamemap.CarParking.list?.getOrNull(id.removePrefix("park:").toIntOrNull() ?: -1) ?: return
             gr.gamemap.CarParking.list = null
@@ -497,6 +505,19 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     override fun onGetTemplate(): Template {
+        if (surface.ownButtons && NavEngine.planning) {
+            // choosing a route: the cards are on the map; these are for the knob / touchpad
+            // (and anyone who'd rather): Start, the next route, close
+            val strip = ActionStrip.Builder()
+                .addAction(Action.Builder().setTitle(gr.gamemap.L.t("Start")).setOnClickListener { NavEngine.startPlanned() }.build())
+            // (Android Auto allows one titled action here: the others are icons)
+            if (NavEngine.options.size > 1) strip.addAction(action(R.drawable.ic_next) {
+                NavEngine.select((NavEngine.selected + 1) % NavEngine.options.size); surface.redraw()
+            })
+            strip.addAction(action(R.drawable.ic_i_close) { NavEngine.cancelPlan() })
+            return NavigationTemplate.Builder().setActionStrip(strip.build())
+                .setMapActionStrip(ActionStrip.Builder().addAction(Action.PAN).build()).build()
+        }
         if (surface.ownButtons) {
             // GameMap draws its own see-through buttons; Android Auto keeps one: the ☰ menu
             val b = NavigationTemplate.Builder().setActionStrip(
