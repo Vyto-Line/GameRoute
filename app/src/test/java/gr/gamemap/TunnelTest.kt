@@ -1,48 +1,45 @@
 package gr.gamemap
 
-import android.location.Location
-import android.location.LocationManager
-import android.os.Looper
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** Drive, lose GPS (a tunnel), and check the arrow keeps moving along the route, then recovers. */
+/** Roads in tunnels are drawn (faded, dashed edges), in every style. */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
 class TunnelTest {
     @Test
-    fun tunnel() {
-        val data = File(System.getProperty("previewData") ?: "../previewdata")
+    fun tunnelsDrawn() {
         val out = File(System.getProperty("previewOut") ?: "build/previews").apply { mkdirs() }
-        val r = Osrm.parseAll(File(data, "route.json").readText())[0]
-        NavEngine.debugDrive(Place("Museum", "", r.points.last()), r, 0)
-        val looper = shadowOf(Looper.getMainLooper())
-        val log = StringBuilder()
-        fun fixAt(m: Double) {
-            var i = 0
-            while (i < r.points.size - 2 && r.cum[i + 1] < m) i++
-            val p = Geo.lerp(r.points[i], r.points[i + 1], ((m - r.cum[i]) / maxOf(r.cum[i + 1] - r.cum[i], 0.1)).coerceIn(0.0, 1.0))
-            LocationTracker.onLocationChanged(Location(LocationManager.GPS_PROVIDER).apply {
-                latitude = p.lat; longitude = p.lon; speed = 12f; bearing = Geo.bearing(r.points[i], r.points[i + 1]); accuracy = 5f
-                time = System.currentTimeMillis()
-            })
-            looper.idle()
+        VectorSource.init(RuntimeEnvironment.getApplication())
+        // central Athens at z14: find the tile with the most tunnel road
+        var best: Triple<Int, Int, Int>? = null
+        for (x in 9254..9260) for (y in 6302..6308) {
+            val vt = VectorSource.get(14, x, y) ?: continue
+            val n = vt.features.count { it.layer == "transportation" && it["brunnel"] == "tunnel" && it.type == 2 && it["class"] in setOf("motorway", "trunk", "primary", "secondary", "tertiary") }
+            if (n > (best?.third ?: 0)) best = Triple(x, y, n)
         }
-        var m = 100.0
-        repeat(8) { fixAt(m); m += 12; Thread.sleep(1000); looper.idleFor(java.time.Duration.ofMillis(1000)) }
-        log.append("before the tunnel: along=${NavEngine.along.toInt()} estimating=${NavEngine.estimating}\n")
-        val a0 = NavEngine.along
-        // no fixes for 8 s
-        repeat(8) { Thread.sleep(1000); looper.idleFor(java.time.Duration.ofMillis(1000))
-            log.append("  no GPS +${it + 1}s: along=${NavEngine.along.toInt()} estimating=${NavEngine.estimating}\n") }
-        log.append("moved ${(NavEngine.along - a0).toInt()} m without GPS (expected about ${(12 * 5.5).toInt()}–${12 * 8} m)\n")
-        m += 12 * 8
-        fixAt(m)
-        log.append("GPS back: along=${NavEngine.along.toInt()} (real ${m.toInt()}) estimating=${NavEngine.estimating}\n")
-        File(out, "tunnel.txt").writeText(log.toString())
+        assertTrue("a tile with a tunnel", best != null)
+        val (tx, ty, n) = best!!
+        val themes = Theme.entries
+        val tile = 512
+        val sheet = Bitmap.createBitmap(tile * 2 * themes.size, tile * 2, Bitmap.Config.ARGB_8888)
+        val c = Canvas(sheet)
+        for ((i, th) in themes.withIndex()) {
+            for (sx in 0..1) for (sy in 0..1) {
+                val b = VectorRenderer.render(th, 15, tx * 2 + sx, ty * 2 + sy, tile, dark = true) ?: continue
+                c.drawBitmap(Bitmap.createScaledBitmap(b, tile, tile, false), (i * 2 + sx) * tile.toFloat(), sy * tile.toFloat(), null)
+            }
+        }
+        File(out, "tunnels.png").outputStream().use { sheet.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File(out, "tunnels.txt").writeText("tile 14/$tx/$ty: $n tunnel roads; styles: ${themes.joinToString { it.name }}\n")
     }
 }

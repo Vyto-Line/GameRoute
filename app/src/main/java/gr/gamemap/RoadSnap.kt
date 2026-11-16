@@ -60,7 +60,7 @@ object RoadSnap {
             val vt = VectorSource.peek(dz, tx, ty) ?: continue
             any = true
             for (f in vt.features) {
-                if (f.layer != "transportation" || f.type != 2 || f["brunnel"] == "tunnel") continue
+                if (f.layer != "transportation" || f.type != 2) continue // tunnels too: in one, the car is on it, not on the road above
                 val meters = roadMeters[f["class"]] ?: continue
                 val half = meters * 0.85f / 2 / mpp
                 val dir = when (f["oneway"]) { "1" -> 1f; "-1" -> -1f; else -> 0f }

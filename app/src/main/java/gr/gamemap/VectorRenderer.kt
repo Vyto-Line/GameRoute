@@ -168,6 +168,25 @@ object VectorRenderer {
                 for (f in roads) if (f["class"] == cls) c.drawPath(pathOf(f), line)
             }
         }
+        // tunnels: under the other roads, faded, with dashed edges (driving through one, the road is still there)
+        val tunnels = layer("transportation").filter { it["brunnel"] == "tunnel" && it.type == 2 }
+        if (tunnels.isNotEmpty()) {
+            for ((cls, kind) in visible) {
+                if (cls == "rail" || cls == "transit" || cls == "path" || cls == "track") continue
+                val mine = tunnels.filter { it["class"] == cls }
+                if (mine.isEmpty()) continue
+                val w = width(kind)
+                line.color = s.casing ?: roadColor(cls); line.alpha = 200
+                line.strokeWidth = px(w + 2.2f * thin)
+                line.pathEffect = if (aa) android.graphics.DashPathEffect(floatArrayOf(px(5f), px(3.5f)), 0f) else null
+                for (f in mine) c.drawPath(pathOf(f), line)
+                line.pathEffect = null
+                line.color = roadColor(cls); line.alpha = 120
+                line.strokeWidth = px(w * 0.8f)
+                for (f in mine) c.drawPath(pathOf(f), line)
+            }
+            line.alpha = 255
+        }
         for ((cls, kind) in visible) {
             line.color = roadColor(cls)
             line.strokeWidth = px(width(kind))

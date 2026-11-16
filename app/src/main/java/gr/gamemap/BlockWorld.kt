@@ -182,7 +182,7 @@ object BlockWorld {
         for (f in layer("water")) fill(f, WATER)
         for (f in layer("waterway")) if (f.type == 2) line(f, WATER, when (f["class"]) { "river" -> 6f; "canal" -> 5f; else -> 2f })
 
-        val roads = layer("transportation").filter { it["brunnel"] != "tunnel" }
+        val roads = layer("transportation") // tunnels too: driving through one, the road is still drawn
         // area features (pedestrian squares) first
         for (f in roads) if (f.type == 3) fill(f, SMOOTH_STONE)
         val order = listOf("path", "track", "rail", "transit", "service", "minor", "tertiary", "secondary", "primary", "trunk", "motorway")
