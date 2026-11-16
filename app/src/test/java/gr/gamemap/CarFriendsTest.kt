@@ -45,6 +45,13 @@ class CarFriendsTest {
         log.append("friends=${fr.size}, invites=${me.invites.size}\n")
         Friends::class.java.getDeclaredField("core").apply { isAccessible = true }.set(null, me)
 
+        // what friends are doing: Nikos drives, Giorgos was on 25 minutes ago
+        Friends.activityForTest(fr[0].fid, true, true, false, now)
+        Friends.activityForTest(fr[2].fid, false, false, false, System.currentTimeMillis() - 25 * 60_000)
+        val acts = fr.map { it.name + ": " + Friends.activityText(it.fid) }
+        log.append("activity: $acts\n")
+        assertTrue(acts.toString(), acts.any { it.contains("Driving now") } && acts.any { it.contains("Last seen 25 min ago") })
+
         // what broke build 100: a row button with a title and no icon
         try {
             androidx.car.app.model.Row.Builder().setTitle("x").addAction(androidx.car.app.model.Action.Builder().setTitle("Invite").setOnClickListener {}.build())

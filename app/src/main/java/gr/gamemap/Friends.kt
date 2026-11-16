@@ -382,6 +382,58 @@ object Friends {
     val levels = java.util.concurrent.ConcurrentHashMap<String, String>()
     fun levelOf(fid: String): String = levels[fid].orEmpty()
 
+    /**
+     * What friends are up to, from their "I'm here": driving now, in a convoy (never where or to
+     * where), and when they were last online. Invisible friends send nothing, so show nothing.
+     */
+    class Activity(val driving: Boolean, val convoy: Boolean, val lastOn: Long)
+    val activity = java.util.concurrent.ConcurrentHashMap<String, Activity>()
+
+    /** "Driving now", "In a convoy", "Online now", "Last seen 12 min ago", "Not online". */
+    fun activityText(fid: String, now: Long = System.currentTimeMillis()): String {
+        val a = activity[fid]
+        if (ready && core.isOnline(fid)) return when {
+            core.isBusy(fid) -> L.t("Do not disturb · invites wait")
+            a?.convoy == true && a.driving -> L.t("Driving in a convoy")
+            a?.convoy == true -> L.t("In a convoy")
+            a?.driving == true -> L.t("Driving now")
+            else -> L.t("Online now")
+        }
+        val last = a?.lastOn ?: 0L
+        if (last <= 0L) return L.t("Not online")
+        val mins = (now - last) / 60_000
+        return when {
+            mins < 1 -> L.t("Last seen just now")
+            mins < 60 -> L.t("Last seen $mins min ago")
+            mins < 24 * 60 -> L.t("Last seen ${mins / 60} h ago")
+            else -> L.t("Last seen ${mins / (24 * 60)} days ago")
+        }
+    }
+
+    /** Remembered between runs: "last seen" still works after a restart. */
+    private fun saveLastSeen() {
+        if (!::app.isInitialized) return
+        val o = JSONObject(); for ((k, v) in activity) if (v.lastOn > 0) o.put(k, v.lastOn)
+        app.getSharedPreferences("friends", Context.MODE_PRIVATE).edit().putString("lastOn", o.toString()).apply()
+    }
+
+    internal fun loadLastSeen() {
+        if (!::app.isInitialized) return
+        val o = try { JSONObject(app.getSharedPreferences("friends", Context.MODE_PRIVATE).getString("lastOn", null) ?: "{}") } catch (e: Exception) { JSONObject() }
+        for (k in o.keys()) if (activity[k] == null) activity[k] = Activity(false, false, o.optLong(k))
+    }
+
+    /** For tests: a friend's activity as it would come with their "I'm here". */
+    internal fun activityForTest(fid: String, on: Boolean, driving: Boolean, convoy: Boolean, at: Long) = took(fid, on, driving, convoy, at)
+
+    private fun took(fid: String, on: Boolean, driving: Boolean, convoy: Boolean, at: Long) {
+        val before = activity[fid]?.lastOn ?: 0L
+        // their phone's time of the message (online: the last beat; going away: when they left)
+        val stamp = at.coerceIn(0L, System.currentTimeMillis())
+        activity[fid] = Activity(on && driving, on && convoy, maxOf(before, if (on && stamp == 0L) System.currentTimeMillis() else stamp))
+        saveLastSeen()
+    }
+
     object Presence {
         private const val BROKER = "ssl://broker.emqx.io:8883"
         private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "friends-online").apply { isDaemon = true } }
@@ -393,6 +445,9 @@ object Friends {
             val o = JSONObject().put("on", online).put("at", System.currentTimeMillis())
             if (online && core.status == FriendCore.DND) o.put("dnd", true)
             if (Xp.showToFriends) o.put("lv", Xp.badge()) // only if I chose to show it
+            // what I'm doing (never where): driving, in a convoy
+            if (online && NavEngine.active && !NavEngine.arrived) o.put("dr", true)
+            if (online && Convoy.active) o.put("cv", true)
             val body = o.toString()
             return MqttMessage(Seal.seal(core.presenceKey(), body).toByteArray()).apply { qos = 0; isRetained = true }
         }
@@ -401,9 +456,18 @@ object Friends {
             override fun run() { if (!on) return; io.execute { publishMe() }; main.postDelayed(this, 120_000) }
         }
 
+        private var myKey = ""
+        /** Driving started or stopped, a convoy joined or left: tell friends now, not at the next beat. */
+        private val mine: () -> Unit = {
+            val k = "${NavEngine.active && !NavEngine.arrived}${Convoy.active}"
+            if (k != myKey) { myKey = k; if (on) io.execute { publishMe() } }
+        }
+        @Volatile private var hooked = false
+
         fun start() {
             if (!ready || !core.started || on) return
             on = true
+            if (!hooked) { hooked = true; NavEngine.changed += mine; Convoy.changed += mine; loadLastSeen() }
             io.execute {
                 if (!on) return@execute
                 try {
@@ -417,6 +481,8 @@ object Friends {
                             val o = Seal.open(core.presenceKey(f.secret), String(m.payload))?.let { JSONObject(it) }
                             core.setOnline(f.fid, if (o != null && o.optBoolean("on")) o.optLong("at") else null, o?.optBoolean("dnd") == true)
                             levels[f.fid] = o?.optString("lv").orEmpty()
+                            val on = o != null && o.optBoolean("on")
+                            took(f.fid, on, o?.optBoolean("dr") == true, o?.optBoolean("cv") == true, o?.optLong("at") ?: 0L)
                             main.post { changed.fire() }
                         }
                     })

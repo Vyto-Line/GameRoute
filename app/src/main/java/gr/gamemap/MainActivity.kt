@@ -3972,7 +3972,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val c = Friends.core
         val cv = Convoy.code
         val fr = c.friends.sortedWith(compareBy({ !c.isOnline(it.fid) }, { it.name.lowercase() }))
-        val key = "${c.code}|${fr.joinToString { it.fid + it.name + c.isOnline(it.fid) + (cv?.let { x -> c.sentTo(it.fid, x)?.status }) }}|" +
+        val key = "${c.code}|${fr.joinToString { it.fid + it.name + c.isOnline(it.fid) + Friends.activityText(it.fid) + (cv?.let { x -> c.sentTo(it.fid, x)?.status }) }}|" +
             "${c.requests.joinToString { it.fid }}|${c.invites.joinToString { it.convoy + it.count }}|${c.pending.joinToString { it.nonce + it.status }}|$cv|${Convoy.active}|${theme.name}|${MapState.dark}"
         if (key == friendsKey && sheetHost.childCount > 0) return
         friendsKey = key
@@ -4051,7 +4051,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     addView(label(c.shownName(f), 15f, bold = true).apply { setTextColor(ink) })
                     Friends.levelOf(f.fid).takeIf { it.isNotBlank() }?.let { addView(label(it, 12.5f, bold = true).apply { setTextColor(readable(accent)) }) }
                     val busy = online && c.isBusy(f.fid)
-                    addView(label(if (busy) L.t("Do not disturb · invites wait") else if (online) "Online" else "Offline", 13f).apply { setTextColor(if (busy) readable(Color.rgb(230, 70, 70)) else if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
+                    addView(label(Friends.activityText(f.fid), 13f).apply { setTextColor(if (busy) readable(Color.rgb(230, 70, 70)) else if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 val st = cv?.let { c.sentTo(f.fid, it)?.status }
                 if (st != null) addView(label(when (st) { "seen" -> "✓✓ Seen"; "joined" -> "✓ Joined"; "no" -> "Not now"; else -> "✓ Sent" }, 13.5f, bold = true).apply {

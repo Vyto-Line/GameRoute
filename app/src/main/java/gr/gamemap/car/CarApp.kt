@@ -1156,11 +1156,8 @@ class FriendsCarScreen(carContext: CarContext) : Screen(carContext) {
         val L = gr.gamemap.L
         val on = c.isOnline(f.fid)
         val times = c.drivesWith(f.fid)
-        val text = when {
-            on && c.isBusy(f.fid) -> L.t("Do not disturb · invites wait")
-            on -> if (times > 0) L.t("Online · drove together $times times") else L.t("Online now")
-            else -> L.t("Not online")
-        }
+        // what they're doing: driving, in a convoy, online, or when they were last on
+        val text = gr.gamemap.Friends.activityText(f.fid) + if (on && times > 0 && !c.isBusy(f.fid)) " · " + L.t("drove together $times times") else ""
         return row((if (on) "● " else "") + c.shownName(f), text, L.t("Invite"), onInvite)
     }
 }
