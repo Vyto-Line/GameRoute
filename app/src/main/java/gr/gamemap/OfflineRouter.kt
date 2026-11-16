@@ -397,7 +397,13 @@ object OfflineRouter {
                     }
                     val startAt = cumNow()
                     if (i == 0 && li == 0) steps += NavStep("depart", "straight", g.name(e), 0, s.point, null)
-                    if (i > 0) step(g, leg, i)?.let { steps += it }
+                    if (i > 0) step(g, leg, i)?.let { st ->
+                        // the same turn again a few metres on (a split junction): say it once
+                        val last = steps.lastOrNull()
+                        if (last != null && last.type != "depart" && last.road.isNotBlank() && last.road == st.road && st.type != "roundabout" &&
+                            Geo.distance(last.pos, st.pos) < 80) return@let
+                        steps += st
+                    }
                     addPts(part)
                     val len = cumNow() - startAt
                     seconds += len / (g.speed(e) / 3.6)
