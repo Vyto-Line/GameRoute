@@ -45,6 +45,12 @@ class CarFriendsTest {
         log.append("friends=${fr.size}, invites=${me.invites.size}\n")
         Friends::class.java.getDeclaredField("core").apply { isAccessible = true }.set(null, me)
 
+        // what broke build 100: a row button with a title and no icon
+        try {
+            androidx.car.app.model.Row.Builder().setTitle("x").addAction(androidx.car.app.model.Action.Builder().setTitle("Invite").setOnClickListener {}.build())
+            log.append("a row button without an icon: allowed\n")
+        } catch (e: Exception) { log.append("a row button without an icon: $e\n") }
+
         var failed = 0
         for (level in listOf(1, 3, 5, 6, 7, 8)) for (inConvoy in listOf(false, true)) {
             Convoy.leave(quiet = true)

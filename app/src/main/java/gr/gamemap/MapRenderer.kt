@@ -388,11 +388,13 @@ class MapRenderer(private val car: Boolean = false) {
             else { drawStandIn(c, theme, z, x, ty, paint); missing++ }
             if (showTraffic) TrafficOverlay.get(theme, z, x, ty, !interacting)?.let { c.drawBitmap(it, null, dst, overlayPaint) }
         }
-        squaresMissing = missing
+        squaresMissing = missing; squaresShown = tiles.size
     }
 
     /** Map squares still being drawn in the last frame (0: the whole map is in; for tests). */
     @Volatile var squaresMissing = -1
+        private set
+    @Volatile var squaresShown = 0
         private set
 
     /** While a tile loads, show a cached tile from a nearby zoom level instead of a gap. */
