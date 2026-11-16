@@ -3,3 +3,8 @@ build/
 local.properties
 .idea/
 *.iml
+
+# working notes (plans, ideas): kept off GitHub
+PLAN-*.md
+IDEAS.md
+NOTES*.md
