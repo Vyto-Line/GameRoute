@@ -92,7 +92,7 @@ object RoadMatch {
         if (tileKey != "test") load(p)
         if (segs.isEmpty()) return null
         val px = mx(p.lon); val py = my(p.lat)
-        val reach = (accuracy * 1.2).coerceIn(12f, 30f).toDouble()
+        val reach = (accuracy * 1.2f).coerceIn(12f, 30f).toDouble()
         val now = System.currentTimeMillis()
         val prev = last?.takeIf { now - lastAt < 10_000 }
         var best: Seg? = null; var bestScore = Double.MAX_VALUE; var bestT = 0.0; var bestDist = 0.0
