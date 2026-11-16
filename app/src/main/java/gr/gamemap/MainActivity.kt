@@ -3504,8 +3504,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     isClickable = true; setOnClickListener { openSheet(k) }
                     addView(LinearLayout(context).apply {
                         orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, p * 3 / 4, 0, p * 2 / 3)
-                        addView(label(ic, 22f).apply { setTextColor(readable(accent)); gravity = Gravity.CENTER }, LinearLayout.LayoutParams((28 * d).toInt(), (28 * d).toInt()))
-                        addView(label(t, 14f, bold = true).apply { setTextColor(ink); setPadding(0, p / 3, 0, 0) })
+                        addView(label(ic, 22f).apply { setTextColor(readable(accent)); gravity = Gravity.CENTER }, LinearLayout.LayoutParams((28 * d).toInt(), (28 * d).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL })
+                        addView(label(t, 14f, bold = true).apply { setTextColor(ink); setPadding(0, p / 3, 0, 0); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                     }, android.widget.FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                     if (k == "friends" && waiting > 0) addView(label("$waiting", 11.5f, bold = true).apply {
                         setTextColor(Color.WHITE); gravity = Gravity.CENTER; background = bg(Color.rgb(230, 60, 60), radius = 9f)
