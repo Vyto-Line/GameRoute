@@ -80,7 +80,7 @@ class FinalStage4Test {
         assertFalse("no Report button", home.any { it == "⚠" })
         activity.showSettings(); idle(); tap("Map")
         assertTrue("Show traffic in Settings › Map", texts(root).any { it.startsWith("Show traffic") })
-        activity.showSettings(); idle(); tap("Advanced")
+        tap("‹ Settings"); tap("Advanced")
         assertTrue(texts(root).any { it.startsWith("What's new") })
         tap("What's new"); shot("stage4_whatsnew")
         log.append("What's new: ${texts(root).filter { it.length > 3 }.take(6)}\n")
