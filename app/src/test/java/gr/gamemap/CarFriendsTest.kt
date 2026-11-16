@@ -72,7 +72,31 @@ class CarFriendsTest {
                 e.stackTrace.take(12).forEach { log.append("    at $it\n") }
             }
         }
+        // in a convoy: Leave is there (a row and a header button), and its question builds
         Convoy.leave(quiet = true)
+        Convoy.debugStart(Place("Nafplio", "", LatLng(37.567, 22.805)))
+        val ctx = TestCarContext.createCarContext(app)
+        androidx.car.app.CarContext::class.java.getDeclaredMethod("updateHandshakeInfo", androidx.car.app.HandshakeInfo::class.java)
+            .apply { isAccessible = true }.invoke(ctx, androidx.car.app.HandshakeInfo("com.google.android.projection.gearhead", 7))
+        val s = FriendsCarScreen(ctx); ScreenController(s).moveToState(Lifecycle.State.RESUMED)
+        val t = s.onGetTemplate() as ListTemplate
+        val rows = t.sectionedLists.flatMap { it.itemList.items }.map { (it as Row).title.toString() }
+        log.append("convoy rows: $rows, header buttons ${t.actionStrip?.actions?.size}\n")
+        assertTrue("Leave the convoy row", rows.any { it.contains("Leave the convoy") })
+        assertTrue("Drive to the destination row", rows.any { it.contains("Drive to Nafplio") })
+        val q = gr.gamemap.car.LeaveConvoyCarScreen(ctx); ScreenController(q).moveToState(Lifecycle.State.RESUMED)
+        val qt = q.onGetTemplate() as androidx.car.app.model.MessageTemplate
+        log.append("leave question: ${qt.title} · ${qt.actions.map { it.title }}\n")
+        Convoy.leave(quiet = true)
+
+        // the car buttons stay at the screen's edge even when the car reports a half-width free area
+        val w = 1920; val h = 720
+        val rr = MapRenderer(car = true).apply { carButtons = true; forceLite = false }
+        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        rr.draw(android.graphics.Canvas(bmp), w, h, android.graphics.Rect(0, 0, w / 2, h), 1.6f, true)
+        val edge = rr.carButtonAt(w - 14 * 1.6f - 24 * 1.6f, h - 14 * 1.6f - 24 * 1.6f)
+        log.append("button at the right edge with a half-width area: $edge\n")
+        assertTrue("zoom button at the edge", edge != null)
         assertTrue("the car Friends screen threw on $failed setups (see car_friends.txt)", failed == 0)
     }
 }

@@ -279,7 +279,14 @@ class MapRenderer(private val car: Boolean = false) {
         // the convoy lobby takes the top-left corner (instead of Where to? and the saved places)
         carLobbyShown = car && hud && carButtons && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planning &&
             selectedPlace == null && Convoy.proposal == null && !Convoy.meSharing && !Convoy.underway && !carTrip
-        if (car && hud && carButtons && !NavEngine.planning && !carTrip) drawCarButtons(c, area, d, theme)
+        if (car && hud && carButtons && !NavEngine.planning && !carTrip) {
+            // Some Android Auto versions report a much narrower free area for a moment (after the
+            // knob/touchpad focus or pan mode) and don't always widen it again: the buttons then
+            // sat in the middle of the map. A real strip or panel never takes 30% of the width,
+            // so then the buttons stay at the screen's edge.
+            val ra = if (area.right < w * 0.7f) Rect(area.left, area.top, w, area.bottom) else area
+            drawCarButtons(c, ra, d, theme)
+        }
         bannerBottom = area.top.toFloat()
         if (hud && !NavEngine.planning && NavEngine.offer == null && !carTrip) {
             // in the car: smaller, in the very top-left corner
@@ -1024,7 +1031,7 @@ class MapRenderer(private val car: Boolean = false) {
     /** Rain streaks: fixed positions (0..1), drifting slowly down with time. */
     private val rainDrops by lazy {
         val r = java.util.Random(11)
-        FloatArray(150 * 3) { i -> if (i % 3 == 2) 0.5f + r.nextFloat() else r.nextFloat() }
+        FloatArray(80 * 3) { i -> if (i % 3 == 2) 0.5f + r.nextFloat() else r.nextFloat() }
     }
 
     /**
@@ -1041,8 +1048,8 @@ class MapRenderer(private val car: Boolean = false) {
         fill.shader = null
         stroke.color = if (dark) Color.argb(40, 217, 200, 255) else Color.argb(46, 90, 60, 150)
         stroke.strokeWidth = 1f * d
-        // real rain speed: a drop crosses the screen in about a second (bigger, nearer drops
-        // faster), falling a little sideways, and comes back in at the top somewhere else
+        // a drop crosses the screen in about two seconds (bigger, nearer drops a little faster),
+        // falling a little sideways, and comes back in at the top somewhere else: a light rain
         val now = android.os.SystemClock.uptimeMillis()
         val w = a.width().toFloat(); val h = a.height().toFloat()
         val drops = rainDrops
@@ -1050,7 +1057,7 @@ class MapRenderer(private val car: Boolean = false) {
         while (i < drops.size) {
             val size = drops[i + 2]
             val len = size * 20 * d
-            val period = (1500f - size * 600f) // ms per fall: 600 to 1200
+            val period = (2600f - size * 700f) // ms per fall: 1550 to 2250
             val f = ((now + (drops[i + 1] * period).toLong()) % period.toLong()) / period
             val lap = (now + (drops[i + 1] * period).toLong()) / period.toLong()
             val x0 = ((drops[i] + lap * 0.618034) % 1.0).toFloat()

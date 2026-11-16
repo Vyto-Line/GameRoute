@@ -186,6 +186,7 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
     }
 
     override fun onVisibleAreaChanged(visibleArea: Rect) {
+        gr.gamemap.CrashLog.note("car visible area $visibleArea of ${w}x$h")
         visible = Rect(visibleArea)
         redraw()
     }
@@ -1093,10 +1094,23 @@ class FriendsCarScreen(carContext: CarContext) : Screen(carContext) {
             })
             if (C.active) {
                 // in a convoy: who's in, who has my invite, then everyone else
+                // the convoy itself: where it's going (one tap to drive there) and leaving it
+                val dest = C.destination
+                val top = ArrayList<Row>()
+                if (dest != null && !NavEngine.active) top += Row.Builder().setTitle(L.t("Drive to ${dest.name}")).addText(L.t("The convoy's destination"))
+                    .setOnClickListener { screenManager.popToRoot(); NavEngine.start(carContext, dest) }.build()
+                top += Row.Builder().setTitle(L.t("Leave the convoy")).addText(L.t("The others carry on without you"))
+                    .setOnClickListener { screenManager.push(LeaveConvoyCarScreen(carContext)) }.build()
+                section(L.t("Convoy") + (C.code?.let { " · " + it.uppercase() } ?: ""), top)
                 val inConvoy = C.members.values.filter { it.state != "left" && !it.sharing }
                 section(L.t("In your convoy"), inConvoy.map { m ->
                     val st = when { m.stale -> L.t("no signal"); m.lostSecs > 0 -> L.t(C.lostText(m.lostSecs)); m.state == "ready" -> L.t(if (m.ready) "ready ✓" else "joined"); m.state == "arrived" -> L.t("arrived"); else -> L.t("${m.kmh} km/h") }
-                    Row.Builder().setTitle("● " + m.name).addText(st).build()
+                    // tap: the map goes to them
+                    Row.Builder().setTitle("● " + m.name).addText(st + " · " + L.t("tap to see on the map")).setOnClickListener {
+                        val at = m.shown ?: m.pos
+                        screenManager.popToRoot()
+                        if (at != null) MapState.car.pan(at, 0f)
+                    }.build()
                 })
                 val members = inConvoy.map { it.fid }.toSet()
                 val sent = c.friends.filter { it.fid !in members && C.code?.let { x -> c.sentTo(it.fid, x) } != null }
@@ -1130,7 +1144,10 @@ class FriendsCarScreen(carContext: CarContext) : Screen(carContext) {
             CarToast.makeText(carContext, L.t("Convoy started: invite friends below"), CarToast.LENGTH_SHORT).show()
             listener()
         }.build())
-        else strip.addAction(Action.Builder().setTitle(L.t("Message")).setOnClickListener { screenManager.push(QuickMessageCarScreen(carContext)) }.build())
+        else {
+            strip.addAction(Action.Builder().setTitle(L.t("Message")).setOnClickListener { screenManager.push(QuickMessageCarScreen(carContext)) }.build())
+            strip.addAction(Action.Builder().setIcon(icon(carContext, R.drawable.ic_i_leave)).setOnClickListener { screenManager.push(LeaveConvoyCarScreen(carContext)) }.build())
+        }
         b.setActionStrip(strip.build())
         return b.build()
     }
@@ -1145,6 +1162,22 @@ class FriendsCarScreen(carContext: CarContext) : Screen(carContext) {
             else -> L.t("Not online")
         }
         return row((if (on) "● " else "") + c.shownName(f), text, L.t("Invite"), onInvite)
+    }
+}
+
+/** "Leave the convoy?" Leave / Stay: one tap from Friends, never by accident. */
+class LeaveConvoyCarScreen(carContext: CarContext) : Screen(carContext) {
+    override fun onGetTemplate(): Template {
+        val L = gr.gamemap.L
+        return androidx.car.app.model.MessageTemplate.Builder(L.t("The others carry on without you. You can join again from an invite."))
+            .setTitle(L.t("Leave the convoy?")).setHeaderAction(Action.BACK)
+            .addAction(Action.Builder().setTitle(L.t("Leave")).setBackgroundColor(CarColor.RED).setOnClickListener {
+                gr.gamemap.Convoy.leave()
+                CarToast.makeText(carContext, L.t("You left the convoy"), CarToast.LENGTH_SHORT).show()
+                screenManager.popToRoot()
+            }.build())
+            .addAction(Action.Builder().setTitle(L.t("Stay")).setOnClickListener { screenManager.pop() }.build())
+            .build()
     }
 }
 
