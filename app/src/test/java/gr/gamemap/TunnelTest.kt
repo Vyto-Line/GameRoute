@@ -22,12 +22,14 @@ class TunnelTest {
         VectorSource.init(RuntimeEnvironment.getApplication())
         // central Athens at z14: find the tile with the most tunnel road
         var best: Triple<Int, Int, Int>? = null
-        for (x in 9254..9260) for (y in 6302..6308) {
+        var got = 0
+        for (x in 9268..9278) for (y in 6316..6324) {
             val vt = VectorSource.get(14, x, y) ?: continue
+            got++
             val n = vt.features.count { it.layer == "transportation" && it["brunnel"] == "tunnel" && it.type == 2 && it["class"] in setOf("motorway", "trunk", "primary", "secondary", "tertiary") }
             if (n > (best?.third ?: 0)) best = Triple(x, y, n)
         }
-        assertTrue("a tile with a tunnel", best != null)
+        assertTrue("a tile with a tunnel ($got tiles read)", best != null)
         val (tx, ty, n) = best!!
         val themes = Theme.entries
         val tile = 512
