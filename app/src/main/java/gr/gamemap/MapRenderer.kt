@@ -377,6 +377,7 @@ class MapRenderer(private val car: Boolean = false) {
         // ready instead of popping in. Asked for first: the loader takes newest requests first,
         // so what's on screen still wins.
         if (!interacting && NavEngine.active && view.following) prefetchAhead(theme, z, tiles)
+        var missing = 0
         for (t in tiles) {
             val tx = t[0]; val ty = t[1]
             val x = tx.mod(n)
@@ -384,11 +385,15 @@ class MapRenderer(private val car: Boolean = false) {
             dst.set(left, top, left + tilePx, top + tilePx)
             val bmp = if (interacting) TileCache.peek(theme, z, x, ty) else TileCache.get(theme, z, x, ty)
             if (bmp != null) c.drawBitmap(bmp, null, dst, paint)
-            else drawStandIn(c, theme, z, x, ty, paint)
+            else { drawStandIn(c, theme, z, x, ty, paint); missing++ }
             if (showTraffic) TrafficOverlay.get(theme, z, x, ty, !interacting)?.let { c.drawBitmap(it, null, dst, overlayPaint) }
         }
-
+        squaresMissing = missing
     }
+
+    /** Map squares still being drawn in the last frame (0: the whole map is in; for tests). */
+    @Volatile var squaresMissing = -1
+        private set
 
     /** While a tile loads, show a cached tile from a nearby zoom level instead of a gap. */
     private var aheadAt = 0L
@@ -1034,15 +1039,22 @@ class MapRenderer(private val car: Boolean = false) {
         fill.shader = null
         stroke.color = if (dark) Color.argb(40, 217, 200, 255) else Color.argb(46, 90, 60, 150)
         stroke.strokeWidth = 1f * d
-        val t = (android.os.SystemClock.uptimeMillis() % 60_000L) / 60_000f
+        // real rain speed: a drop crosses the screen in about a second (bigger, nearer drops
+        // faster), falling a little sideways, and comes back in at the top somewhere else
+        val now = android.os.SystemClock.uptimeMillis()
         val w = a.width().toFloat(); val h = a.height().toFloat()
         val drops = rainDrops
         var i = 0
         while (i < drops.size) {
-            val len = drops[i + 2] * 18 * d
-            val x = a.left + drops[i] * w
-            val y = a.top + ((drops[i + 1] + t * 3f) % 1f) * h
-            c.drawLine(x, y, x + len * 0.22f, y + len, stroke)
+            val size = drops[i + 2]
+            val len = size * 20 * d
+            val period = (1500f - size * 600f) // ms per fall: 600 to 1200
+            val f = ((now + (drops[i + 1] * period).toLong()) % period.toLong()) / period
+            val lap = (now + (drops[i + 1] * period).toLong()) / period.toLong()
+            val x0 = ((drops[i] + lap * 0.618034) % 1.0).toFloat()
+            val y = a.top - len + f * (h + len)
+            val x = a.left + x0 * w + f * h * 0.18f - h * 0.09f
+            c.drawLine(x, y, x + len * 0.18f, y + len, stroke)
             i += 3
         }
     }

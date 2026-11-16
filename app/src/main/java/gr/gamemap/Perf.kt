@@ -95,8 +95,16 @@ object Perf {
         }
     }
 
-    /** Only the effects are moving (rain, snow) while the car stands still: a few frames a second. */
-    const val EFFECTS_ONLY_DELAY = 200L
+    /**
+     * Only the effects are moving (rain, snow) while the car stands still. Rain needs a steady
+     * frame rate to look like rain instead of jumping streaks: 20-30 frames a second, fewer on
+     * Smoothness Low (Battery saver turns the effects off altogether).
+     */
+    fun effectsDelay(): Long = when (if (saving) maxOf(smoothness, LOW) else smoothness) {
+        HIGH -> 33L
+        NORMAL -> 50L
+        else -> 100L
+    }
 
     // ---- watching the drawing
     private val recent = LongArray(90)

@@ -366,6 +366,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(controls, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
             // recenter: bottom right, just above whatever card is at the bottom (a target icon)
             addView(recenterBtn, FrameLayout.LayoutParams((56 * d).toInt(), (56 * d).toInt(), Gravity.END or Gravity.BOTTOM).apply { marginEnd = (14 * d).toInt() })
+            // map style: bottom right, under the thumb (the recenter button goes above it)
+            addView(styleBtn, FrameLayout.LayoutParams((50 * d).toInt(), (50 * d).toInt(), Gravity.END or Gravity.BOTTOM).apply { marginEnd = (17 * d).toInt() })
             laterPill = TextView(this@MainActivity).apply {
                 textSize = 14f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; visibility = View.GONE
                 val q = (12 * d).toInt(); setPadding(q, 0, q, 0); elevation = 6 * d
@@ -1129,7 +1131,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(styleBtn); addView(trafficBtn); addView(reportBtn); addView(muteBtn); addView(overviewBtn); addView(navMenuBtn)
+            // (Map style sits at the bottom right, by the recenter button)
+            addView(trafficBtn); addView(reportBtn); addView(muteBtn); addView(overviewBtn); addView(navMenuBtn)
         }
         askText = label("", 16f, bold = true)
         askCard = LinearLayout(this).apply {
@@ -1881,7 +1884,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         muteBtn.text = if (Voice.muted) "🔇" else "🔊"
         // while driving only three: sound, report, ☰ (style, traffic and overview live in ☰)
         overviewBtn.visibility = View.GONE
-        styleBtn.visibility = if (nav) View.GONE else View.VISIBLE
+        styleBtn.visibility = if (nav || planning || searching) View.GONE else View.VISIBLE
         navMenuBtn.visibility = if (nav) View.VISIBLE else View.GONE
         // update 100: Report is gone (unused), Show traffic lives in Settings › Map
         reportBtn.visibility = View.GONE
@@ -2038,8 +2041,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             homeSheet.visibility == View.VISIBLE -> homeSheet.height
             else -> insets.bottom
         }
-        recenterBtn.translationY = -(bottom + 14 * d)
-        laterPill.translationY = -(bottom + 84 * d) // above the recenter button, clear of the speed
+        val styleUp = if (styleBtn.visibility == View.VISIBLE) 60 * d else 0f
+        styleBtn.translationY = -(bottom + 14 * d)
+        recenterBtn.translationY = -(bottom + 14 * d + styleUp)
+        val recUp = if (recenterBtn.visibility == View.VISIBLE) 70 * d else 0f
+        laterPill.translationY = -(bottom + 14 * d + styleUp + recUp) // above the buttons, clear of the speed
         if (map.insetTop != top || map.insetBottom != bottom) {
             map.insetTop = top
             map.insetBottom = bottom
@@ -2281,6 +2287,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         if (sheetOverlay.visibility != View.VISIBLE) sheetStack.clear()
         if (kind != sheetKind) { settingsPage = null; settingsQuery = "" }
+        if (kind != sheetKind) styleScroll = 0
         // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
         quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""; progressKey = ""; garageKey = ""; youKey = ""
         if ((kind == "friends" || kind == "addfriend") && Friends.ready && Friends.core.started) Friends.kick()
@@ -2359,13 +2366,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (MapState.lightMode == MapState.LightMode.AUTO) sheetHost.addView(label("Switches at sunrise and sunset", 13f).apply {
             setTextColor(dim()); setPadding((4 * d).toInt(), (6 * d).toInt(), 0, 0)
         })
-        // theme grid, 3 per row
+        // theme grid, 3 per row: scrolls, so every style (and the car's style below) can be reached
+        // on short screens and with big text
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.66).apply { addView(grid); post { scrollTo(0, styleScroll) }
+            setOnScrollChangeListener { _, _, y, _, _ -> styleScroll = y } }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         val dark = MapState.dark
         var row: LinearLayout? = null
         Theme.entries.forEachIndexed { i, th ->
             if (i % 3 == 0) {
                 row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                sheetHost.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (10 * d).toInt() })
+                grid.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (10 * d).toInt() })
             }
             val sel = th == MapState.theme
             val card = LinearLayout(this).apply {
@@ -2392,9 +2403,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val rest = (3 - Theme.entries.size % 3) % 3
         repeat(rest) { row?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
         // car style
-        sheetHost.addView(settingRow("Android Auto style", MapState.carTheme?.title ?: "Same as phone") { chooseCarStyle() },
-            LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (12 * d).toInt() })
+        grid.addView(settingRow("Android Auto style", MapState.carTheme?.title ?: "Same as phone") { chooseCarStyle() },
+            LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (12 * d).toInt(); bottomMargin = (12 * d).toInt() })
     }
+
+    /** Where the style list was scrolled to (picking a style redraws the sheet: it stays put). */
+    private var styleScroll = 0
 
     private fun chooseCarStyle() {
         val names = arrayOf("Same as phone") + Theme.entries.map { it.title }.toTypedArray()
@@ -5322,8 +5336,8 @@ class GameMapView(ctx: Context) : View(ctx) {
             if (MapState.gesture || renderer.interacting) postInvalidateOnAnimation()
             else postInvalidateDelayed(Perf.frameDelay(LocationTracker.speedMps > 1f))
         } else if (renderer.effectsMoving) {
-            // standing still with only the rain or snow moving: a few frames a second
-            postInvalidateDelayed(Perf.EFFECTS_ONLY_DELAY)
+            // standing still with only the rain or snow moving: steady enough to look like rain
+            postInvalidateDelayed(Perf.effectsDelay())
         }
     }
 }

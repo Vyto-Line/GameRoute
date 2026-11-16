@@ -145,29 +145,48 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
      * Drawing has its own thread: the main thread stays free for the car's taps and drags, so
      * they're handled at once instead of waiting behind a frame.
      */
-    private val thread = android.os.HandlerThread("car-render", android.os.Process.THREAD_PRIORITY_DISPLAY).apply { start() }
-    private val rh = Handler(thread.looper)
-    private val lock = Any()
+    @Volatile private var thread = newThread()
+    @Volatile private var rh = Handler(thread.looper)
+    private fun newThread() = android.os.HandlerThread("car-render", android.os.Process.THREAD_PRIORITY_DISPLAY).apply { start() }
+
+    /**
+     * Held while a frame is drawn. The car's own calls (screen gone, new size, visible area) never
+     * wait on it for long: a frame stuck on a screen the car is taking away (it stops taking frames
+     * first) used to hold the main thread too, and GameRoute froze in the car after a few switches.
+     */
+    @Volatile private var drawing = java.util.concurrent.locks.ReentrantLock()
+    @Volatile private var frameStarted = 0L
+
     @Volatile private var surface: Surface? = null
     @Volatile private var w = 0
     @Volatile private var h = 0
     @Volatile private var density = 1f
-    private val visible = Rect()
+    /** The part of the screen not covered by Android Auto (cards, bars): a fresh copy each change. */
+    @Volatile private var visible = Rect()
     private val draw = Runnable { render() }
-    val redraw: () -> Unit = { rh.removeCallbacks(draw); rh.post(draw) }
+    val redraw: () -> Unit = { val r = rh; r.removeCallbacks(draw); r.post(draw) }
 
     override fun onSurfaceAvailable(container: SurfaceContainer) {
-        synchronized(lock) {
-            surface = container.surface
-            w = container.width; h = container.height
-            density = (container.dpi / 160f).coerceAtLeast(0.75f)
-            visible.set(0, 0, w, h)
+        // the last frame never finished (stuck on the old screen): draw on a fresh thread
+        if (frameStarted != 0L && android.os.SystemClock.uptimeMillis() - frameStarted > 1500) {
+            gr.gamemap.CrashLog.note("car: a frame was stuck, new drawing thread")
+            val old = thread
+            drawing = java.util.concurrent.locks.ReentrantLock()
+            thread = newThread(); rh = Handler(thread.looper)
+            frameStarted = 0L
+            old.quit()
         }
+        w = container.width; h = container.height
+        density = (container.dpi / 160f).coerceAtLeast(0.75f)
+        visible = Rect(0, 0, w, h)
+        hardware = true
+        surface = container.surface
+        gr.gamemap.CrashLog.note("car screen ${w}x$h")
         redraw()
     }
 
     override fun onVisibleAreaChanged(visibleArea: Rect) {
-        synchronized(lock) { visible.set(visibleArea) }
+        visible = Rect(visibleArea)
         redraw()
     }
 
@@ -177,12 +196,17 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
     }
 
     override fun onSurfaceDestroyed(container: SurfaceContainer) {
-        // waits for a frame being drawn, so the surface is never used after the car takes it back
-        synchronized(lock) { surface = null }
+        // no new frames on it; a frame being drawn gets a moment to finish, but the car is never
+        // kept waiting (it may have stopped taking frames already, and would wait for us)
+        surface = null
+        val lk = drawing
+        if (lk.tryLock(300, java.util.concurrent.TimeUnit.MILLISECONDS)) lk.unlock()
+        else gr.gamemap.CrashLog.note("car: screen gone during a frame")
     }
 
     /** The car screen went away for good: stop the drawing thread. */
     fun release() {
+        surface = null
         rh.removeCallbacksAndMessages(null)
         thread.quitSafely()
     }
@@ -221,12 +245,15 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
         if (selectedPlace != null) selectedPlace = null
     }
 
-    private var hardware = true
+    @Volatile private var hardware = true
 
     private fun render() {
-        synchronized(lock) {
+        val lk = drawing
+        if (!lk.tryLock()) { rh.postDelayed(draw, 50); return } // the screen is changing: try again in a moment
+        try {
             val s = surface ?: return
             if (!s.isValid || w == 0) return
+            frameStarted = android.os.SystemClock.uptimeMillis()
             val c = try {
                 if (hardware) s.lockHardwareCanvas() else s.lockCanvas(null)
             } catch (e: Exception) {
@@ -235,7 +262,8 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
             }
             try {
                 val t0 = android.os.SystemClock.uptimeMillis()
-                renderer.draw(c, w, h, if (visible.isEmpty) Rect(0, 0, w, h) else Rect(visible), density, hud = true)
+                val v = visible
+                renderer.draw(c, w, h, if (v.isEmpty) Rect(0, 0, w, h) else v, density, hud = true)
                 gr.gamemap.Perf.frameDrawn(android.os.SystemClock.uptimeMillis() - t0)
             } catch (e: Exception) {
                 // a frame drawn while the data changed under it: skip it, the next one is fine
@@ -246,14 +274,18 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
             } finally {
                 try { s.unlockCanvasAndPost(c) } catch (_: Exception) {}
             }
+        } finally {
+            frameStarted = 0L
+            lk.unlock()
         }
         // Keep animating (gliding arrow, smooth zoom) at ~30 fps while something moves.
+        val r = rh
         if (renderer.animating) {
-            rh.removeCallbacks(draw)
-            rh.postDelayed(draw, if (renderer.interacting) 16L else gr.gamemap.Perf.frameDelay(LocationTracker.speedMps > 1f))
+            r.removeCallbacks(draw)
+            r.postDelayed(draw, if (renderer.interacting) 16L else gr.gamemap.Perf.frameDelay(LocationTracker.speedMps > 1f))
         } else if (renderer.effectsMoving) {
-            rh.removeCallbacks(draw)
-            rh.postDelayed(draw, gr.gamemap.Perf.EFFECTS_ONLY_DELAY)
+            r.removeCallbacks(draw)
+            r.postDelayed(draw, gr.gamemap.Perf.effectsDelay())
         }
     }
 }
@@ -1006,12 +1038,22 @@ class FriendsCarScreen(carContext: CarContext) : Screen(carContext) {
         })
     }
 
-    override fun onGetTemplate(): Template {
+    /** Buttons on rows broke once (the car wants an icon on each): never again a crash, plain rows instead. */
+    private var plainRows = false
+
+    override fun onGetTemplate(): Template = try { build() } catch (e: Exception) {
+        gr.gamemap.CrashLog.note("car friends: $e")
+        if (plainRows) throw e
+        plainRows = true
+        build()
+    }
+
+    private fun build(): Template {
         val F = gr.gamemap.Friends
         val C = gr.gamemap.Convoy
         val L = gr.gamemap.L
         val limit = carListLimit(carContext)
-        val canAct = carContext.carAppApiLevel >= 6 // a button on each row (older cars: tap the row)
+        val canAct = carContext.carAppApiLevel >= 6 && !plainRows // a button on each row (older cars: tap the row)
         val sections = ArrayList<Pair<String, List<Row>>>()
         var used = 0
         fun section(title: String, rows: List<Row>) {
@@ -1022,8 +1064,12 @@ class FriendsCarScreen(carContext: CarContext) : Screen(carContext) {
         }
         fun row(title: String, text: String, button: String?, onClick: () -> Unit): Row {
             val r = Row.Builder().setTitle(title).addText(text)
-            if (button != null && canAct) r.addAction(Action.Builder().setTitle(button).setOnClickListener(onClick).build())
-            else r.setOnClickListener(onClick)
+            // Android Auto wants an icon on a row's button (a title alone throws)
+            val res = when (button) { L.t("Join") -> R.drawable.ic_act_convoy; else -> R.drawable.ic_i_plus }
+            val acted = button != null && canAct && try {
+                r.addAction(Action.Builder().setTitle(button).setIcon(icon(carContext, res)).setOnClickListener(onClick).build()); true
+            } catch (e: Exception) { gr.gamemap.CrashLog.note("car friends row button: $e"); false }
+            if (!acted) r.setOnClickListener(onClick)
             return r.build()
         }
         fun invite(f: gr.gamemap.FriendCore.Friend) {
