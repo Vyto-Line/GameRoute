@@ -109,7 +109,7 @@ class SpeedStage2Test {
         val p = r.points[r.points.size / 3]
         LocationTracker.onLocationChanged(Location("gps").apply { latitude = p.lat; longitude = p.lon; speed = 0f; accuracy = 5f; time = System.currentTimeMillis() })
         val w = 1920; val h = 720
-        val rr = MapRenderer(car = true).apply { carButtons = true }
+        val rr = MapRenderer(car = true).apply { carButtons = true; forceLite = false } // the test machine is slow: no automatic lite mode
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val c = Canvas(bmp)
         MapState.setTheme(Theme.ARCTIC); MapState.setLightMode(MapState.LightMode.LIGHT)
         fun frames(n: Int) = repeat(n) { rr.draw(c, w, h, Rect(0, 0, w, h), 1.6f, true); looper.idleFor(java.time.Duration.ofMillis(60)); Thread.sleep(25) }
@@ -143,7 +143,7 @@ class SpeedStage2Test {
         // phone map with snow
         MapState.setLightMode(MapState.LightMode.DARK)
         val pw = 1080; val ph = 2340
-        val pr = MapRenderer(car = false)
+        val pr = MapRenderer(car = false).apply { forceLite = false }
         val pb = Bitmap.createBitmap(pw, ph, Bitmap.Config.ARGB_8888); val pc = Canvas(pb)
         repeat(30) { pr.draw(pc, pw, ph, Rect(0, 0, pw, ph), 2.75f, true); looper.idleFor(java.time.Duration.ofMillis(60)); Thread.sleep(25) }
         File(out, "stage2_snow_phone_dark.png").outputStream().use { pb.compress(Bitmap.CompressFormat.PNG, 100, it) }
