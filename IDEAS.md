@@ -46,7 +46,7 @@ Mockups: the GameRoute mockups canvas, rows 18 (Friends) and 19 (Backup & restor
 
 ## Next (planned 16 Nov 2026, mockups rows 25–27)
 
-1. **Violet Rain** map style (27): purple neon roads, amber route, faint rain and haze, lit windows.
+1. ~~**Violet Rain** map style (27)~~ · done in build-95.
 2. **Declutter** (26): a round More button first (26j, option B), then Home, Work + the 2
    places you go to most at this hour; More opens a sheet (fuel, parking, chargers, start or join
    a convoy, saved places); while driving only turn, speed and arrival
