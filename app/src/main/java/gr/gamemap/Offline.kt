@@ -61,7 +61,39 @@ object Offline {
     fun mayRefresh(): Boolean = ::appContext.isInitialized && autoUpdate && (!wifiOnly || onWifi())
 
     /** Offline routing ready (the road file downloaded). */
-    fun routingReady(): Boolean = false
+    fun routingReady(): Boolean = OfflineRouter.present
+
+    /** Connected to the internet right now (a network that has been checked to work). */
+    fun online(): Boolean = try {
+        val cm = appContext.getSystemService(android.net.ConnectivityManager::class.java)
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        caps != null && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } catch (e: Exception) { true }
+
+    /** The road file's download size (from its info file), once known. */
+    @Volatile var roadsSize = 0L
+
+    fun loadRoadsInfo() {
+        if (roadsSize > 0) return
+        Thread {
+            try { roadsSize = org.json.JSONObject(Http.get(OfflineRouter.INFO, timeout = 8000)).optLong("gz"); changed.fire() } catch (_: Exception) {}
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Downloads the road file (offline routing), on Wi-Fi if asked. */
+    fun downloadRoads() {
+        if (OfflineRouter.downloading) return
+        Thread {
+            while (wifiOnly && !onWifi()) {
+                if (!waitingForWifi) { waitingForWifi = true; changed.fire() }
+                try { Thread.sleep(3000) } catch (_: InterruptedException) { return@Thread }
+            }
+            if (waitingForWifi) { waitingForWifi = false; changed.fire() }
+            OfflineRouter.download { changed.fire() }
+            changed.fire()
+        }.apply { priority = Thread.MIN_PRIORITY }.start()
+    }
 
     private lateinit var appContext: Context
     fun init(ctx: Context) { appContext = ctx.applicationContext }

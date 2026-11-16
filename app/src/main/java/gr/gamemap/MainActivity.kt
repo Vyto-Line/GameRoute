@@ -3595,7 +3595,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Offline maps: download the map around here, list and delete downloads. */
     private fun renderOffline() {
         val areas = Offline.areas()
-        val key = "${areas.size}|${Offline.downloading}|${Offline.done.get() / 20}|${Offline.waitingForWifi}|${Offline.wifiOnly}${Offline.autoUpdate}${Offline.alongRoutes}|${theme.name}|${MapState.dark}"
+        val key = "${areas.size}|${Offline.downloading}|${Offline.done.get() / 20}|${Offline.waitingForWifi}|${Offline.wifiOnly}${Offline.autoUpdate}${Offline.alongRoutes}|${OfflineRouter.present}${OfflineRouter.downloading}${(OfflineRouter.progress * 50).toInt()}${Offline.roadsSize}|${theme.name}|${MapState.dark}"
         if (key == offlineKey && sheetHost.childCount > 0) return
         offlineKey = key
         Offline.changed -= offlineListener; Offline.changed += offlineListener
@@ -3629,9 +3629,38 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2; bottomMargin = p / 2 })
             body.addView(pill("Stop") { Offline.cancelled = true }.apply { setTextColor(ink) })
         }
+        val date = java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault())
+        // offline routing: the road file for Greece
+        Offline.loadRoadsInfo()
+        body.addView(label("OFFLINE ROUTING", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.06f; setPadding(0, p, 0, p / 3) })
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(p, p / 2, p / 2, p / 2); background = bg(dim(if (OfflineRouter.present) 30 else 16), radius = 14f)
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label((if (OfflineRouter.present) "✓ " else "") + L.t("Roads of Greece"), 15.5f, bold = true).apply { setTextColor(ink) })
+                val sub = when {
+                    OfflineRouter.downloading -> L.t("Downloading… ${(OfflineRouter.progress * 100).toInt()}%")
+                    OfflineRouter.present -> "${Offline.size(OfflineRouter.bytes())} · ${date.format(java.util.Date(OfflineRouter.date()))} · " + L.t("routes and reroutes with no signal")
+                    Offline.roadsSize > 0 -> L.t("New routes and reroutes with no signal") + " · " + L.t("about ${Offline.size(Offline.roadsSize)}")
+                    else -> L.t("New routes and reroutes with no signal")
+                }
+                addView(label(sub, 13f).apply { setTextColor(dim()) })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            when {
+                OfflineRouter.downloading -> {}
+                OfflineRouter.present -> addView(pill("Delete") {
+                    AlertDialog.Builder(this@MainActivity).setMessage(L.t("Delete the offline roads? Routes will need the internet again."))
+                        .setPositiveButton("Delete") { _, _ -> OfflineRouter.delete(); Offline.changed.fire() }.setNegativeButton("Cancel", null).showT()
+                }.apply { textSize = 14f; setTextColor(readable(Color.rgb(220, 60, 60))) })
+                else -> addView(pill("⬇ Download") {
+                    if (Offline.wifiOnly && !Offline.onWifi()) Toast.makeText(this@MainActivity, L.t("It starts as soon as you're on Wi-Fi"), Toast.LENGTH_LONG).show()
+                    Offline.downloadRoads()
+                }.apply { textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) })
+            }
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
         // regions
         body.addView(label("REGIONS", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.06f; setPadding(0, p, 0, p / 3) })
-        val date = java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault())
         for (r in Offline.regions) {
             val have = Offline.downloaded(r)
             body.addView(LinearLayout(this).apply {

@@ -676,7 +676,8 @@ object NavEngine {
 
     private fun apply(r: RouteOption, announce: Boolean) {
         current = r
-        noSignal = false
+        // planned on the phone with no signal: the chip says so
+        noSignal = Router.lastSource == "Offline"
         Offline.saveAlong(r)
         if (tripPlanned < 0) tripPlanned = r.distance
         secondsPerMeter = if (r.distance > 0) r.duration / r.distance else 0.08

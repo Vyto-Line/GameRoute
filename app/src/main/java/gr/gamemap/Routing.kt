@@ -104,6 +104,13 @@ class RouteOption(
 object Osrm {
     /** Routes from [from] to [to], through the [via] stops in order. */
     fun routes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float? = null, reroute: Boolean = false, via: List<LatLng> = emptyList()): List<RouteOption> {
+        if (!online()) offline(from, to, heading, via)?.let { return it }
+        return try { onlineRoutes(from, to, alternatives, heading, reroute, via) } catch (e: Exception) {
+            offline(from, to, heading, via) ?: throw e
+        }
+    }
+
+    private fun onlineRoutes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float?, reroute: Boolean, via: List<LatLng>): List<RouteOption> {
         val pts = listOf(from) + via + listOf(to)
         var url = "https://router.project-osrm.org/route/v1/driving/" +
             pts.joinToString(";") { "${it.lon},${it.lat}" } +
@@ -192,7 +199,19 @@ object Router {
      * A reroute, as fast as possible: OSRM, and if it hasn't answered in [headStart] ms TomTom too;
      * the first good answer wins (no more waiting out OSRM's 8 s timeout when it's having a slow moment).
      */
+    /** The phone's own router (no signal needed), if the road file is downloaded. */
+    private fun offline(from: LatLng, to: LatLng, heading: Float?, via: List<LatLng>): List<RouteOption>? {
+        if (!OfflineRouter.present) return null
+        val r = try { OfflineRouter.route(from, to, heading, via) } catch (e: Throwable) { CrashLog.note("offline route: ${e.message}"); null } ?: return null
+        lastSource = "Offline"
+        return listOf(r)
+    }
+
+    private fun online() = try { Offline.online() } catch (e: Exception) { true }
+
     fun quick(from: LatLng, to: LatLng, heading: Float?, via: List<LatLng>, headStart: Long = 1200): List<RouteOption> {
+        // no internet: straight to the phone's own router (no waiting for timeouts)
+        if (!online()) offline(from, to, heading, via)?.let { return it }
         if (!Traffic.active) return routes(from, to, false, heading, reroute = true, via = via)
         val done = java.util.concurrent.ExecutorCompletionService<Pair<String, List<RouteOption>?>>(racers)
         done.submit { "OSRM" to try { Osrm.routes(from, to, false, heading, true, via).takeIf { it.isNotEmpty() } } catch (e: Exception) { null } }
@@ -213,6 +232,7 @@ object Router {
             if (list != null) { lastSource = src; return list }
             if (!tomtomAsked) askTomTom() // OSRM failed fast: TomTom now
         }
+        offline(from, to, heading, via)?.let { return it }
         throw RuntimeException("No route")
     }
 

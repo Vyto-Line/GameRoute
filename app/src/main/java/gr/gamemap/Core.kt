@@ -52,6 +52,7 @@ class GameMapApp : Application() {
         Startup.step("places") { Places.init(this) }
         Startup.step("open places") { OpenPlaces.init(this) }
         Startup.step("offline") { Offline.init(this) }
+        Startup.step("offline roads") { OfflineRouter.init(this) }
         Startup.step("convoy") { Convoy.init(this) }
         Startup.step("friends") { Friends.init(this) }
         Startup.step("fuel") { Fuel.init(this) }
