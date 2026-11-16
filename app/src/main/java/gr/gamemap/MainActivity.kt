@@ -2710,8 +2710,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Map smoothness while driving", L.t(PERF_SMOOTH[Perf.smoothness])) { choosePerf("smooth") },
                 switchRow("Live friend updates (off: checked every 15 min)", Perf.liveFriends) { Perf.liveFriends = it; Friends.Live.start() },
                 switchRow("Save GPS when stopped", Perf.saveGpsStopped) { Perf.saveGpsStopped = it },
-                settingRow("Last drive", Perf.lastDrive() ?: L.t("Measured on your next drive of 5 minutes or more")) {},
-                if (Perf.struggling) settingRow("Effects paused", L.t("The map was slow on this phone, so effects are off until the app restarts")) {} else null,
+                settingRow(L.t("Last drive") + ": " + (Perf.lastDrive() ?: L.t("Measured on your next drive of 5 minutes or more")), null) {},
+                if (Perf.struggling) settingRow(L.t("Effects paused") + ": " + L.t("The map was slow on this phone, so effects are off until the app restarts"), null) {} else null,
             )
             else -> listOf(
                 settingRow("Units", if (MapState.imperial) "Miles" else "Kilometres") { MapState.setImperial(!MapState.imperial) },

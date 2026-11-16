@@ -1066,9 +1066,10 @@ class MapRenderer(private val car: Boolean = false) {
             val fall = (f[i + 1] + t * (0.035f + size * 0.025f)) % 1f   // big flakes fall a little faster
             val x = a.left + ((f[i] * w + kotlin.math.sin(t * 0.8f + f[i + 3]) * 14 * d) % w + w) % w
             val y = a.top + fall * h
-            fill.color = if (dark) Color.argb(170, 235, 242, 250) else Color.argb(235, 255, 255, 255)
+            // on the white map the flakes need a cool edge to show at all
+            fill.color = if (dark) Color.argb(170, 235, 242, 250) else Color.argb(230, 214, 228, 242)
             c.drawCircle(x, y, (1.6f + size * 1.6f) * d, fill)
-            if (!dark) { stroke.color = Color.argb(90, 70, 110, 150); stroke.strokeWidth = 0.8f * d; c.drawCircle(x, y, (1.6f + size * 1.6f) * d, stroke) }
+            if (!dark) { stroke.color = Color.argb(170, 92, 128, 168); stroke.strokeWidth = 1f * d; c.drawCircle(x, y, (1.6f + size * 1.6f) * d, stroke) }
             i += 4
         }
     }
