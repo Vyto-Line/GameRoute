@@ -104,13 +104,6 @@ class RouteOption(
 object Osrm {
     /** Routes from [from] to [to], through the [via] stops in order. */
     fun routes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float? = null, reroute: Boolean = false, via: List<LatLng> = emptyList()): List<RouteOption> {
-        if (!online()) offline(from, to, heading, via)?.let { return it }
-        return try { onlineRoutes(from, to, alternatives, heading, reroute, via) } catch (e: Exception) {
-            offline(from, to, heading, via) ?: throw e
-        }
-    }
-
-    private fun onlineRoutes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float?, reroute: Boolean, via: List<LatLng>): List<RouteOption> {
         val pts = listOf(from) + via + listOf(to)
         var url = "https://router.project-osrm.org/route/v1/driving/" +
             pts.joinToString(";") { "${it.lon},${it.lat}" } +
@@ -237,6 +230,13 @@ object Router {
     }
 
     fun routes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float? = null, reroute: Boolean = false, via: List<LatLng> = emptyList()): List<RouteOption> {
+        if (!online()) offline(from, to, heading, via)?.let { return it }
+        return try { onlineRoutes(from, to, alternatives, heading, reroute, via) } catch (e: Exception) {
+            offline(from, to, heading, via) ?: throw e
+        }
+    }
+
+    private fun onlineRoutes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float?, reroute: Boolean, via: List<LatLng>): List<RouteOption> {
         // planning a trip: TomTom's alternatives too, at the same time (OSRM often finds just one)
         val extra = if (alternatives && !reroute && via.isEmpty() && Traffic.active)
             racers.submit(java.util.concurrent.Callable { try { TomTomRoute.routes(from, to, true, heading, via) } catch (e: Exception) { null } }) else null
