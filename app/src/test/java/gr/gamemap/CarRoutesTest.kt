@@ -39,7 +39,6 @@ class CarRoutesTest {
             o.delaySeconds = if (i == 1) 240 else 30
             o.traffic = if (i == 1) listOf(Stretch(o.length * 0.3, o.length * 0.55, 3, 200)) else listOf(Stretch(o.length * 0.5, o.length * 0.58, 1, 30))
         }
-        opts[opts.size - 1].tollCost = 2.4
         val place = Place("National Archaeological Museum", "Patision 44", opts[0].points.last())
         NavEngine.debugPlan(place, opts)
         val log = StringBuilder()
