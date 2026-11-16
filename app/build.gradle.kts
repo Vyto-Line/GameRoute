@@ -74,6 +74,8 @@ android {
 
 dependencies {
     implementation("androidx.car.app:app:1.4.0")
+    // the car's own speed and GPS on Android Auto (CarHardwareManager)
+    implementation("androidx.car.app:app-projected:1.4.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.1")
     // MQTT: real-time convoy positions through a public broker

@@ -122,6 +122,13 @@ object LocationTracker : LocationListener {
         val looper = Looper.getMainLooper()
         // the same rule as updateMode(): a convoy parked for a minute doesn't need GPS every second
         precise = NavEngine.active || NavEngine.planning || "car" in users || "nav" in users || (Convoy.active && !convoyIdle)
+        // faster lock: show the freshest fix any provider still has (up to 30 min old) straight away
+        if (last == null) {
+            val fresh = lm.allProviders.mapNotNull { pr -> try { lm.getLastKnownLocation(pr) } catch (_: Exception) { null } }
+                .filter { System.currentTimeMillis() - it.time < 30 * 60_000L }
+                .maxByOrNull { it.time }
+            fresh?.let { onLocationChanged(Location(it).apply { speed = 0f }) }
+        }
         val fused = if (Build.VERSION.SDK_INT >= 31 && lm.allProviders.contains(LocationManager.FUSED_PROVIDER))
             LocationManager.FUSED_PROVIDER else null
         val plan: List<Triple<String, Long, Float>> = when {
@@ -187,6 +194,12 @@ object LocationTracker : LocationListener {
     /** Provider name of tunnel-mode positions (estimated along the route, not measured). */
     const val ESTIMATE = "estimate"
 
+    /** Provider name of fixes from the car's own GPS (Android Auto, when the car shares it). */
+    const val CAR = "car"
+
+    /** How far ahead of the last fix the arrow aims, in seconds of driving (fix age + glide). */
+    private const val LEAD_S = 1.0
+
     /** Tunnel mode: a position worked out along the route while GPS is lost. */
     fun estimate(p: LatLng, bearing: Float, speedMps: Float) {
         onLocationChanged(Location(ESTIMATE).apply {
@@ -195,27 +208,76 @@ object LocationTracker : LocationListener {
         })
     }
 
+    /** Fixes in a row thrown away as impossible jumps (after 3, the position is believed: a real move). */
+    private var jumps = 0
+
+    /** The last measured (not estimated) fix: what the Weak GPS note goes by. */
+    @Volatile var lastReal: Location? = null
+        private set
+
+    /**
+     * Weak GPS: moving or navigating, not in tunnel mode, and the last measured fix is vague (over
+     * 30 m) or a few seconds old. The map shows a small note under the arrow.
+     */
+    val weak: Boolean get() {
+        val r = lastReal ?: return false
+        if (NavEngine.estimating) return false
+        if (!NavEngine.active && speed < 2f) return false
+        val age = System.currentTimeMillis() - r.time
+        return (r.hasAccuracy() && r.accuracy > 30f) || age in 4_000..90_000
+    }
+
+    /** True if [l] is farther from [prev] than a car could have got in the time between them. */
+    internal fun impossibleJump(prev: Location, l: Location): Boolean {
+        val dt = ((l.time - prev.time) / 1000.0).coerceAtLeast(0.5)
+        val fastest = maxOf(if (l.hasSpeed()) l.speed else 0f, if (prev.hasSpeed()) prev.speed else 0f, 6f) * 1.6 + 8
+        val slack = ((if (l.hasAccuracy()) l.accuracy else 30f) + (if (prev.hasAccuracy()) prev.accuracy else 30f)).coerceAtMost(80f) + 15
+        val d = Geo.distance(LatLng(prev.latitude, prev.longitude), LatLng(l.latitude, l.longitude))
+        return d > fastest * dt + slack
+    }
+
     override fun onLocationChanged(location: Location) {
         val prev = last
-        // in a tunnel the phone may still report wild, inaccurate fixes: keep estimating instead
-        if (NavEngine.active && location.provider != ESTIMATE && location.hasAccuracy() && location.accuracy > 60 &&
-            prev != null && System.currentTimeMillis() - prev.time < 120_000) return
-        // Prefer GPS; ignore a coarser fix that arrives right after a GPS one.
-        if (prev != null && prev.provider == LocationManager.GPS_PROVIDER && location.provider != ESTIMATE &&
-            location.provider != LocationManager.GPS_PROVIDER &&
+        val real = location.provider != ESTIMATE
+        val now = System.currentTimeMillis()
+        // In a tunnel the phone may still report wild fixes (over 100 m off): keep estimating instead.
+        // Merely vague city fixes (30-100 m, between tall buildings) are kept: throwing those away
+        // left the arrow guessing at an old speed, and turns came too late.
+        if (NavEngine.active && real && location.hasAccuracy() && location.accuracy > 100 &&
+            prev != null && now - prev.time < 120_000) return
+        // Prefer GPS (or the car's own); ignore a coarser fix that arrives right after one.
+        if (prev != null && (prev.provider == LocationManager.GPS_PROVIDER || prev.provider == CAR) && real &&
+            location.provider != LocationManager.GPS_PROVIDER && location.provider != CAR &&
             location.time - prev.time < 10_000
         ) return
+        // the car's own GPS only fills in while the phone's has gone quiet
+        if (location.provider == CAR && prev != null && prev.provider == LocationManager.GPS_PROVIDER && now - prev.time < 2_500) return
         // Drop wildly inaccurate fixes once we have a decent one.
         if (prev != null && location.hasAccuracy() && location.accuracy > 150 &&
             prev.hasAccuracy() && prev.accuracy < 50 && location.time - prev.time < 30_000
         ) return
+        // A jump no car could make (signal bouncing off buildings): skip it, up to 3 in a row.
+        val prevReal = lastReal
+        if (real && prevReal != null && location.time - prevReal.time < 30_000 && impossibleJump(prevReal, location)) {
+            if (++jumps <= 3) { CrashLog.note("gps jump skipped"); return }
+        }
+        if (real) { jumps = 0; lastReal = location }
 
         last = location
         speed = if (location.hasSpeed()) location.speed else 0f
         if (location.provider != ESTIMATE) checkConvoyPace(location)
         var p = LatLng(location.latitude, location.longitude)
-        val snapped = if (speed > 1f) NavEngine.snap(p, if (location.hasBearing() && speed > 3f) location.bearing else null) else null
-        if (snapped != null) {
+        val bearing = if (location.hasBearing() && speed > 3f) location.bearing else null
+        // stopped (a red light): the fixes wander a few metres; keep the arrow still
+        val held = toPos?.takeIf { real && speed < 0.7f && prev != null && (!prev.hasSpeed() || prev.speed < 0.7f) &&
+            Geo.distance(it, p) < maxOf(if (location.hasAccuracy()) location.accuracy * 0.8 else 10.0, 8.0) }
+        val snapped = if (held != null || speed <= 1f) null
+            else NavEngine.snap(p, bearing)
+                // no route (or off it): the map's own roads, by heading, speed and the road we were on
+                ?: if (speed > 2f) RoadMatch.match(p, bearing, speed, if (location.hasAccuracy()) location.accuracy else 20f) else null
+        if (held != null) {
+            p = held
+        } else if (snapped != null) {
             p = snapped.first
             headingTarget = snapped.second
         } else if (location.hasBearing() && speed > 1.5f) {
@@ -225,8 +287,11 @@ object LocationTracker : LocationListener {
 
         val firstFix = toPos == null
         fromPos = if (firstFix) p else displayPosition()
-        glideMeters = fromPos?.let { Geo.distance(it, p) } ?: 0.0
-        toPos = p
+        // The arrow glides to the new fix over the next second, so aim it where the car will be by
+        // then (a fix is already a moment old): otherwise the arrow trails the car by 1-2 s.
+        val target = if (!firstFix && held == null && speed > 2f) Geo.offset(p, moveBearing, (speed * LEAD_S).coerceAtMost(40.0)) else p
+        glideMeters = fromPos?.let { Geo.distance(it, target) } ?: 0.0
+        toPos = target
         fixAt = SystemClock.uptimeMillis()
         if (firstFix) heading = headingTarget
 

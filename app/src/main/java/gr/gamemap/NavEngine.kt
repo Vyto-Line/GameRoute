@@ -52,6 +52,8 @@ object NavEngine {
     var error: String? = null
         private set
     var nextStep = -1
+    /** The route [nextStep] counts in (a new route starts the count again). */
+    private var stepRoute: RouteOption? = null
         private set
     var distanceToNext = 0.0
         private set
@@ -715,6 +717,8 @@ object NavEngine {
     private var alongAtFix = 0.0
     private var speedAtFix = 0f
     private var onRouteAtFix = true
+    private var estAlong = -1.0
+    private var estAt = 0L
 
     /**
      * Tunnel mode: once a second while navigating. With no usable GPS fix for 2.5 s while you
@@ -732,12 +736,18 @@ object NavEngine {
                 if (estimating && age > 120_000) { estimating = false; changed.fire() }
                 return
             }
-            val est = (alongAtFix + speedAtFix * age / 1000.0).coerceAtMost(r.length - 25)
+            // the car's own speed when Android Auto shares it (it knows when you stop in the tunnel),
+            // else the speed at the last fix; moved forward a second at a time
+            val now = System.currentTimeMillis()
+            val v = CarFeed.speed() ?: speedAtFix
+            estAlong = if (!estimating || estAlong < 0) alongAtFix + v * age / 1000.0 else estAlong + v * (now - estAt) / 1000.0
+            estAt = now
+            val est = estAlong.coerceAtMost(r.length - 25)
             val p = routePointAt(est) ?: return
             val ahead = routePointAt(est + 15) ?: return
-            if (!estimating) CrashLog.note("tunnel mode on")
+            if (!estimating) CrashLog.note("tunnel mode on" + if (CarFeed.speed() != null) " (car speed)" else "")
             estimating = true
-            LocationTracker.estimate(p, Geo.bearing(p, ahead), speedAtFix)
+            LocationTracker.estimate(p, Geo.bearing(p, ahead), v)
         }
     }
 
@@ -769,7 +779,7 @@ object NavEngine {
             along = r.cum[best] + Geo.distance(route[best], proj).coerceAtMost(r.cum[best + 1] - r.cum[best])
         }
         if (real) {
-            if (estimating) { estimating = false; CrashLog.note("tunnel mode off") }
+            if (estimating) { estimating = false; estAlong = -1.0; CrashLog.note("tunnel mode off") }
             lastRealFixAt = System.currentTimeMillis(); alongAtFix = along; onRouteAtFix = onRoad
             speedAtFix = if (l.hasSpeed()) l.speed else speedAtFix
         }
@@ -809,8 +819,16 @@ object NavEngine {
             val warnAt = maxOf(1000.0, LocationTracker.speedMps * 40.0)
             if (dist < warnAt && tollSaid !== t) { tollSaid = t; Voice.say(Phrases.toll(t.price, Voice.lang)) }
         }
-        nextStep = r.steps.indexOfFirst { it.routeIndex > best || it.direction == "arrive" }
+        var next = r.steps.indexOfFirst { it.routeIndex > best || it.direction == "arrive" }
             .let { if (it < 0) r.steps.size - 1 else it }
+        // Move on to the next turn only once this one is really behind us (12 m past it): near the
+        // turn a vague fix can land just past the corner, and the box and voice skipped ahead.
+        if (stepRoute === r && next > nextStep && nextStep >= 0) {
+            val held = r.steps.getOrNull(nextStep)
+            if (held != null && held.direction != "arrive" && held.routeIndex in r.cum.indices && along < r.cum[held.routeIndex] + 12) next = nextStep
+        }
+        stepRoute = r
+        nextStep = next
         r.steps.getOrNull(nextStep)?.let { distanceToNext = (r.cum[it.routeIndex] - along).coerceAtLeast(0.0) }
         if (onRoad) currentStep?.let { Voice.progress(nextStep, it, distanceToNext, LocationTracker.speedMps, followingStep) }
 

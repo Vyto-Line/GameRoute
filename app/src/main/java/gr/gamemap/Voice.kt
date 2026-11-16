@@ -57,6 +57,38 @@ object Voice {
             changed.fire()
         }
 
+    /** How much the voice talks: 0 = Normal, 1 = Fewer (one heads-up and the turn), 2 = Turns only. */
+    var talk: Int
+        get() = if (::appContext.isInitialized) prefs().getInt("voiceTalk", 0).coerceIn(0, 2) else 0
+        set(v) { prefs().edit().putInt("voiceTalk", v.coerceIn(0, 2)).apply(); changed.fire() }
+
+    /** The old timing (exact distances at moments set by speed), kept as a fallback in Advanced. */
+    var classic: Boolean
+        get() = ::appContext.isInitialized && prefs().getBoolean("voiceClassic", false)
+        set(v) { prefs().edit().putBoolean("voiceClassic", v).apply(); changed.fire() }
+
+    /** Lines said for the current maneuver (for tests): the heads-up distances, then 0 for the turn itself. */
+    internal val saidMarks = ArrayList<Int>()
+
+    /**
+     * The heads-ups before a turn, in metres, by speed: in town 200 m; on faster roads 300 m; on the
+     * motorway 1 km and 500 m. Fewer keeps the last one, Turns only none.
+     */
+    internal fun marks(speed: Float, talk: Int): List<Int> {
+        val all = when {
+            speed >= 22f -> listOf(1000, 500)   // about 80 km/h and up
+            speed >= 14f -> listOf(300)         // about 50-80 km/h
+            else -> listOf(200)
+        }
+        return when (talk) { 1 -> all.takeLast(1); 2 -> emptyList(); else -> all }
+    }
+
+    /** The turn itself is said this far ahead: about 5 s in town, 6 s on the motorway, at least 30 m. */
+    internal fun nowAt(speed: Float): Double = maxOf(speed * (if (speed >= 22f) 6.0 else 5.0), 30.0)
+
+    /** GPS fixes are a moment old and the voice takes a moment to start: say each line this much earlier. */
+    internal fun lead(speed: Float): Double = speed * 1.2
+
     fun reset() {
         lastStep = -1
         saidFar = false; saidPrep = false; saidNow = false
@@ -81,10 +113,12 @@ object Voice {
             lastStep = index
             saidFar = false; saidPrep = false; saidNow = false
             stepStartDist = dist
+            saidMarks.clear()
         }
         if (step.direction == "arrive") return // the arrival has its own line
         // the road just changes its name (no turn): nothing worth saying
         if ((step.type == "continue" || step.type == "new name") && step.direction in setOf("straight", "continue")) return
+        if (!classic) { progressNew(step, dist, speed, then); return }
         val near = maxOf(speed * 7.0, 40.0)
         val prep = maxOf(speed * 22.0, 250.0).coerceAtMost(1500.0)
         when {
@@ -105,6 +139,35 @@ object Voice {
     }
 
     /**
+     * Round distances at fixed moments: "In 200 metres, turn right", then "Turn right" about 5 s
+     * before the turn. Each heads-up is said once, a little early, and only if there's time for it
+     * before the turn itself (no "in 200 metres" right before "turn right").
+     */
+    private fun progressNew(step: NavStep, dist: Double, speed: Float, then: NavStep?) {
+        val lead = lead(speed)
+        val now = nowAt(speed)
+        if (!saidNow && dist - lead <= now) {
+            saidNow = true; saidPrep = true; saidFar = true
+            saidMarks += 0
+            val t = Phrases.instruction(step, lang)
+            say(if (then != null) "$t, ${Phrases.then(then, lang)}" else t)
+            return
+        }
+        if (saidNow) return
+        val ms = marks(speed, talk)
+        for ((i, m) in ms.withIndex()) {
+            if (m in saidMarks) continue
+            if (dist - lead > m) break                       // not there yet (and not the smaller ones either)
+            val floor = ms.getOrNull(i + 1)?.toDouble() ?: (now * 1.6)
+            // the turn began closer than this, or we're already past the next line's moment: skip it
+            if (stepStartDist < m * 0.9 || dist - lead <= floor) { saidMarks += m; continue }
+            saidMarks += m
+            say(Phrases.ahead(step, m.toDouble(), lang))
+            return
+        }
+    }
+
+    /**
      * Another app is recording (Instagram, the camera, a call): a voice line would take the audio
      * focus and make it stop, so stay quiet.
      */
@@ -117,7 +180,11 @@ object Voice {
         } catch (_: Exception) { false }
     }
 
+    /** Tests: every line the voice is asked to say, before any check (null = off). */
+    internal var heardForTest: MutableList<String>? = null
+
     fun say(text: String) {
+        heardForTest?.add(text)
         if (!::appContext.isInitialized || muted) return
         // nothing to say unless the map is in use (open, in the car, or navigating)
         if (!LocationTracker.inUse && !NavEngine.active) return

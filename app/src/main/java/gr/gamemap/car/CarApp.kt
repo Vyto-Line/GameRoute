@@ -79,8 +79,11 @@ class GameMapSession : Session() {
         gr.gamemap.Parked.clear() // driving off: the old parking spot is history
         // the car's night mode follows its headlights (or light sensor): dark map at night
         MapState.setCarNight(carContext.isDarkMode)
+        val stopCarData = listenToCar(carContext)
         lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
             override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                stopCarData()
+                gr.gamemap.CarFeed.clear()
                 MapState.setCarNight(null)
                 gr.gamemap.Parked.carDisconnected() // the car is parked where the phone is now
             }
@@ -91,6 +94,37 @@ class GameMapSession : Session() {
     override fun onCarConfigurationChanged(newConfiguration: android.content.res.Configuration) {
         MapState.setCarNight(carContext.isDarkMode)
     }
+}
+
+/**
+ * The car's speed and, where the car shares it, its own GPS (Car App API 3+). Each piece is optional:
+ * a car (or a host) that doesn't offer one just doesn't call back. Returns how to stop listening.
+ */
+fun listenToCar(ctx: CarContext): () -> Unit {
+    if (ctx.carAppApiLevel < 3) return {}
+    val stops = ArrayList<() -> Unit>()
+    val exec = androidx.core.content.ContextCompat.getMainExecutor(ctx)
+    try {
+        val hw = ctx.getCarService(androidx.car.app.hardware.CarHardwareManager::class.java)
+        try {
+            val l = androidx.car.app.hardware.common.OnCarDataAvailableListener<androidx.car.app.hardware.info.Speed> { sp ->
+                val v = sp.rawSpeedMetersPerSecond
+                if (v.status == androidx.car.app.hardware.common.CarValue.STATUS_SUCCESS) v.value?.let { gr.gamemap.CarFeed.onSpeed(kotlin.math.abs(it)) }
+            }
+            hw.carInfo.addSpeedListener(exec, l)
+            stops += { try { hw.carInfo.removeSpeedListener(l) } catch (_: Exception) {} }
+            gr.gamemap.CrashLog.note("car speed: listening")
+        } catch (e: Exception) { gr.gamemap.CrashLog.note("car speed: $e") }
+        try {
+            val l = androidx.car.app.hardware.common.OnCarDataAvailableListener<androidx.car.app.hardware.info.CarHardwareLocation> { loc ->
+                val v = loc.location
+                if (v.status == androidx.car.app.hardware.common.CarValue.STATUS_SUCCESS) v.value?.let { gr.gamemap.CarFeed.onLocation(it) }
+            }
+            hw.carSensors.addCarHardwareLocationListener(androidx.car.app.hardware.info.CarSensors.UPDATE_RATE_NORMAL, exec, l)
+            stops += { try { hw.carSensors.removeCarHardwareLocationListener(l) } catch (_: Exception) {} }
+        } catch (e: Exception) { gr.gamemap.CrashLog.note("car location: $e") }
+    } catch (e: Exception) { gr.gamemap.CrashLog.note("car hardware: $e") }
+    return { stops.forEach { it() } }
 }
 
 fun icon(ctx: CarContext, res: Int) = CarIcon.Builder(IconCompat.createWithResource(ctx, res)).build()

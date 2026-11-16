@@ -250,9 +250,13 @@ class MapRenderer(private val car: Boolean = false) {
         if (me != null) {
             if (following) {
                 drawPlayer(c, cx, cy, 0f, d, theme)
+                if (hud && LocationTracker.weak) drawWeakGps(c, cx, cy, d, area)
             } else {
                 val (sx, sy) = toScreen(me, camera!!)
-                if (area.contains(sx.toInt(), sy.toInt())) drawPlayer(c, sx, sy, LocationTracker.heading - bearing, d, theme)
+                if (area.contains(sx.toInt(), sy.toInt())) {
+                    drawPlayer(c, sx, sy, LocationTracker.heading - bearing, d, theme)
+                    if (hud && LocationTracker.weak) drawWeakGps(c, sx, sy, d, area)
+                }
             }
         }
 
@@ -1615,6 +1619,27 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     /** Tunnel mode: a small chip saying the position is estimated. */
+    /** Weak GPS: a dashed amber ring round the arrow and a small note under it. */
+    private fun drawWeakGps(c: Canvas, x: Float, y: Float, d: Float, a: Rect) {
+        val amber = Color.rgb(255, 179, 71)
+        stroke.color = amber; stroke.strokeWidth = 1.6f * d
+        stroke.pathEffect = android.graphics.DashPathEffect(floatArrayOf(6 * d, 5 * d), 0f)
+        c.drawCircle(x, y, 30 * d, stroke)
+        stroke.pathEffect = null
+        fill.color = Color.argb(46, 255, 179, 71); c.drawCircle(x, y, 30 * d, fill)
+        val label = gr.gamemap.L.t("Weak GPS · position may be off")
+        val tf = text.typeface
+        text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 12.5f * d
+        val w = text.measureText(label) + 26 * d
+        val left = (x - w / 2).coerceIn(a.left + 6 * d, a.right - 6 * d - w)
+        val top = y + 38 * d
+        val r = RectF(left, top, left + w, top + 26 * d)
+        fill.color = Color.argb(235, 30, 26, 44); c.drawRoundRect(r, 13 * d, 13 * d, fill)
+        stroke.color = amber; stroke.strokeWidth = 1.2f * d; c.drawRoundRect(r, 13 * d, 13 * d, stroke)
+        text.color = amber; c.drawText(label, r.left + 13 * d, r.centerY() + 4.3f * d, text)
+        text.typeface = tf
+    }
+
     private fun drawNoGps(c: Canvas, a: Rect, d: Float, t: Theme, message: String = "No GPS: estimating") {
         val label = gr.gamemap.L.t(message)
         text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 13 * d

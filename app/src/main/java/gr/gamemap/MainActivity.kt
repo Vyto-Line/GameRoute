@@ -2650,6 +2650,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             )
             "nav" -> listOf(
                 settingRow("Spoken directions", voice) { chooseVoice() },
+                settingRow("How much the voice talks", L.t(TALK[Voice.talk])) { chooseTalk() },
                 settingRow("Faster routes", if (NavEngine.autoSwitch) "Switch automatically" else "Ask me") { chooseAutoSwitch() },
                 switchRow("Avoid tolls", NavEngine.avoidTolls) { NavEngine.avoidTolls = it },
                 switchRow("Avoid motorways", NavEngine.avoidMotorways) { NavEngine.avoidMotorways = it },
@@ -2703,6 +2704,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Open map links in GameRoute", if (mapLinksOn()) "On" else "Off") { explainMapLinks() },
                 settingRow("Star ratings & reviews", if (Reviews.enabled) "Google key set" else "Off: Reviews opens Google Maps") { chooseGoogleKey() },
                 settingRow("Show the welcome screens again", null) { closeSheet(); showWelcome() },
+                switchRow("Classic voice timing (exact distances)", Voice.classic) { Voice.classic = it },
             )
         }
     }
@@ -2774,6 +2776,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 dlg.dismiss()
                 if (k < 2) Voice.say(if (k == 1) "Οι οδηγίες θα ακούγονται στα ελληνικά" else "Directions will be spoken in English")
             }.showT()
+    }
+
+    private val TALK = arrayOf("Normal", "Fewer", "Turns only")
+
+    /** Normal: every heads-up and the turn. Fewer: one heads-up and the turn. Turns only: just the turn. */
+    private fun chooseTalk() {
+        val opts = arrayOf(L.t("Normal") + "\n" + L.t("In 200 m, then at the turn (motorway: 1 km, 500 m)"),
+            L.t("Fewer") + "\n" + L.t("One heads-up, then at the turn"),
+            L.t("Turns only") + "\n" + L.t("Only at the turn"))
+        AlertDialog.Builder(this).setTitle(L.t("How much the voice talks"))
+            .setSingleChoiceItems(opts, Voice.talk) { dlg, k -> Voice.talk = k; dlg.dismiss(); showSettings() }
+            .showT()
     }
 
     private fun chooseAutoSwitch() {
