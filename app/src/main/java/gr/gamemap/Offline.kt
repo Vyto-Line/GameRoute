@@ -53,8 +53,8 @@ object Offline {
 
     /** On Wi-Fi (or an unmetered network) right now. */
     fun onWifi(): Boolean = try {
-        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        !cm.isActiveNetworkMetered
+        val cm = appContext.getSystemService(android.net.ConnectivityManager::class.java)
+        cm.isActiveNetworkMetered.not()
     } catch (e: Exception) { false }
 
     /** An old downloaded square may be refreshed now (automatic updates on, and Wi-Fi if asked). */
