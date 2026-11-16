@@ -15,6 +15,10 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+import org.robolectric.RuntimeEnvironment
 
 /** The pictures for the GitHub page: the real app, phone and car, in a mix of styles. */
 @RunWith(RobolectricTestRunner::class)
@@ -42,6 +46,17 @@ class ReadmeShotsTest {
         }
         val r = opts[0]
         val dest = Place("National Archaeological Museum", "Patision 44", r.points.last())
+        // a phone that already has friends (as if they'd been added over the network)
+        val t0 = System.currentTimeMillis()
+        RuntimeEnvironment.getApplication().getSharedPreferences("friends", Context.MODE_PRIVATE).edit()
+            .putString("code", "VYTO-4821").putString("codeV", "2").putString("fid", "me0000000000")
+            .putString("friends", JSONArray()
+                .put(JSONObject().put("fid", "f1nikos").put("n", "Nikos").put("s", "c2VjcmV0MQ").put("since", t0 - 86_400_000L * 30))
+                .put(JSONObject().put("fid", "f3maria").put("n", "Maria").put("s", "c2VjcmV0Mw").put("since", t0 - 86_400_000L * 12))
+                .put(JSONObject().put("fid", "f2giorgos").put("n", "Giorgos").put("s", "c2VjcmV0Mg").put("since", t0))
+                .put(JSONObject().put("fid", "f4kostas").put("n", "Kostas").put("s", "c2VjcmV0NA").put("since", t0)).toString())
+            .putString("requests", JSONArray().put(JSONObject().put("fid", "r1eleni").put("n", "Eleni").put("s", "c2VjcmV0NQ").put("at", t0).put("nonce", "n1")).toString())
+            .apply()
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         val root = activity.window.decorView
         val looper = shadowOf(Looper.getMainLooper())
@@ -84,6 +99,8 @@ class ReadmeShotsTest {
         locate(300.0, 0f)
         val map = find(root)!!
         mapView = map
+        Friends.core.setOnline("f1nikos", now); Friends.core.setOnline("f3maria", now)
+        Explorer.addXp(3400)
 
         // home
         style(Theme.OPEN_WORLD, false); MapState.zoomBy(16.5 - MapState.targetZoom); shot("home")
@@ -103,7 +120,7 @@ class ReadmeShotsTest {
         style(Theme.LOOKOUT, false); clean()
         NavEngine.debugPlan(dest, opts); shot("routes")
         // driving
-        style(Theme.NEON_RACER, true); clean()
+        style(Theme.VIOLET_RAIN, true); clean()
         NavEngine.debugDrive(dest, r, 120); locate(400.0)
         repeat(200) { MapState.tick(); LocationTracker.tick(); looper.idleFor(java.time.Duration.ofMillis(10)) }
         shot("drive")
@@ -116,7 +133,27 @@ class ReadmeShotsTest {
         MapState.zoomBy(15.6 - MapState.targetZoom)
         shot("convoy")
         activity.openSheetForTest("convoy"); shot("convoy_list"); back()
+        // quiet driving: the buttons faded, two messages waiting for the stop
+        Later.add("🏛 Landmark discovered: Panathenaic Stadium · +25 XP"); Later.add("👥 1 friend request: open Together")
+        locate(600.0, 13f); repeat(60) { MapState.tick(); LocationTracker.tick(); looper.idleFor(java.time.Duration.ofMillis(10)) }
+        shot("quiet")
+        Later.take()
         Convoy.leave(quiet = true); NavEngine.stop(); looper.idle()
+        // the convoy lobby (you started it) and its invite screen
+        style(Theme.NEON_NOIR, true); locate(300.0, 0f); clean()
+        Convoy.debugStart(Place("Glyfada Marina", "Glyfada", r.points.last())); Convoy.debugHost(true)
+        Convoy.debugMember("Maria", r.points[5], 0, 0, -1.0, -1.0, "ready")
+        Convoy.debugMember("Nikos", r.points[8], 0, 0, -1.0, -1.0, "ready")
+        Convoy.members.values.first { it.name == "Maria" }.ready = true
+        Convoy.members.values.first { it.name == "Nikos" }.along = true
+        activity.openSheetForTest("convoy"); shot("lobby"); clean()
+        activity.openSheetForTest("convoyinvite"); shot("invite"); clean()
+        activity.refreshForTest(); shot("home_convoy")
+        Convoy.leave(quiet = true); looper.idle()
+        // You, and friends
+        style(Theme.VIOLET_RAIN, true); clean()
+        activity.openSheetForTest("you"); shot("you"); clean()
+        activity.openSheetForTest("friends"); shot("friends"); clean()
         // race start countdown
         style(Theme.TRAILBLAZER, false); locate(300.0, 0f); clean()
         Convoy.debugStart(dest)
@@ -136,8 +173,13 @@ class ReadmeShotsTest {
         shot("fuel"); clean()
         // arrival card
         style(Theme.PARCHMENT_QUEST, false); clean()
-        NavEngine.debugTrip(Explorer.Trip("National Archaeological Museum", now, 840, 4200.0, 120, 41, 1, 1)); shot("arrival")
+        val parts = listOf(Xp.Part("Trip", 31, "4.2 km"), Xp.Part("Clean drive", 6), Xp.Part("New roads", 18, "0.9 km never driven"),
+            Xp.Part("Landmark", 25, "1 new"), Xp.Part("Daily streak", 30, "day 3"))
+        NavEngine.debugTrip(Explorer.Trip("National Archaeological Museum", now, 840, 4200.0, 120, parts.sumOf { it.xp }, 1, Explorer.level, parts)); shot("arrival")
         NavEngine.dismissTrip(); looper.idle()
+        style(Theme.NEON_NOIR, true); clean()
+        activity.openSheetForTest("progress"); shot("progress"); clean()
+        activity.openSheetForTest("garage"); shot("garage"); clean()
         // styles and settings
         clean(); style(Theme.BLOCKY, false); MapState.zoomBy(17.0 - MapState.targetZoom); shot("blocky")
         style(Theme.RETRO, false); activity.openSheetForTest("style"); shot("styles"); clean()
