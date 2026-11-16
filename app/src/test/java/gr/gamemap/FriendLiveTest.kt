@@ -33,9 +33,11 @@ class FriendLiveTest {
         a.request(b.code)
         listener.join(30_000)
         val ms = gotAt - sent
-        b.check()
+        var checks = 0
+        val t1 = System.currentTimeMillis()
+        while (b.requests.isEmpty() && System.currentTimeMillis() - t1 < 10_000) { checks++; b.check(); if (b.requests.isEmpty()) Thread.sleep(1500) }
         File(System.getProperty("previewOut") ?: "build/previews").apply { mkdirs() }.resolve("friendlive.txt")
-            .writeText("request seen live after $ms ms; requests after check: ${b.requests.size}\n")
+            .writeText("request seen live after $ms ms; in the list after $checks check(s), ${System.currentTimeMillis() - sent} ms\n")
         assertTrue("arrived ($ms ms)", gotAt > 0 && ms < 5000)
         assertTrue(b.requests.isNotEmpty())
     }

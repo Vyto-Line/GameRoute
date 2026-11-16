@@ -284,7 +284,7 @@ object Friends {
                             wait = 2_000L
                             while (wanted) {
                                 val line = r.readLine() ?: break
-                                if (line.contains("\"event\":\"message\"")) kick()
+                                if (line.contains("\"event\":\"message\"")) { kick(); main.postDelayed({ kick() }, 1500); main.postDelayed({ kick() }, 4000) }
                                 // a new code: listen on the new topic
                                 if (core.myTopics() != topics) break
                             }
