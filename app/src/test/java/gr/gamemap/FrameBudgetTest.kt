@@ -51,7 +51,7 @@ class FrameBudgetTest {
         for (car in listOf(true, false)) for (th in listOf(Theme.OPEN_WORLD, Theme.NEON_NOIR, Theme.VIOLET_RAIN, Theme.ARCTIC)) {
             MapState.setTheme(th); MapState.setLightMode(if (th == Theme.ARCTIC || th == Theme.OPEN_WORLD) MapState.LightMode.LIGHT else MapState.LightMode.DARK)
             val w = if (car) 1920 else 1080; val h = if (car) 720 else 2340; val d = if (car) 1.6f else 2.75f
-            val rr = MapRenderer(car = car).apply { carButtons = car }
+            val rr = MapRenderer(car = car).apply { carButtons = car; forceLite = false }
             val c = Canvas(Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888))
             val area = Rect(0, 0, w, h)
             var m = 200.0
