@@ -423,8 +423,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     tripOverlay.visibility == View.VISIBLE -> NavEngine.dismissTrip()
                     placeShown != null -> closePlace()
                     askCard.visibility == View.VISIBLE -> Alerts.clearAsk()
-                    sheetOverlay.visibility == View.VISIBLE && sheetKind == "settings" && settingsPage != null -> { settingsPage = null; refreshChrome() }
-                    sheetOverlay.visibility == View.VISIBLE -> closeSheet()
+                    sheetOverlay.visibility == View.VISIBLE -> sheetBack() // one step back (closes the first sheet)
                     suggestScroll.visibility == View.VISIBLE || pickFor != null -> closeSearch()
                     NavEngine.planning -> NavEngine.cancelPlan()
                     NavEngine.active -> AlertDialog.Builder(this@MainActivity)
@@ -2250,7 +2249,34 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     // ------------------------------------------------------------------ bottom sheets
 
+    /** Where the open sheet was opened from (You › Settings › …): its back button goes there. */
+    private val sheetStack = ArrayList<String>()
+    private var sheetNoPush = false
+
+    private fun sheetTitle(kind: String) = when (kind) {
+        "you" -> "You"; "settings" -> "Settings"; "more" -> "More"; "convoy", "friends", "addfriend" -> "Together"
+        "progress" -> "Progress"; "garage" -> "Garage"; "trips" -> "Trips"; "style" -> "Map style"; "offline" -> "Offline maps"
+        "convoyinvite" -> "Invite"; else -> "Back"
+    }
+
+    /** Back one step (to the sheet this one came from), or closed if it was the first. */
+    private fun sheetBack() {
+        if (sheetKind == "settings" && settingsPage != null) { settingsPage = null; refreshChrome(); return }
+        val prev = sheetStack.removeLastOrNull() ?: run { closeSheet(); return }
+        sheetNoPush = true
+        try { openSheet(prev) } finally { sheetNoPush = false }
+    }
+
+    /** The same sheet group (Together's two tabs): no step back in between. */
+    private fun switchSheet(kind: String) { sheetNoPush = true; try { openSheet(kind) } finally { sheetNoPush = false } }
+
     private fun openSheet(kind: String) {
+        // opened from another sheet: remember it, for the back button
+        if (!sheetNoPush && sheetOverlay.visibility == View.VISIBLE && sheetKind.isNotEmpty() && sheetKind != kind) {
+            if (sheetStack.lastOrNull() != sheetKind) sheetStack += sheetKind
+            if (sheetStack.size > 6) sheetStack.removeAt(0)
+        }
+        if (sheetOverlay.visibility != View.VISIBLE) sheetStack.clear()
         if (kind != sheetKind) { settingsPage = null; settingsQuery = "" }
         // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
         quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""; progressKey = ""; garageKey = ""; youKey = ""
@@ -2268,14 +2294,25 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun closeSheet() {
+        sheetStack.clear()
         sheetOverlay.visibility = View.GONE
         sheetKind = ""
         sheetHost.removeAllViews()
     }
 
+    /** "‹ You": back to where this sheet was opened from. */
+    private fun backPill(to: String, onClick: () -> Unit) = TextView(this).apply {
+        text = "‹ " + L.t(to); textSize = 15f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; maxLines = 1
+        setTextColor(readable(accent)); background = bg(dim(26), radius = 12f)
+        val q = (10 * d).toInt(); setPadding(q, q / 2, q + q / 3, q / 2); minHeight = (40 * d).toInt()
+        contentDescription = L.t("Back to $to")
+        setOnClickListener { onClick() }
+    }
+
     private fun sheetHeader(title: String) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        sheetStack.lastOrNull()?.let { from -> addView(backPill(sheetTitle(from)) { sheetBack() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() }) }
         addView(label(title, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
     }
@@ -2577,7 +2614,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val g = settingsGroups().first { it.key == page }
         sheetHost.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            addView(pill("‹") { settingsPage = null; refreshChrome() }.apply { setTextColor(ink); textSize = 24f; contentDescription = "Back to settings" })
+            addView(backPill("Settings") { settingsPage = null; refreshChrome() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() })
             addView(label(g.title, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
         })
@@ -3367,7 +3404,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sheetHost.background = bg(panel, radius = 22f, topOnly = true)
         sheetHost.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            addView(pill("‹") { openSheet("convoy") }.apply { textSize = 22f; setTextColor(ink); contentDescription = L.t("Back") })
+            addView(backPill(sheetTitle(sheetStack.lastOrNull() ?: "convoy")) { if (sheetStack.isEmpty()) switchSheet("convoy") else sheetBack() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() })
             addView(label("Invite", 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
         })
@@ -3474,7 +3511,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** You: progress, Garage, friends, trips, and the app's settings, in one place. */
     private fun renderYou() {
         val c = if (Friends.ready && Friends.core.started) Friends.core else null
-        val key = "${Explorer.xp}|${Xp.prestige}|${theme.name}|${MapState.dark}|${Xp.streak}|${c?.friends?.joinToString { it.fid + c.isOnline(it.fid) + c.nickname(it.fid) }}|" +
+        val key = "${Convoy.myName}|${Explorer.xp}|${Xp.prestige}|${theme.name}|${MapState.dark}|${Xp.streak}|${c?.friends?.joinToString { it.fid + c.isOnline(it.fid) + c.nickname(it.fid) }}|" +
             "${c?.requests?.size}|${c?.invites?.size}|${Xp.challenges().joinToString { "${it.have}" }}|${Offline.areas().size}"
         if (key == youKey && sheetHost.childCount > 0) return
         youKey = key
@@ -3485,10 +3522,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // who I am: the ring, my title, level and streak
         sheetHost.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, p / 2)
+            sheetStack.lastOrNull()?.let { from -> addView(backPill(sheetTitle(from)) { sheetBack() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p / 2 }) }
             addView(YouRing(context, big = true).apply { setOnClickListener { openSheet("progress") } }, LinearLayout.LayoutParams((64 * d).toInt(), (64 * d).toInt()).apply { marginEnd = p })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(label(Xp.stars + L.t(Xp.title()), 19f, bold = true).apply { setTextColor(ink); typeface = theme.typeface; maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                // your name first (tap to change it), then your title in this style, then the level
+                addView(label(Convoy.myName.ifBlank { L.t("Your name") }, 24f, bold = true).apply {
+                    setTextColor(if (Convoy.myName.isBlank()) dim() else ink); typeface = theme.typeface; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                    contentDescription = L.t("Your name, tap to change it")
+                    setOnClickListener { editConvoyName { youKey = ""; refreshChrome() } }
+                })
+                addView(label(Xp.stars + L.t(Xp.title()), 14.5f, bold = true).apply { setTextColor(readable(accent)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(0, (2 * d).toInt(), 0, 0) })
                 addView(label(L.t("Level ${Explorer.level}") + " · $have / $of XP", 13.5f).apply { setTextColor(dim()) })
                 if (Xp.streak > 0) addView(label("🔥 " + L.t(if (Xp.streak == 1) "1-day streak" else "${Xp.streak}-day streak"), 13.5f, bold = true).apply { setTextColor(readable(Color.rgb(255, 176, 40))) })
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
@@ -3646,7 +3690,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             row.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; minimumHeight = (44 * d).toInt()
                 if (on) background = bg(accent, radius = 12f)
-                isClickable = true; setOnClickListener { if (!on) openSheet(key) }
+                isClickable = true; setOnClickListener { if (!on) switchSheet(key) }
                 contentDescription = L.t(title)
                 addView(label(if (key == "convoy") "👥 $title" else title, 15f, bold = true).apply { setTextColor(if (on) onAccent(accent) else ink) })
                 if (key == "friends" && waiting > 0) addView(label(if (waiting > 9) "9+" else "$waiting", 11.5f, bold = true).apply {
@@ -4327,7 +4371,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }, LinearLayout.LayoutParams((64 * d).toInt(), (64 * d).toInt()).apply { marginEnd = p })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(label(Xp.stars + L.t(Xp.title()), 20f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+                addView(label(Convoy.myName.ifBlank { L.t("You") }, 20f, bold = true).apply { setTextColor(ink); typeface = theme.typeface; maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                addView(label(Xp.stars + L.t(Xp.title()) + " · " + L.t(theme.title), 14f, bold = true).apply { setTextColor(readable(accent)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
                 addView(label(L.t("Level $lvl · ${Explorer.xp} XP") + (if (Xp.prestige > 0) " · " + L.t("prestige ${Xp.prestige}") else ""), 13.5f).apply { setTextColor(dim()) })
                 addView(bar(have.toFloat() / maxOf(of, 1), accent), LinearLayout.LayoutParams(MATCH_PARENT, (9 * d).toInt()).apply { topMargin = p / 2 })
                 val next = Xp.nextUnlock(lvl)

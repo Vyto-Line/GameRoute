@@ -195,24 +195,24 @@ object Xp {
     // ------------------------------------------------------------------ titles
 
     private val ladders: Map<Theme, List<String>> = mapOf(
-        Theme.OPEN_WORLD to listOf("Rookie", "Wanderer", "Pathfinder", "Road Captain", "Free Spirit", "Living Legend"),
-        Theme.NEON_NOIR to listOf("Rookie", "Street Runner", "Night Rider", "Chrome Ghost", "Neon King", "Road Legend"),
-        Theme.NEON_RACER to listOf("Rookie", "Midnight Cruiser", "Drift Spirit", "Turbo Ace", "Night Champion", "Midnight Legend"),
-        Theme.BLOCKY to listOf("Newcomer", "Block Builder", "Cave Explorer", "Master Builder", "World Shaper", "Cube Legend"),
-        Theme.PARCHMENT_QUEST to listOf("Squire", "Knight", "Lord", "Baron", "Duke", "Legend of the Realm"),
-        Theme.LOOKOUT to listOf("Spotter", "Ranger", "Watchman", "Trail Warden", "Chief Ranger", "Guardian of the Hills"),
-        Theme.RETRO to listOf("Player 1", "Level Runner", "Power-Up", "High Scorer", "Final Boss", "Hall of Fame"),
-        Theme.TRAILBLAZER to listOf("Trainee", "Tracker", "Trailblazer", "Expedition Lead", "Master Explorer", "Legend of the Trail"),
-        Theme.VIOLET_RAIN to listOf("Rookie", "Rain Runner", "Neon Drifter", "Violet Phantom", "Storm Chaser", "Legend of the Rain"),
-        Theme.RALLY to listOf("Co-driver", "Privateer", "Stage Hunter", "Works Driver", "Rally Ace", "Rally Legend"),
-        Theme.BLUEPRINT to listOf("Draftsman", "Surveyor", "Planner", "Engineer", "Chief Architect", "Master Planner"),
-        Theme.NAUTICAL to listOf("Deckhand", "Bosun", "Navigator", "First Mate", "Captain", "Admiral"),
-        Theme.ARCTIC to listOf("Trekker", "Snow Scout", "Ice Ranger", "Expedition Lead", "Polar Explorer", "Legend of the North"),
+        Theme.OPEN_WORLD to listOf("Rookie", "Wanderer", "Explorer", "Pathfinder", "Road Scout", "Road Captain", "Free Spirit", "Trailmaster", "Road Veteran", "Living Legend", "Open Road Icon"),
+        Theme.NEON_NOIR to listOf("Rookie", "Street Runner", "Night Rider", "Courier", "Chrome Ghost", "Fixer", "Neon Ace", "Grid Runner", "Neon King", "Road Legend", "City Icon"),
+        Theme.NEON_RACER to listOf("Rookie", "Midnight Cruiser", "Street Racer", "Drift Spirit", "Turbo Ace", "Nitro Pilot", "Night Champion", "Midnight Phantom", "Midnight King", "Midnight Legend", "Midnight Icon"),
+        Theme.BLOCKY to listOf("Newcomer", "Block Builder", "Miner", "Cave Explorer", "Architect", "Master Builder", "Engineer", "World Shaper", "Realm Crafter", "Cube Legend", "Block Icon"),
+        Theme.PARCHMENT_QUEST to listOf("Squire", "Knight", "Knight Errant", "Lord", "Baron", "Viscount", "Count", "Duke", "Prince", "King", "Legend of the Realm"),
+        Theme.LOOKOUT to listOf("Spotter", "Ranger", "Watchman", "Trail Warden", "Peak Scout", "Fire Captain", "Chief Ranger", "Forest Marshal", "Mountain Warden", "Guardian of the Hills", "Keeper of the Forest"),
+        Theme.RETRO to listOf("Player 1", "Level Runner", "Coin Collector", "Power-Up", "Extra Life", "High Scorer", "Combo Master", "Boss Hunter", "Final Boss", "Hall of Fame", "Arcade Legend"),
+        Theme.TRAILBLAZER to listOf("Trainee", "Tracker", "Scout", "Trailblazer", "Ranger", "Expedition Lead", "Cartographer", "Pioneer", "Master Explorer", "Legend of the Trail", "World Walker"),
+        Theme.VIOLET_RAIN to listOf("Rookie", "Rain Runner", "Night Courier", "Neon Drifter", "Violet Phantom", "Storm Chaser", "Thunder Rider", "Midnight Oracle", "Rain King", "Legend of the Rain", "Violet Icon"),
+        Theme.RALLY to listOf("Co-driver", "Privateer", "Club Racer", "Stage Hunter", "Gravel Ace", "Works Driver", "Team Leader", "Rally Ace", "Champion", "Rally Legend", "Rally Icon"),
+        Theme.BLUEPRINT to listOf("Draftsman", "Surveyor", "Junior Planner", "Planner", "Engineer", "Senior Engineer", "Architect", "Lead Architect", "Chief Architect", "Master Planner", "City Founder"),
+        Theme.NAUTICAL to listOf("Deckhand", "Bosun", "Helmsman", "Navigator", "Second Mate", "First Mate", "Captain", "Commodore", "Rear Admiral", "Admiral", "Fleet Admiral"),
+        Theme.ARCTIC to listOf("Trekker", "Snow Scout", "Ice Walker", "Ice Ranger", "Glacier Guide", "Expedition Lead", "Polar Explorer", "Aurora Seeker", "North Star", "Legend of the North", "Polar Icon"),
     )
-    /** The level each title starts at. */
-    val titleLevels = intArrayOf(1, 4, 8, 15, 25, 40)
+    /** The level each title starts at: every 5 levels, up to prestige at 50. */
+    val titleLevels = intArrayOf(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50)
 
-    fun ladder(t: Theme): List<String> = ladders[t] ?: listOf("Rookie", "Driver", "Pathfinder", "Road Captain", "Road Master", "Road Legend")
+    fun ladder(t: Theme): List<String> = ladders[t] ?: listOf("Rookie", "Driver", "Regular", "Pathfinder", "Navigator", "Road Captain", "Road Master", "Veteran", "Expert", "Road Legend", "Road Icon")
 
     fun title(t: Theme = MapState.theme, level: Int = Explorer.level): String {
         val l = ladder(t)

@@ -50,11 +50,17 @@ class BigTextTest {
             val bmp = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888); root.draw(Canvas(bmp))
             File(out, "big_$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
+        Convoy.myName = "Vyto"
         Places.save("home", Place("Home", "Ilioupoli", LatLng(37.931, 23.756)))
         for ((th, dark) in listOf(Theme.VIOLET_RAIN to true, Theme.OPEN_WORLD to true)) {
             MapState.setTheme(th); MapState.setLightMode(if (dark) MapState.LightMode.DARK else MapState.LightMode.LIGHT)
             activity.refreshForTest(); shot("home_${th.name.lowercase()}")
             activity.openSheetForTest("you"); shot("you_${th.name.lowercase()}")
+            if (th == Theme.VIOLET_RAIN) {
+                // opened from You: a back button to You; Settings › a page: back to Settings
+                MainActivity::class.java.getDeclaredMethod("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "progress"); shot("progress_back")
+                MainActivity::class.java.getDeclaredMethod("sheetBack").apply { isAccessible = true }.invoke(activity); shot("back_to_you")
+            }
             MainActivity::class.java.getDeclaredMethod("closeSheet").apply { isAccessible = true }.invoke(activity)
         }
     }
