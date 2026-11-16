@@ -687,7 +687,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** ≡ More: what used to crowd the chip row. */
     private fun renderMore() {
-        val key = "${theme.name}|${MapState.dark}|${Convoy.active}|${Places.labelled().joinToString { it.label }}|${Places.saved("home")?.name}|${Places.saved("work")?.name}"
+        val key = "${theme.name}|${MapState.dark}|${Convoy.active}|${Places.labelled().joinToString { it.label.orEmpty() }}|${Places.saved("home")?.name}|${Places.saved("work")?.name}"
         if (key == moreKey && sheetHost.childCount > 0) return
         moreKey = key
         sheetHost.removeAllViews()
