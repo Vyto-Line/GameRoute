@@ -45,8 +45,8 @@ class ThumbnailsTest {
                 }
                 r.draw(c, w, h, Rect(0, 0, w, h), 1.6f, hud = false)
                 val colours = colours(bmp)
-                println("thumb ${theme.name} $mode: missing=${r.squaresMissing} of ${r.squaresShown}, colours=$colours")
-                assertTrue("${theme.name} $mode: map squares never came (${r.squaresMissing} of ${r.squaresShown} missing)", r.squaresMissing * 2 < r.squaresShown)
+                println("thumb ${theme.name} $mode: missing=${r.squaresMissing} of ${r.squaresShown}, colours=$colours, problem=${TileCache.lastProblem}")
+                assertTrue("${theme.name} $mode: map squares never came (${r.squaresMissing} of ${r.squaresShown} missing; ${TileCache.lastProblem}; data ${VectorSource.debugKeys()})", r.squaresMissing * 2 < r.squaresShown)
                 val tag = if (mode == MapState.LightMode.DARK) "d" else "l"
                 @Suppress("DEPRECATION")
                 File(out, "thumb_${theme.name.lowercase()}_$tag.webp").outputStream().use { bmp.compress(Bitmap.CompressFormat.WEBP, 82, it) }

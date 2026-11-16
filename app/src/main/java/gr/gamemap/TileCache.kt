@@ -16,6 +16,9 @@ import java.util.concurrent.TimeUnit
 object TileCache {
     val loaded = Signal()
 
+    /** Why the last square couldn't be drawn (for tests and the crash log). */
+    @Volatile var lastProblem: String? = null
+
     /** Pixel size of one tile; 512 gives crisp lines and text on dense screens. */
     var tilePx = 512
         private set
@@ -137,10 +140,10 @@ object TileCache {
                         failed.remove(k)
                         loaded.fire()
                     } else {
-                        failed[k] = System.currentTimeMillis()
+                        failed[k] = System.currentTimeMillis(); lastProblem = "$k: no map data"
                     }
                 } catch (t: Throwable) {
-                    failed[k] = System.currentTimeMillis()
+                    failed[k] = System.currentTimeMillis(); lastProblem = "$k: $t"
                 } finally {
                     inFlight.remove(k)
                 }

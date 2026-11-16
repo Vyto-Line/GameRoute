@@ -71,6 +71,7 @@ object VectorSource {
 
     /** For tests: use already-parsed data for a tile. */
     fun put(z: Int, x: Int, y: Int, vt: VectorTile) { parsed.put("$z/$x/$y", vt) }
+    internal fun debugKeys() = "${parsed.size()}/${parsed.maxSize()} bytes: " + parsed.snapshot().keys.take(6)
 
     /** Every parsed tile in memory, keyed "z/x/y" (for searching names offline). */
     fun parsedTiles(): Map<String, VectorTile> = parsed.snapshot()
