@@ -84,6 +84,17 @@ class Fix101Test {
         val z = MapState.phone.freeZoomForTest()
         log.append("no route, on a motorway: auto zoom $z\n")
         assertTrue("zooms out on a motorway without a route", z <= -0.8)
+        // English: street names in Latin letters on screen; the voice says only the turn
+        val names = listOf("Παναγή Τσαλδάρη", "Αιόλου", "Λεωφόρος Βασιλίσσης Σοφίας", "ΣΤΑΔΙΟΥ", "Ευριπίδου", "Kifisias")
+        val lat = names.map { Names.latin(it) }
+        log.append("latin: $lat\n")
+        assertTrue(lat.toString(), lat[0] == "Panagi Tsaldari" && lat[1] == "Aiolou" && lat[3] == "STADIOU" && lat[4] == "Evripidou" && lat[5] == "Kifisias")
+        val step = NavStep("turn", "right", "Αιόλου", 0, LatLng(37.98, 23.73), null)
+        val spokenEn = Phrases.ahead(step, 200.0, Phrases.ENGLISH, named = false)
+        val spokenEl = Phrases.ahead(step, 200.0, Phrases.GREEK, named = false)
+        val shownEn = Phrases.instruction(step, Phrases.ENGLISH)
+        log.append("voice: \"$spokenEn\" / \"$spokenEl\"; on screen: \"$shownEn\"\n")
+        assertTrue(spokenEn == "In 200 metres, turn right" && !spokenEl.contains("Αιόλου") && shownEn.contains("Aiolou"))
         log.append("all checks passed\n")
     }
 }

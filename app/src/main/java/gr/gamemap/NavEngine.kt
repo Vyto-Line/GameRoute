@@ -490,7 +490,7 @@ object NavEngine {
         val r = current
         if (active && r != null && !arrived) {
             val prev = r.steps.getOrNull(nextStep - 1)?.road ?: r.steps.firstOrNull()?.road
-            if (!prev.isNullOrBlank()) return prev
+            if (!prev.isNullOrBlank()) return Names.shown(prev)
         }
         val p = LocationTracker.position ?: return ""
         if (LocationTracker.speedMps < 2f && !active) return ""

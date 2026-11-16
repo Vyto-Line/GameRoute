@@ -494,9 +494,10 @@ object Phrases {
     private val ordEn = listOf("", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth")
 
     /** The instruction, capitalised, without a distance. */
-    fun instruction(s: NavStep, lang: String): String {
-        val name = s.road
+    fun instruction(s: NavStep, lang: String, named: Boolean = true): String {
         val g = lang == GREEK
+        // spoken directions say only the turn ("turn right"); on screen the name, in the reader's letters
+        val name = if (!named) "" else if (g) s.road else Names.latin(s.road)
         val onto = if (name.isBlank()) "" else if (g) " στην $name" else " onto $name"
         val base = when (s.type) {
             "arrive" -> if (g) "Φτάσατε στον προορισμό σας" else "You have arrived"
@@ -546,14 +547,14 @@ object Phrases {
     }
 
     /** "In 300 metres, turn left onto X" */
-    fun ahead(s: NavStep, m: Double, lang: String): String {
-        val instr = instruction(s, lang)
+    fun ahead(s: NavStep, m: Double, lang: String, named: Boolean = true): String {
+        val instr = instruction(s, lang, named)
         val lower = instr.replaceFirstChar { it.lowercase() }
         return if (lang == GREEK) "Σε ${distance(m, lang)}, $lower" else "In ${distance(m, lang)}, $lower"
     }
 
-    fun then(s: NavStep, lang: String): String {
-        val lower = instruction(s, lang).replaceFirstChar { it.lowercase() }
+    fun then(s: NavStep, lang: String, named: Boolean = true): String {
+        val lower = instruction(s, lang, named).replaceFirstChar { it.lowercase() }
         return if (lang == GREEK) "και μετά $lower" else "then $lower"
     }
 

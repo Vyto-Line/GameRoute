@@ -124,16 +124,16 @@ object Voice {
         when {
             !saidNow && dist <= near -> {
                 saidNow = true; saidPrep = true; saidFar = true
-                val t = Phrases.instruction(step, lang)
-                say(if (then != null) "$t, ${Phrases.then(then, lang)}" else t)
+                val t = Phrases.instruction(step, lang, named = false)
+                say(if (then != null) "$t, ${Phrases.then(then, lang, named = false)}" else t)
             }
             !saidPrep && dist <= prep && dist > near * 1.8 && stepStartDist > near * 2 -> {
                 saidPrep = true; saidFar = true
-                say(Phrases.ahead(step, dist, lang))
+                say(Phrases.ahead(step, dist, lang, named = false))
             }
             !saidFar && dist in 1800.0..2300.0 && speed > 17f -> {
                 saidFar = true
-                say(Phrases.ahead(step, dist, lang))
+                say(Phrases.ahead(step, dist, lang, named = false))
             }
         }
     }
@@ -149,8 +149,8 @@ object Voice {
         if (!saidNow && dist - lead <= now) {
             saidNow = true; saidPrep = true; saidFar = true
             saidMarks += 0
-            val t = Phrases.instruction(step, lang)
-            say(if (then != null) "$t, ${Phrases.then(then, lang)}" else t)
+            val t = Phrases.instruction(step, lang, named = false)
+            say(if (then != null) "$t, ${Phrases.then(then, lang, named = false)}" else t)
             return
         }
         if (saidNow) return
@@ -162,7 +162,7 @@ object Voice {
             // the turn began closer than this, or we're already past the next line's moment: skip it
             if (stepStartDist < m * 0.9 || dist - lead <= floor) { saidMarks += m; continue }
             saidMarks += m
-            say(Phrases.ahead(step, m.toDouble(), lang))
+            say(Phrases.ahead(step, m.toDouble(), lang, named = false))
             return
         }
     }

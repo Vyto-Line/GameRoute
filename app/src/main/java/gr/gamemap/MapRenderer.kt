@@ -2106,7 +2106,7 @@ class MapRenderer(private val car: Boolean = false) {
             else -> {
                 val st = step!!
                 NavEngine.formatDistance(NavEngine.distanceToNext) to
-                    (if (st.road.isNotBlank() && st.type != "arrive") st.road else st.text)
+                    (if (st.road.isNotBlank() && st.type != "arrive") Names.shown(st.road) else st.text)
             }
         }
         // the small line ("Turn left", "Keep right") only when it adds something: never a bare
@@ -2152,7 +2152,7 @@ class MapRenderer(private val car: Boolean = false) {
         if (then != null && !NavEngine.arrived) {
             text.textSize = 15 * d
             text.typeface = Typeface.DEFAULT_BOLD
-            val label = ellipsize(if (then.road.isNotBlank() && then.type != "arrive") then.road else then.text, box.width() - 110 * d)
+            val label = ellipsize(if (then.road.isNotBlank() && then.type != "arrive") Names.shown(then.road) else then.text, box.width() - 110 * d)
             val w = text.measureText(label) + 82 * d
             val tab = RectF(box.left + 14 * d, box.bottom - 2 * d, box.left + 14 * d + w, box.bottom + 38 * d)
             panel(c, tab, d, t, outline = false)
@@ -2205,7 +2205,7 @@ class MapRenderer(private val car: Boolean = false) {
         val tx = c2 + 12 * d; val maxW = box.right - tx - 10 * d
         val roundabout = (step.type == "roundabout" || step.type == "rotary") && step.exit in 1..12
         val what = (if (roundabout) gr.gamemap.L.t("Exit ${step.exit}") else step.text.substringBefore(" onto ").substringBefore(" στην ")).uppercase()
-        val road = step.road.takeIf { it.isNotBlank() && step.type != "arrive" } ?: step.text
+        val road = step.road.takeIf { it.isNotBlank() && step.type != "arrive" }?.let { Names.shown(it) } ?: step.text
         text.textAlign = Paint.Align.LEFT
         text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 12 * d; text.color = Ui.dim(t, 190)
         c.drawText(ellipsize(what, maxW), tx, box.top + 30 * d, text)
@@ -2225,7 +2225,7 @@ class MapRenderer(private val car: Boolean = false) {
             c.drawText(gap, gx, y + 5 * d, text)
             val sx = gx + text.measureText(gap) + 16 * d
             drawJunction(c, sx, y, 24 * d, then, ink, ink, d, mini = true)
-            val label = (if (then.road.isNotBlank() && then.type != "arrive") then.road else then.text)
+            val label = (if (then.road.isNotBlank() && then.type != "arrive") Names.shown(then.road) else then.text)
             c.drawText(ellipsize(label, box.right - sx - 24 * d), sx + 16 * d, y + 5 * d, text)
         }
         text.typeface = t.typeface

@@ -716,7 +716,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         val mb = Maneuver.Builder(type).setIcon(icon(carContext, res))
         if (roundabout) mb.setRoundaboutExitNumber(s.exit)
         val b = Step.Builder(s.text).setManeuver(mb.build())
-        if (s.road.isNotBlank()) b.setRoad(s.road)
+        if (s.road.isNotBlank()) b.setRoad(gr.gamemap.Names.shown(s.road))
         val lanes = s.lanes
         if (withLanes && lanes != null) {
             for (l in lanes) {
