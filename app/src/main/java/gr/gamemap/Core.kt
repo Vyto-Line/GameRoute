@@ -231,8 +231,19 @@ class MapView(private val zoomKey: String) {
 
     private var lastAuto = 0.0
 
+    /** Driving without a route: the road kind, counted once it's held for a few seconds. */
+    private var freeKind: String? = null
+    private var freePending: String? = null
+    private var freePendingAt = 0L
+
     private fun autoZoom(): Double {
-        if (!NavEngine.active || NavEngine.arrived || !following || overview || gesture) return 0.0
+        if (!following || overview || gesture) return 0.0
+        if (!NavEngine.active || NavEngine.arrived) {
+            // just driving (no route): out on highways and at speed, in on small streets, the same way
+            if (NavEngine.active || NavEngine.planning || LocationTracker.speedMps < 3f && freeKind == null) return 0.0
+            if (SystemClock.uptimeMillis() - userZoomAt < 20_000) return lastAuto
+            return freeZoom().also { lastAuto = it }
+        }
         // you zoomed yourself a moment ago: the automatic zoom holds still for 20 s, so it doesn't
         // undo your zoom (on a highway it would otherwise pull straight back out)
         if (SystemClock.uptimeMillis() - userZoomAt < 20_000) return lastAuto
@@ -263,6 +274,26 @@ class MapView(private val zoomKey: String) {
     }
 
     internal fun autoZoomForTest() = autoZoomNow()
+    internal fun freeZoomForTest() = freeZoom()
+
+    private fun freeZoom(): Double {
+        val now = SystemClock.uptimeMillis()
+        val k = RoadMatch.kindNow()
+        // a side street brushing past doesn't count: a new kind holds 3 s first
+        if (k != null && k != freeKind) {
+            if (k != freePending) { freePending = k; freePendingAt = now }
+            else if (now - freePendingAt > 3_000 || freeKind == null) { freeKind = k; freePending = null }
+        } else if (k == freeKind) freePending = null
+        val kmh = LocationTracker.speedMps * 3.6
+        val fast = -((kmh - 35) / 65).coerceIn(0.0, 1.0) * 1.1
+        val road = RoadKind.zoomFor(freeKind)
+        val v = when {
+            road < 0 -> minOf(road, fast)
+            road > 0 -> road + maxOf(fast, -0.5) * 0.5
+            else -> fast
+        }
+        return Math.round(v.coerceIn(-1.4, 1.0) * 10) / 10.0
+    }
 
     /** Advances the zoom animation. Returns true while animating. */
     fun tick(): Boolean {

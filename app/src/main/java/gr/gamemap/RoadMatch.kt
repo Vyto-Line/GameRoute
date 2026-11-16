@@ -39,6 +39,15 @@ object RoadMatch {
 
     internal fun reset() { tileKey = ""; segs = emptyList(); last = null }
 
+    /** The kind of road the car is on right now (driving without a route), as RoadKind names it. */
+    fun kindNow(): String? {
+        val s = last?.takeIf { System.currentTimeMillis() - lastAt < 8_000 } ?: return null
+        return s.cls.takeIf { it in setOf("motorway", "trunk", "primary", "secondary", "tertiary", "minor", "service") }
+    }
+
+    /** For tests: the stretch the car is on. */
+    internal fun setLastForTest(cls: String) { last = Seg(0.0, 0.0, 1.0, 1.0, cls, 0, 1L, false); lastAt = System.currentTimeMillis() }
+
     /** For tests: use these stretches (already in metres around [lat]/[lon]). */
     internal fun useForTest(lat: Double, lon: Double, list: List<Seg>) {
         originLat = lat; originLon = lon; segs = list; tileKey = "test"; last = null

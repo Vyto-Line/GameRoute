@@ -79,6 +79,11 @@ class Fix101Test {
         log.append("rain: $diff pixels changed in 100 ms, effectsMoving=${r.effectsMoving}, delay ${Perf.effectsDelay()} ms\n")
         assertTrue("the rain moves", diff > 50)
         assertTrue("rain at 20+ frames a second", Perf.effectsDelay() <= 50)
+        // driving without a route: the zoom follows the road (out on a motorway)
+        RoadMatch.setLastForTest("motorway")
+        val z = MapState.phone.freeZoomForTest()
+        log.append("no route, on a motorway: auto zoom $z\n")
+        assertTrue("zooms out on a motorway without a route", z <= -0.8)
         log.append("all checks passed\n")
     }
 }

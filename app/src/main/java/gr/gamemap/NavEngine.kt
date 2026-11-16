@@ -18,6 +18,7 @@ object NavEngine {
     // ------------------------------------------------------------- planning (route preview)
 
     var planning = false
+        private set
     /**
      * The route choice was started in the car: it stays on the car's screen (the phone keeps its own
      * map, untouched). Started on the phone, it shows on both, as before.
@@ -28,7 +29,6 @@ object NavEngine {
     private fun fitPlan(points: List<LatLng>) = if (planInCar) MapState.car.requestFit(points) else MapState.requestFit(points)
     /** Planning, as this screen sees it. */
     fun planningOn(car: Boolean) = planning && (car || !planInCar)
-        private set
     var planPlace: Place? = null
         private set
     var options: List<RouteOption> = emptyList()
