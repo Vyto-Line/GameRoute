@@ -107,6 +107,11 @@ object Explorer {
         Theme.RETRO -> gr.gamemap.L.t("Stage clear!")
         Theme.TRAILBLAZER -> gr.gamemap.L.t("Area explored!")
         Theme.VIOLET_RAIN -> gr.gamemap.L.t("Through the rain")
+        Theme.RALLY -> gr.gamemap.L.t("Stage complete")
+        Theme.BLUEPRINT -> gr.gamemap.L.t("Plan complete")
+        Theme.NAUTICAL -> gr.gamemap.L.t("Landfall")
+        Theme.ARCTIC -> gr.gamemap.L.t("Expedition complete")
+        Theme.HIGH_CONTRAST -> gr.gamemap.L.t("You have arrived")
     }
 
     // ------------------------------------------------------------------ landmarks

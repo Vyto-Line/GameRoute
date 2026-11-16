@@ -241,6 +241,7 @@ class MapRenderer(private val car: Boolean = false) {
             if (theme.paper) drawPaper(c, full)
             if (theme.sunGlow) drawSunGlow(c, full)
             if (theme.rain) drawRain(c, full, d)
+            if (theme.drafting) drawDrafting(c, full, d)
         }
         if (theme.radar) drawRadarFrame(c, cx, cy, radius, bearing, d)
         prof("overlays", tp0); tp0 = System.nanoTime()
@@ -1021,6 +1022,24 @@ class MapRenderer(private val car: Boolean = false) {
             val y = a.top + ((drops[i + 1] + t * 3f) % 1f) * h
             c.drawLine(x, y, x + len * 0.22f, y + len, stroke)
             i += 3
+        }
+    }
+
+    /** Blueprint: a faint drafting grid, every fifth line a little stronger. */
+    private fun drawDrafting(c: Canvas, a: Rect, d: Float) {
+        val dark = MapState.dark
+        val step = 22 * d
+        var i = 0; var x = a.left.toFloat()
+        while (x < a.right) {
+            stroke.color = if (dark) Color.argb(if (i % 5 == 0) 46 else 22, 207, 227, 255) else Color.argb(if (i % 5 == 0) 44 else 20, 30, 80, 166)
+            stroke.strokeWidth = (if (i % 5 == 0) 1.2f else 0.8f) * d
+            c.drawLine(x, a.top.toFloat(), x, a.bottom.toFloat(), stroke); x += step; i++
+        }
+        i = 0; var y = a.top.toFloat()
+        while (y < a.bottom) {
+            stroke.color = if (dark) Color.argb(if (i % 5 == 0) 46 else 22, 207, 227, 255) else Color.argb(if (i % 5 == 0) 44 else 20, 30, 80, 166)
+            stroke.strokeWidth = (if (i % 5 == 0) 1.2f else 0.8f) * d
+            c.drawLine(a.left.toFloat(), y, a.right.toFloat(), y, stroke); y += step; i++
         }
     }
 

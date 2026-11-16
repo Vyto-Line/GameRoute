@@ -204,6 +204,10 @@ object Xp {
         Theme.RETRO to listOf("Player 1", "Level Runner", "Power-Up", "High Scorer", "Final Boss", "Hall of Fame"),
         Theme.TRAILBLAZER to listOf("Trainee", "Tracker", "Trailblazer", "Expedition Lead", "Master Explorer", "Legend of the Trail"),
         Theme.VIOLET_RAIN to listOf("Rookie", "Rain Runner", "Neon Drifter", "Violet Phantom", "Storm Chaser", "Legend of the Rain"),
+        Theme.RALLY to listOf("Co-driver", "Privateer", "Stage Hunter", "Works Driver", "Rally Ace", "Rally Legend"),
+        Theme.BLUEPRINT to listOf("Draftsman", "Surveyor", "Planner", "Engineer", "Chief Architect", "Master Planner"),
+        Theme.NAUTICAL to listOf("Deckhand", "Bosun", "Navigator", "First Mate", "Captain", "Admiral"),
+        Theme.ARCTIC to listOf("Trekker", "Snow Scout", "Ice Ranger", "Expedition Lead", "Polar Explorer", "Legend of the North"),
     )
     /** The level each title starts at. */
     val titleLevels = intArrayOf(1, 4, 8, 15, 25, 40)

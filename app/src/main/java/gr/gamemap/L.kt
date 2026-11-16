@@ -450,7 +450,12 @@ object L {
         "Update" to "Ενημέρωση", "Later" to "Αργότερα", "Downloading update…" to "Λήψη ενημέρωσης…",
         "Download failed: check internet" to "Η λήψη απέτυχε: ελέγξτε το ίντερνετ",
         // style names
-        "Free Roam" to "Ελεύθερη Περιπλάνηση", "Might City" to "Πόλη της Ισχύος", "Midnight Run" to "Μεσονύχτια Κούρσα", "Blockworld" to "Κυβόκοσμος", "Realm Map" to "Χάρτης Βασιλείου", "Fire Tower" to "Πυροφυλάκιο", "Catch 'Em Trail" to "Κυνήγι Ορόσημων", "8-Bit" to "8-Bit", "Violet Rain" to "Βιολετί Βροχή", "Through the rain" to "Μέσα από τη βροχή",
+        "Free Roam" to "Ελεύθερη Περιπλάνηση", "Might City" to "Πόλη της Ισχύος", "Midnight Run" to "Μεσονύχτια Κούρσα", "Blockworld" to "Κυβόκοσμος", "Realm Map" to "Χάρτης Βασιλείου", "Fire Tower" to "Πυροφυλάκιο", "Catch 'Em Trail" to "Κυνήγι Ορόσημων", "8-Bit" to "8-Bit", "Violet Rain" to "Βιολετί Βροχή", "Through the rain" to "Μέσα από τη βροχή", "Rally Roadbook" to "Ράλι Roadbook", "Blueprint" to "Σχέδιο", "Nautical Chart" to "Ναυτικός Χάρτης", "Arctic" to "Αρκτική", "High Contrast" to "Υψηλή Αντίθεση",
+        "Stage complete" to "Η ειδική ολοκληρώθηκε", "Plan complete" to "Το σχέδιο ολοκληρώθηκε", "Landfall" to "Στεριά!", "Expedition complete" to "Η αποστολή ολοκληρώθηκε", "You have arrived" to "Φτάσατε",
+        "Co-driver" to "Συνοδηγός", "Privateer" to "Ιδιώτης οδηγός", "Stage Hunter" to "Κυνηγός ειδικών", "Works Driver" to "Εργοστασιακός οδηγός", "Rally Ace" to "Άσσος του ράλι", "Rally Legend" to "Θρύλος του ράλι",
+        "Draftsman" to "Σχεδιαστής", "Surveyor" to "Τοπογράφος", "Planner" to "Πολεοδόμος", "Engineer" to "Μηχανικός", "Chief Architect" to "Επικεφαλής αρχιτέκτονας", "Master Planner" to "Μεγάλος σχεδιαστής",
+        "Deckhand" to "Ναύτης", "Bosun" to "Λοστρόμος", "Navigator" to "Πλοηγός", "First Mate" to "Ύπαρχος", "Captain" to "Καπετάνιος", "Admiral" to "Ναύαρχος",
+        "Trekker" to "Οδοιπόρος", "Snow Scout" to "Ανιχνευτής χιονιού", "Ice Ranger" to "Φύλακας των πάγων", "Polar Explorer" to "Πολικός εξερευνητής", "Legend of the North" to "Θρύλος του Βορρά",
         // trips, offline, explorer
         "Clear history" to "Διαγραφή ιστορικού", "Your finished trips will show here." to "Οι διαδρομές σας θα εμφανίζονται εδώ.",
         "City centre" to "Κέντρο πόλης", "Wider area" to "Ευρύτερη περιοχή",
