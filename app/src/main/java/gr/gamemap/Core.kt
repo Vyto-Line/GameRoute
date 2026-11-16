@@ -281,8 +281,9 @@ class MapView(private val zoomKey: String) {
         val k = RoadMatch.kindNow()
         // a side street brushing past doesn't count: a new kind holds 3 s first
         if (k != null && k != freeKind) {
-            if (k != freePending) { freePending = k; freePendingAt = now }
-            else if (now - freePendingAt > 3_000 || freeKind == null) { freeKind = k; freePending = null }
+            if (freeKind == null) { freeKind = k; freePending = null }
+            else if (k != freePending) { freePending = k; freePendingAt = now }
+            else if (now - freePendingAt > 3_000) { freeKind = k; freePending = null }
         } else if (k == freeKind) freePending = null
         val kmh = LocationTracker.speedMps * 3.6
         val fast = -((kmh - 35) / 65).coerceIn(0.0, 1.0) * 1.1

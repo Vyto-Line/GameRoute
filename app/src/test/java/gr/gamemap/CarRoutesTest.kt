@@ -34,6 +34,8 @@ class CarRoutesTest {
             VectorSource.put(14, x, y, VectorTile(f.readBytes()))
         }
         val opts = Osrm.parseAll(File(data, "route.json").readText()).toMutableList()
+        // three routes to choose from (the saved answer has two: the third is another copy)
+        while (opts.size < 3) opts += Osrm.parseAll(File(data, "route.json").readText())[opts.size % 2]
         opts.forEachIndexed { i, o ->
             o.trafficSeconds = (o.duration * 2.2 + i * 100).toInt()
             o.delaySeconds = if (i == 1) 240 else 30
