@@ -501,6 +501,17 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             return
         }
         if (id == "convoy:accept") { gr.gamemap.Convoy.accept(); return }
+        if (id == "convoy:go") {
+            // the lobby's big button: START (host, or nobody else at the start), READY UP, or take ready back
+            val C = gr.gamemap.Convoy
+            val dest = C.destination ?: return
+            when {
+                C.lobby().isEmpty() -> { NavEngine.start(carContext, dest); MapState.car.recenter() }
+                C.meReady -> C.setReady(false)
+                else -> C.setReady(true)
+            }
+            return
+        }
         if (id == "convoy:decline") { gr.gamemap.Convoy.decline(); return }
         if (id.startsWith("friend:")) {
             // a friend in the convoy box: the map goes to them (me: back to my car)
@@ -518,6 +529,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             }
             "mute", "unmute" -> Voice.muted = !Voice.muted
             "report" -> screenManager.push(ReportScreen(carContext))
+            "friends" -> screenManager.push(FriendsCarScreen(carContext))
             "zoomin" -> MapState.car.zoomBy(1.0)
             "zoomout" -> MapState.car.zoomBy(-1.0)
             "recenter" -> MapState.car.recenter()
@@ -952,49 +964,113 @@ class FriendsCarScreen(carContext: CarContext) : Screen(carContext) {
     override fun onGetTemplate(): Template {
         val F = gr.gamemap.Friends
         val C = gr.gamemap.Convoy
-        val list = ItemList.Builder().setNoItemsMessage(gr.gamemap.L.t("No friends yet") + ". " + gr.gamemap.L.t("Add friends on your phone: Together › Friends"))
-        val rows = ArrayList<Row>()
-        if (F.ready && F.core.started) {
-            for (i in F.core.invites.filter { it.convoy != C.code }) {
-                rows += Row.Builder().setTitle(gr.gamemap.L.t("${i.from} invites you to a convoy"))
-                    .addText(if (i.dest.isNotBlank()) i.dest else gr.gamemap.L.t("No destination yet"))
-                    .setOnClickListener { screenManager.pop(); carJoinConvoy(carContext, i.convoy) }
-                    .build()
+        val L = gr.gamemap.L
+        val limit = carListLimit(carContext)
+        val canAct = carContext.carAppApiLevel >= 6 // a button on each row (older cars: tap the row)
+        val sections = ArrayList<Pair<String, List<Row>>>()
+        var used = 0
+        fun section(title: String, rows: List<Row>) {
+            val room = limit - used
+            if (rows.isEmpty() || room <= 0) return
+            val take = rows.take(room); used += take.size
+            sections += title to take
+        }
+        fun row(title: String, text: String, button: String?, onClick: () -> Unit): Row {
+            val r = Row.Builder().setTitle(title).addText(text)
+            if (button != null && canAct) r.addAction(Action.Builder().setTitle(button).setOnClickListener(onClick).build())
+            else r.setOnClickListener(onClick)
+            return r.build()
+        }
+        fun invite(f: gr.gamemap.FriendCore.Friend) {
+            if (!C.active) {
+                if (C.myName.isBlank()) C.myName = "Driver"
+                val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
+                C.create(dest)
             }
-            val friends = F.core.friends.sortedWith(compareByDescending<gr.gamemap.FriendCore.Friend> { F.core.isOnline(it.fid) }.thenBy { it.name.lowercase() })
-            for (f in friends) {
-                val online = F.core.isOnline(f.fid)
-                val sent = C.code?.let { F.core.sentTo(f.fid, it) }
-                val inConvoy = C.members.values.any { it.fid == f.fid }
-                val state = when {
-                    inConvoy -> gr.gamemap.L.t("✓ Joined")
-                    sent?.status == "joined" -> gr.gamemap.L.t("✓ Joined")
-                    sent?.status == "seen" -> gr.gamemap.L.t("✓✓ Seen")
-                    sent?.status == "no" -> gr.gamemap.L.t("Not now")
-                    sent != null -> gr.gamemap.L.t("✓ Sent")
-                    else -> gr.gamemap.L.t("Tap to invite")
+            F.invite(f)
+            CarToast.makeText(carContext, L.t("Invite sent to ${f.name}"), CarToast.LENGTH_SHORT).show()
+            listener()
+        }
+        if (F.ready && F.core.started) {
+            val c = F.core
+            // invites to me first: Join
+            section(L.t("Invites"), c.invites.filter { it.convoy != C.code }.map { i ->
+                val mins = ((System.currentTimeMillis() - i.at) / 60_000).coerceAtLeast(0)
+                row(L.t("${i.from} invites you"), (if (i.dest.isNotBlank()) L.t("Convoy to ${i.dest}") else L.t("No destination yet")) + " · " + L.t("$mins min ago"), L.t("Join")) {
+                    screenManager.pop(); carJoinConvoy(carContext, i.convoy)
                 }
-                val r = Row.Builder().setTitle((if (online) "● " else "") + f.name)
-                    .addText(gr.gamemap.L.t(if (online) "Online" else "Not online") + " · " + state)
-                if (!inConvoy) r.setOnClickListener {
-                    if (!C.active) {
-                        if (C.myName.isBlank()) C.myName = "Driver"
-                        val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
-                        C.create(dest)
-                    }
-                    F.invite(f)
-                    CarToast.makeText(carContext, gr.gamemap.L.t("Invite sent to ${f.name}"), CarToast.LENGTH_SHORT).show()
-                    listener()
-                }
-                rows += r.build()
+            })
+            if (C.active) {
+                // in a convoy: who's in, who has my invite, then everyone else
+                val inConvoy = C.members.values.filter { it.state != "left" && !it.sharing }
+                section(L.t("In your convoy"), inConvoy.map { m ->
+                    val st = when { m.stale -> L.t("no signal"); m.lostSecs > 0 -> L.t(C.lostText(m.lostSecs)); m.state == "ready" -> L.t(if (m.ready) "ready ✓" else "joined"); m.state == "arrived" -> L.t("arrived"); else -> L.t("${m.kmh} km/h") }
+                    Row.Builder().setTitle("● " + m.name).addText(st).build()
+                })
+                val members = inConvoy.map { it.fid }.toSet()
+                val sent = c.friends.filter { it.fid !in members && C.code?.let { x -> c.sentTo(it.fid, x) } != null }
+                section(L.t("Invited"), sent.map { f ->
+                    val st = C.code?.let { c.sentTo(f.fid, it)?.status }
+                    row((if (c.isOnline(f.fid)) "● " else "") + c.shownName(f), L.t(when (st) { "seen" -> "✓✓ Seen"; "no" -> "Not now"; else -> "✓ Sent" }), L.t("Again")) { invite(f) }
+                })
+                val rest = c.friends.filter { it.fid !in members && it !in sent }.sortedWith(compareBy({ !c.isOnline(it.fid) }, { it.name.lowercase() }))
+                section(L.t("Friends"), rest.map { f -> friendRow(c, f, ::row) { invite(f) } })
+            } else {
+                val fr = c.friends.sortedWith(compareBy({ !c.isOnline(it.fid) }, { it.name.lowercase() }))
+                section(L.t("Online now"), fr.filter { c.isOnline(it.fid) }.map { f -> friendRow(c, f, ::row) { invite(f) } })
+                section(L.t("Not online"), fr.filter { !c.isOnline(it.fid) }.map { f -> friendRow(c, f, ::row) { invite(f) } })
             }
         }
-        rows.take(carListLimit(carContext)).forEach { list.addItem(it) }
         val online = if (F.ready && F.core.started) F.core.friends.count { F.core.isOnline(it.fid) } else 0
-        val title = gr.gamemap.L.t("Friends") + if (online > 0) " · " + gr.gamemap.L.t("$online friends online") else ""
-        return ListTemplate.Builder().setTitle(title).setHeaderAction(Action.BACK).setSingleList(list.build()).build()
+        val title = if (C.active) L.t("Friends · in your convoy") else L.t("Friends") + if (online > 0) " · " + L.t("$online online") else ""
+        val b = ListTemplate.Builder().setTitle(title).setHeaderAction(Action.BACK)
+        if (sections.isEmpty()) {
+            b.setSingleList(ItemList.Builder().setNoItemsMessage(L.t("No friends yet") + ". " + L.t("Add friends on your phone: You › Friends")).build())
+        } else for ((t, rows) in sections) {
+            val il = ItemList.Builder(); rows.forEach { il.addItem(it) }
+            b.addSectionedList(androidx.car.app.model.SectionedItemList.create(il.build(), t))
+        }
+        // the header button: start a convoy (to where I'm going), or a quick message once in one
+        val strip = ActionStrip.Builder()
+        if (!C.active) strip.addAction(Action.Builder().setTitle(L.t("Start a convoy")).setOnClickListener {
+            if (C.myName.isBlank()) C.myName = "Driver"
+            val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
+            C.create(dest)
+            CarToast.makeText(carContext, L.t("Convoy started: invite friends below"), CarToast.LENGTH_SHORT).show()
+            listener()
+        }.build())
+        else strip.addAction(Action.Builder().setTitle(L.t("Message")).setOnClickListener { screenManager.push(QuickMessageCarScreen(carContext)) }.build())
+        b.setActionStrip(strip.build())
+        return b.build()
+    }
+
+    private fun friendRow(c: gr.gamemap.FriendCore, f: gr.gamemap.FriendCore.Friend, row: (String, String, String?, () -> Unit) -> Row, onInvite: () -> Unit): Row {
+        val L = gr.gamemap.L
+        val on = c.isOnline(f.fid)
+        val times = c.drivesWith(f.fid)
+        val text = when {
+            on && c.isBusy(f.fid) -> L.t("Do not disturb · invites wait")
+            on -> if (times > 0) L.t("Online · drove together $times times") else L.t("Online now")
+            else -> L.t("Not online")
+        }
+        return row((if (on) "● " else "") + c.shownName(f), text, L.t("Invite"), onInvite)
     }
 }
+
+/** Quick messages to the convoy from the car: one tap, no typing; everyone sees and hears it. */
+class QuickMessageCarScreen(carContext: CarContext) : Screen(carContext) {
+    override fun onGetTemplate(): Template {
+        val C = gr.gamemap.Convoy
+        val list = ItemList.Builder()
+        for ((k, _, _) in C.quick) list.addItem(Row.Builder().setTitle(C.messageText(k)).setOnClickListener {
+            C.send(k)
+            CarToast.makeText(carContext, gr.gamemap.L.t("Sent to the convoy"), CarToast.LENGTH_SHORT).show()
+            screenManager.popToRoot()
+        }.build())
+        return ListTemplate.Builder().setTitle(gr.gamemap.L.t("Message the convoy")).setHeaderAction(Action.BACK).setSingleList(list.build()).build()
+    }
+}
+
 
 /** The ☰ menu: everything the map buttons do, as a list (also for cars that don't report taps). */
 class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
@@ -1048,6 +1124,9 @@ class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
             }
         }
         friendsRow()
+        if (gr.gamemap.Convoy.active && gr.gamemap.Convoy.members.isNotEmpty()) row("💬 " + gr.gamemap.L.t("Message the convoy"), gr.gamemap.L.t("Need fuel, Stopping soon…")) {
+            screenManager.pop(); screenManager.push(QuickMessageCarScreen(carContext))
+        }
         if (gr.gamemap.Convoy.active) row(gr.gamemap.L.t("Leave convoy"), gr.gamemap.L.t("${gr.gamemap.Convoy.members.size + 1} drivers")) { gr.gamemap.Convoy.leave(); screenManager.pop() }
         else row(gr.gamemap.L.t("Map style"), (MapState.carTheme ?: MapState.theme).title) { MapState.nextCarTheme(); invalidate() }
         val stop = NavEngine.stops.firstOrNull()

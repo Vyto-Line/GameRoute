@@ -282,11 +282,12 @@ class MapRenderer(private val car: Boolean = false) {
             if (car) drawBanner(c, Rect(area.left, 0, area.right, area.bottom), d * 0.8f, theme, pad = 8 * d)
             else drawBanner(c, area, d, theme)
         }
-        convoyStrip.setEmpty()
+        convoyStrip.setEmpty(); carConvoyBottom = 0f
         // the convoy strip/box only on the convoy's own route (a route of my own looks like any other)
         if (hud && Convoy.active && Convoy.onConvoyRoute && !NavEngine.arrived && !NavEngine.planning) {
             if (car) drawCarConvoy(c, area, d, theme) else drawConvoyStrip(c, area, d, theme)
         }
+        if (hud && Convoy.active) drawConvoyMessage(c, area, d, theme)
         if (car && hud && carButtons && NavEngine.planning) drawCarRoutes(c, fullArea, d, theme)
         if (carTrip) drawCarTrip(c, area, d, theme)
         else if (car && carButtons && selectedPlace != null && !NavEngine.planning) drawCarPlace(c, area, d, theme)
@@ -295,7 +296,10 @@ class MapRenderer(private val car: Boolean = false) {
         else if (hud && NavEngine.noSignal && NavEngine.active && !NavEngine.arrived) drawNoGps(c, area, d, theme, NavEngine.noSignalText())
         if (hud && !NavEngine.arrived) NavEngine.tollAhead?.let { (t, dist) -> drawTollChip(c, area, d, theme, t.price, dist) }
         if (car && hud && carButtons) Convoy.proposal?.let { drawCarProposal(c, area, d, theme, it) }
+        val carLobby = car && hud && carButtons && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planning &&
+            selectedPlace == null && Convoy.proposal == null && !Convoy.meSharing && !Convoy.underway && !carTrip
         if (hud && Convoy.counting) { drawCountdown(c, area, d, theme); animating = true }
+        else if (carLobby) drawCarLobby(c, area, d, theme)
         else if (hud && Convoy.active && Convoy.meReady && !NavEngine.active) drawLobbyChip(c, area, d, theme)
         drawDiscovery(c, area, d, theme)
         if (hud && (view.userBearing != null || !following)) drawCompass(c, area, bearing, d, theme)
@@ -1206,6 +1210,10 @@ class MapRenderer(private val car: Boolean = false) {
         when (id) {
             "style" -> { p.moveTo(cx, cy - h); p.lineTo(cx + h, cy - h * 0.4f); p.lineTo(cx, cy + h * 0.2f); p.lineTo(cx - h, cy - h * 0.4f); p.close()
                 p.moveTo(cx - h, cy + h * 0.25f); p.lineTo(cx, cy + h * 0.85f); p.lineTo(cx + h, cy + h * 0.25f) }
+            "friends" -> { p.addCircle(cx - h * 0.35f, cy - h * 0.35f, h * 0.34f, Path.Direction.CW)
+                p.moveTo(cx - h * 0.95f, cy + h * 0.85f); p.quadTo(cx - h * 0.95f, cy + h * 0.05f, cx - h * 0.35f, cy + h * 0.05f); p.quadTo(cx + h * 0.25f, cy + h * 0.05f, cx + h * 0.25f, cy + h * 0.85f)
+                p.addCircle(cx + h * 0.45f, cy - h * 0.25f, h * 0.27f, Path.Direction.CW)
+                p.moveTo(cx + h * 0.45f, cy + h * 0.15f); p.quadTo(cx + h * 0.95f, cy + h * 0.15f, cx + h * 0.95f, cy + h * 0.8f) }
             "report" -> { p.moveTo(cx, cy - h); p.lineTo(cx + h, cy + h * 0.8f); p.lineTo(cx - h, cy + h * 0.8f); p.close()
                 p.moveTo(cx, cy - h * 0.3f); p.lineTo(cx, cy + h * 0.25f); p.moveTo(cx, cy + h * 0.52f); p.lineTo(cx, cy + h * 0.56f) }
             "mute", "unmute" -> { p.moveTo(cx - h, cy - h * 0.35f); p.lineTo(cx - h * 0.45f, cy - h * 0.35f); p.lineTo(cx + h * 0.1f, cy - h * 0.85f)
@@ -1276,7 +1284,17 @@ class MapRenderer(private val car: Boolean = false) {
         btn("style", y); y += size + gap
         if (NavEngine.active) btn(if (Voice.muted) "unmute" else "mute", y) else btn("traffic", y)
         y += size + gap
-        btn("report", y)
+        // Friends (where Report used to be): how many are online, in a green badge
+        btn("friends", y)
+        val online = if (Friends.ready && Friends.core.started) Friends.core.friends.count { Friends.core.isOnline(it.fid) } +
+            Friends.core.invites.count { it.convoy != Convoy.code } else 0
+        if (online > 0) {
+            val bx = x + size - 4 * d; val by = y + 4 * d
+            fill.color = Color.rgb(64, 200, 120); c.drawCircle(bx, by, 11 * d, fill)
+            stroke.color = Color.rgb(12, 14, 20); stroke.strokeWidth = 2 * d; c.drawCircle(bx, by, 11 * d, stroke)
+            text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 13 * d; text.color = Color.rgb(12, 14, 20)
+            c.drawText(if (online > 9) "9+" else "$online", bx, by + 4.5f * d, text)
+        }
         // bottom right: zoom and recenter / overview
         var b = a.bottom - 14 * d - size
         when {
@@ -1641,6 +1659,66 @@ class MapRenderer(private val car: Boolean = false) {
         bannerBottom = r.bottom
     }
 
+    /**
+     * Car: the convoy lobby on the map. Where to, who's in (ready ✓ / joining / not ready), + Invite
+     * (the car's Friends list) and the big button: START for the host (or anyone alone), READY UP
+     * for the others; once ready, it shows who we're waiting for (tap to take it back).
+     */
+    private fun drawCarLobby(c: Canvas, a: Rect, d: Float, t: Theme) {
+        val dest = Convoy.destination ?: return
+        val lobby = Convoy.lobby()
+        val others = Convoy.members.values.filter { it.state != "left" && !it.sharing }.sortedBy { it.name.lowercase() }.take(4)
+        val w = minOf(420 * d, a.width() * 0.42f)
+        val rowH = 30 * d
+        val r = RectF(a.left + 12 * d, maxOf(bannerBottom, a.top.toFloat()) + 10 * d, a.left + 12 * d + w, 0f)
+        r.bottom = r.top + 64 * d + (others.size + 1) * rowH + 66 * d
+        panel(c, r, d, t, outline = true)
+        val ink = Ui.ink(t); val accentInk = Ui.onPanel(t, t.route, 3.0)
+        text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD
+        text.textSize = 12 * d; text.color = accentInk
+        c.drawText(gr.gamemap.L.t("CONVOY") + " · " + (Convoy.pretty() ?: ""), r.left + 16 * d, r.top + 24 * d, text)
+        text.textSize = 18 * d; text.color = ink
+        c.drawText(ellipsize(gr.gamemap.L.t("To ${dest.name}"), w - 32 * d), r.left + 16 * d, r.top + 50 * d, text)
+        val ok = Color.rgb(64, 200, 120); val wait = Color.rgb(255, 176, 60)
+        fun row(i: Int, name: String, state: String, col: Int) {
+            val y = r.top + 64 * d + i * rowH + rowH / 2
+            fill.color = col; c.drawCircle(r.left + 22 * d, y, 6 * d, fill)
+            text.textAlign = Paint.Align.LEFT; text.textSize = 16 * d; text.color = ink
+            c.drawText(ellipsize(name, w * 0.55f), r.left + 38 * d, y + 5.5f * d, text)
+            text.textAlign = Paint.Align.RIGHT; text.textSize = 14 * d; text.color = col
+            c.drawText(gr.gamemap.L.t(state), r.right - 16 * d, y + 5 * d, text)
+        }
+        val meState = if (Convoy.meReady) "READY ✓" else if (Convoy.host) "host" else "not ready"
+        row(0, gr.gamemap.L.t(if (Convoy.host) "You (host)" else "You"), meState, if (Convoy.meReady) ok else wait)
+        others.forEachIndexed { i, m ->
+            val st = when { m.stale -> "no signal"; m.ready -> "READY ✓"; m.state == "ready" && m in lobby -> "not ready"; m.state == "driving" -> "driving"; else -> "joining…" }
+            row(i + 1, m.name, st, if (m.ready) ok else if (m.stale) Color.GRAY else wait)
+        }
+        // buttons
+        val by = r.bottom - 58 * d
+        val inv = RectF(r.left + 12 * d, by, r.left + 12 * d + (w - 36 * d) * 0.4f, by + 46 * d)
+        stroke.color = t.route; stroke.strokeWidth = 1.6f * d; c.drawRoundRect(inv, 12 * d, 12 * d, stroke)
+        text.textAlign = Paint.Align.CENTER; text.textSize = 16 * d; text.color = accentInk
+        c.drawText("+ " + gr.gamemap.L.t("Invite"), inv.centerX(), inv.centerY() + 6 * d, text)
+        carHits += inv to "friends"
+        val go = RectF(inv.right + 12 * d, by, r.right - 12 * d, by + 46 * d)
+        val waiting = lobby.filter { !it.ready }
+        val label = when {
+            lobby.isEmpty() -> "START"
+            Convoy.meReady -> if (waiting.isEmpty()) "✓ Everyone's ready" else "✓ Waiting for ${waiting.size}"
+            Convoy.host -> "START"
+            else -> "READY UP"
+        }
+        val done = label.startsWith("✓")
+        fill.color = if (done) withAlpha(ok, 60) else t.route; c.drawRoundRect(go, 12 * d, 12 * d, fill)
+        text.textSize = if (done) 15 * d else 18 * d
+        text.color = if (done) ink else if (Ui.contrast(Color.WHITE, t.route) >= 3) Color.WHITE else Color.BLACK
+        c.drawText(ellipsize(gr.gamemap.L.t(label), go.width() - 16 * d), go.centerX(), go.centerY() + 6 * d, text)
+        carHits += go to "convoy:go"
+        text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface
+        bannerBottom = r.bottom
+    }
+
     /** At the convoy start after pressing Ready: who we're still waiting for. */
     private fun drawLobbyChip(c: Canvas, a: Rect, d: Float, t: Theme) {
         val lobby = Convoy.lobby()
@@ -1701,6 +1779,7 @@ class MapRenderer(private val car: Boolean = false) {
 
     /** Where the phone's convoy strip is (taps open the list). */
     val convoyStrip = RectF()
+    private var carConvoyBottom = 0f
 
     /** The others in the convoy: an arrow in their colour, name and speed. */
     private var friendGliding = false
@@ -1720,11 +1799,15 @@ class MapRenderer(private val car: Boolean = false) {
             val s = 12 * d
             path.reset()
             path.moveTo(0f, -s * 1.2f); path.lineTo(s * 0.85f, s * 0.85f); path.lineTo(0f, s * 0.4f); path.lineTo(-s * 0.85f, s * 0.85f); path.close()
-            fill.color = if (m.stale) Color.GRAY else m.color; c.drawPath(path, fill)
-            stroke.color = Color.WHITE; stroke.strokeWidth = 2.2f * d; c.drawPath(path, stroke)
+            // signal lost for a while: the arrow fades (it comes back with their next update)
+            val lost = m.lostSecs
+            val fade = if (m.stale) 255 else if (lost > 0) 110 else 255
+            fill.color = if (m.stale) Color.GRAY else m.color; fill.alpha = fade; c.drawPath(path, fill)
+            stroke.color = Color.WHITE; stroke.alpha = fade; stroke.strokeWidth = 2.2f * d; c.drawPath(path, stroke)
+            fill.alpha = 255; stroke.alpha = 255
             c.restore()
             // name tag
-            val label = "${m.name}  ${if (m.state == "arrived") "✓" else m.kmh.toString()}"
+            val label = "${m.name}  ${if (m.state == "arrived") "✓" else if (lost > 0 && !m.stale) gr.gamemap.L.t(Convoy.lostText(lost)) else m.kmh.toString()}"
             text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 12.5f * d
             val w = text.measureText(label) + 14 * d
             val r = RectF(x + 12 * d, y - 26 * d, x + 12 * d + w, y - 6 * d)
@@ -1746,6 +1829,22 @@ class MapRenderer(private val car: Boolean = false) {
 
     /** The convoy friend under a screen point (their arrow or name tag), if any. */
     fun friendAt(x: Float, y: Float): Convoy.Member? = friendHits.lastOrNull { it.first.contains(x, y) }?.second
+
+    /** A quick message from the convoy ("Nikos: Need fuel"), for 8 s under the convoy box or strip. */
+    private fun drawConvoyMessage(c: Canvas, a: Rect, d: Float, t: Theme) {
+        val (who, key, _) = Convoy.showMessage() ?: return
+        val label = "$who: ${Convoy.messageText(key)}"
+        text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 15 * d
+        val w = text.measureText(label) + 44 * d
+        val top = maxOf(bannerBottom, convoyStrip.bottom, carConvoyBottom) + 8 * d
+        val left = if (car) a.left + 12 * d else a.exactCenterX() - w / 2
+        val r = RectF(left, top, left + w, top + 36 * d)
+        panel(c, r, d, t, outline = true)
+        fill.color = t.route; c.drawCircle(r.left + 18 * d, r.centerY(), 6 * d, fill)
+        text.color = Ui.ink(t); c.drawText(label, r.left + 32 * d, r.centerY() + 5 * d, text)
+        bannerBottom = r.bottom
+        animating = true // it goes away by itself after 8 s
+    }
 
     /** Phone: a slim strip under the turn card: everyone on a line to the flag, with how far along (%). */
     private fun drawConvoyStrip(c: Canvas, a: Rect, d: Float, t: Theme) {
@@ -1791,6 +1890,7 @@ class MapRenderer(private val car: Boolean = false) {
         val w = minOf(400 * d, a.width() - 28f * d)
         val rowH = 26 * d
         val r = RectF(a.left + 12 * d, bannerBottom + 8 * d, a.left + 12 * d + w, bannerBottom + 8 * d + 46 * d + rows.size * rowH)
+        carConvoyBottom = r.bottom
         panel(c, r, d, t, outline = true)
         text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 11 * d
         text.color = Ui.onPanel(t, t.route, 3.0)

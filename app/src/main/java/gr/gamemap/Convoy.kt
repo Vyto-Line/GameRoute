@@ -51,6 +51,32 @@ object Convoy {
         val progress: Double get() = if (state == "arrived") 1.0 else if (total > 0 && left >= 0) (1 - left / total).coerceIn(0.0, 1.0) else 0.0
         /** Updates come every second while moving (5 s when stopped), so 25 s without one = signal lost. */
         val stale: Boolean get() = System.currentTimeMillis() - seen > (if (state == "driving" || kmh >= 3) 25_000 else 150_000)
+
+        /**
+         * Signal lost for this many seconds (0 = fine): driving and no update for 6 s. The arrow fades
+         * and the lists say "Signal lost 12 s"; the next update brings them back by itself.
+         */
+        val lostSecs: Int get() {
+            if (state != "driving" && kmh < 3) return 0
+            val gap = System.currentTimeMillis() - seen
+            return if (gap > 6_000) (gap / 1000).toInt() else 0
+        }
+
+        /**
+         * Their clock against mine (ms to add to their time stamps): the smallest gap between when
+         * they sent and when it came, over the last updates (the real-time line takes ~0.1 s, so the
+         * smallest gap is nearly all clock difference). Countdowns and gliding use it, so every
+         * phone counts down to the same moment even when phone clocks differ by seconds.
+         */
+        private val gaps = LongArray(20) { Long.MAX_VALUE }
+        private var gapN = 0
+        @Volatile var skew = 0L
+            private set
+        fun clockSample(theirTs: Long, now: Long) {
+            if (theirTs <= 0) return
+            gaps[gapN++ % gaps.size] = now - theirTs
+            skew = gaps.min().takeIf { it != Long.MAX_VALUE } ?: 0L
+        }
         /** Time stamp of the newest update taken (older ones arriving late are ignored). */
         @Volatile var lastTs = 0L
 
@@ -476,7 +502,7 @@ object Convoy {
         listener = t; t.start()
     }
 
-    private fun take(o: JSONObject) {
+    internal fun take(o: JSONObject) {
         val id = o.optString("id"); if (id.isBlank()) return
         // the destination travels with every message (so whoever joins late gets it too)
         // When someone chooses a new one, the others are asked first (it changes their route).
@@ -507,6 +533,10 @@ object Convoy {
         val ts = o.optLong("ts", 0)
         if (ts != 0L && ts <= m.lastTs) return
         if (ts != 0L) m.lastTs = ts
+        val nowMs = System.currentTimeMillis()
+        m.clockSample(ts, nowMs)
+        // a quick message ("Need fuel"): shown for a few seconds and said aloud while driving
+        if (o.optString("t") == "msg") { heard(m, o.optString("k"), ts + m.skew); return }
         m.name = o.optString("n", m.name)
         val fc = o.optString("fc")
         if (fc.isNotBlank() && fc != m.fc) {
@@ -518,8 +548,8 @@ object Convoy {
         if (o.has("lat")) {
             val now = System.currentTimeMillis()
             m.pos = LatLng(o.getDouble("lat"), o.getDouble("lon"))
-            // measured when they sent it (phone clocks agree to a second or so); else: now
-            m.fixAt = if (ts in (now - 10_000)..now) ts else now
+            // measured when they sent it, on my clock (their clock corrected by the measured difference)
+            m.fixAt = (ts + m.skew).takeIf { it in (now - 10_000)..now } ?: now
         }
         m.heading = o.optDouble("h", m.heading.toDouble()).toFloat()
         m.kmh = o.optInt("s", m.kmh)
@@ -531,11 +561,11 @@ object Convoy {
         m.state = st
         m.ownDest = if (st == "own" && o.has("olat")) Place(o.optString("on", "Their destination"), "", LatLng(o.getDouble("olat"), o.getDouble("olon"))) else null
         m.ready = st == "ready" && o.optBoolean("rd", false)
-        m.readyAt = if (m.ready) o.optLong("ra", ts) else 0
+        m.readyAt = if (m.ready) o.optLong("ra", ts) + m.skew else 0 // on my clock: everyone counts down to the same moment
         m.along = o.optBoolean("al", false)
         m.sharing = o.optBoolean("sh", false)
         m.lv = o.optString("lv")
-        m.seen = o.optLong("ts", System.currentTimeMillis()).coerceAtMost(System.currentTimeMillis())
+        m.seen = nowMs // when it reached me (my clock)
         soon()
     }
 
@@ -713,11 +743,73 @@ object Convoy {
         }
         if (r.state == "own") return if (r.me) "on your own route" else "on their own route"
         if (r.me) return if (onConvoyRoute) NavEngine.formatDistance(NavEngine.remainingDistance) + " to go" else "" // the name says "You" already
-        val mine = if (onConvoyRoute) NavEngine.remainingDistance else return NavEngine.formatDistance(r.left.coerceAtLeast(0.0)) + " to go"
-        val d = mine - r.left
+        if (!onConvoyRoute) return NavEngine.formatDistance(r.left.coerceAtLeast(0.0)) + " to go"
+        members[r.id]?.lostSecs?.takeIf { it > 0 }?.let { return lostText(it) }
         if (r.kmh == 0) return "stopped"
+        val d = gapTo(r) ?: return NavEngine.formatDistance(r.left.coerceAtLeast(0.0)) + " to go"
         return if (d >= 0) "${NavEngine.formatDistance(d)} ahead" else "${NavEngine.formatDistance(-d)} behind"
     }
+
+    /** "Signal lost 12 s" / "Signal lost 2 min". */
+    fun lostText(secs: Int): String = if (secs < 60) "signal lost $secs s" else "signal lost ${secs / 60} min"
+
+    /**
+     * How far they are ahead of me (negative: behind), measured along the same road the same way on
+     * every phone: where they are now (moved on from their last update at their speed) and where I
+     * am, both on the convoy route. Their phone does the same the other way round, so the two
+     * numbers match (850 m ahead here = 850 m behind there). Off the route: from what's left to go.
+     */
+    fun gapTo(r: Row): Double? {
+        val m = members[r.id] ?: return null
+        val now = System.currentTimeMillis()
+        val p = m.predicted(now) ?: return null
+        val theirs = NavEngine.routeDistanceOf(p)
+        if (theirs != null) return theirs - NavEngine.along
+        return if (r.left >= 0) NavEngine.remainingDistance - r.left else null
+    }
+
+    // ------------------------------------------------------------- quick messages
+
+    /** The quick messages: one tap, no typing (key, English, Greek). */
+    val quick = listOf(
+        Triple("fuel", "Need fuel", "Χρειάζομαι καύσιμο"),
+        Triple("stop", "Stopping soon", "Σταματάω σε λίγο"),
+        Triple("ahead", "Go ahead", "Προχωρήστε"),
+        Triple("wait", "Wait for me", "Περιμένετε με"),
+    )
+
+    /** The newest quick message: who, which, when (my clock). */
+    @Volatile var lastMessage: Triple<String, String, Long>? = null
+        private set
+
+    fun messageText(key: String): String = quick.firstOrNull { it.first == key }?.let { if (L.greek) it.third else it.second } ?: key
+
+    /** Sends a quick message to everyone in the convoy. */
+    fun send(key: String) {
+        if (code == null || quick.none { it.first == key }) return
+        publish(JSONObject().put("t", "msg").put("id", myId).put("n", myName.ifBlank { "Driver" }).put("k", key).put("ts", System.currentTimeMillis()))
+        lastMessage = Triple(L.t("You"), key, System.currentTimeMillis())
+        changed.fire()
+    }
+
+    private fun heard(m: Member, key: String, at: Long) {
+        if (quick.none { it.first == key }) return
+        if (System.currentTimeMillis() - at > 60_000) return // an old one (the backup line, late)
+        lastMessage = Triple(m.name, key, System.currentTimeMillis())
+        main.post {
+            changed.fire()
+            // said aloud while driving (and always in the car): eyes stay on the road
+            if (NavEngine.active || LocationTracker.speedMps > 3f) {
+                val gr = Voice.lang == Phrases.GREEK
+                Voice.say("${m.name}: " + quick.first { it.first == key }.let { if (gr) it.third else it.second })
+            }
+        }
+    }
+
+    /** The quick message to show now (8 s after it came), or null. */
+    fun showMessage(): Triple<String, String, Long>? = lastMessage?.takeIf { System.currentTimeMillis() - it.third < 8_000 }
+
+    internal fun debugMessage(name: String, key: String) { lastMessage = Triple(name, key, System.currentTimeMillis()) }
 
     /** Finishing order once everyone (or me) has arrived: (place, total). */
     fun myPlace(): Pair<Int, Int>? {

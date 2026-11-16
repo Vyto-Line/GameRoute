@@ -2679,7 +2679,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Friends", if (Friends.core.started) L.t("${Friends.core.friends.size} friends") else L.t("Add friends")) { openSheet("friends") },
                 switchRow("Show my level to friends", Xp.showToFriends) { Xp.showToFriends = it; Friends.Presence.refresh() },
             ) + (if (!Friends.core.started) emptyList() else listOf(
-                switchRow("Show me as online", Friends.core.showOnline) { Friends.setShowOnline(it) },
+                settingRow("Your status", statusName(Friends.core.status)) { chooseStatus() },
                 switchRow("Friends can invite me to convoys", Friends.core.allowInvites) { Friends.setAllowInvites(it) },
                 settingRow("My friend code", Friends.core.code) {
                     getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("Friend code", Friends.core.code))
@@ -3180,6 +3180,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         sheetHost.addView(SheetScroll(0.56).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
+        // quick messages: one tap, everyone gets it (and hears it while driving)
+        if (Convoy.members.isNotEmpty()) body.addView(android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, p * 2 / 3)
+                val icons = mapOf("fuel" to "⛽", "stop" to "⏸", "ahead" to "▶", "wait" to "✋")
+                for ((k, _, _) in Convoy.quick) addView(pill((icons[k] ?: "") + " " + Convoy.messageText(k)) {
+                    Convoy.send(k)
+                    Toast.makeText(this@MainActivity, L.t("Sent to the convoy"), Toast.LENGTH_SHORT).show()
+                }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p / 2 })
+            })
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+
         // where we're going, with Change (or Choose)
         body.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
@@ -3557,9 +3570,50 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var youKey = ""
 
     /** You: progress, Garage, friends, trips, and the app's settings, in one place. */
+    /** Green Online, red Do not disturb, grey Invisible. */
+    private fun statusColor(s: String) = when (s) { FriendCore.DND -> Color.rgb(240, 82, 82); FriendCore.INVISIBLE -> Color.rgb(140, 148, 160); else -> Color.rgb(64, 200, 120) }
+    private fun statusName(s: String) = L.t(when (s) { FriendCore.DND -> "Do not disturb"; FriendCore.INVISIBLE -> "Invisible"; else -> "Online" })
+
+    /** "● Online ▾": tap to change. */
+    private fun statusChip(s: String, onClick: () -> Unit) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+        val col = statusColor(s)
+        setPadding((10 * d).toInt(), (4 * d).toInt(), (10 * d).toInt(), (4 * d).toInt())
+        background = bg(Color.TRANSPARENT, col, 1.5f, 16f)
+        minimumHeight = (32 * d).toInt()
+        addView(View(context).apply { background = bg(col, radius = 5f) }, LinearLayout.LayoutParams((10 * d).toInt(), (10 * d).toInt()).apply { marginEnd = (7 * d).toInt() })
+        addView(label(statusName(s), 14.5f, bold = true).apply { setTextColor(ink) })
+        addView(label(" ▾", 13f).apply { setTextColor(dim()) })
+        isClickable = true; setOnClickListener { onClick() }
+        contentDescription = L.t("Your status") + ": " + statusName(s)
+    }
+
+    /** Online / Do not disturb / Invisible, and when to go back to Online by itself. */
+    private fun chooseStatus() {
+        if (!Friends.ready) return
+        val keys = arrayOf(FriendCore.ONLINE, FriendCore.DND, FriendCore.INVISIBLE)
+        val opts = arrayOf(
+            L.t("Online") + "\n" + L.t("Friends see you online. Requests and convoy invites arrive straight away."),
+            L.t("Do not disturb") + "\n" + L.t("Friends see you as busy. Requests and invites wait silently until you switch back."),
+            L.t("Invisible") + "\n" + L.t("You look offline to everyone. Invites to you aren't delivered. You can still see friends and invite them."))
+        AlertDialog.Builder(this).setTitle(L.t("Your status"))
+            .setSingleChoiceItems(opts, keys.indexOf(Friends.core.status).coerceAtLeast(0)) { dlg, k ->
+                dlg.dismiss()
+                if (keys[k] == FriendCore.ONLINE) { Friends.setStatus(FriendCore.ONLINE); youKey = ""; refreshChrome(); return@setSingleChoiceItems }
+                // back to Online after…
+                val now = System.currentTimeMillis()
+                val tonight = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 23); set(java.util.Calendar.MINUTE, 59) }.timeInMillis
+                val untils = longArrayOf(now + 3_600_000L, if (tonight > now + 600_000) tonight else now + 86_400_000L, 0L)
+                AlertDialog.Builder(this).setTitle(L.t("Back to Online after"))
+                    .setItems(arrayOf(L.t("1 hour"), L.t("Tonight"), L.t("Never (until I change it)"))) { _, u ->
+                        Friends.setStatus(keys[k], untils[u]); youKey = ""; refreshChrome()
+                    }.showT()
+            }.showT()
+    }
+
     private fun renderYou() {
         val c = if (Friends.ready && Friends.core.started) Friends.core else null
-        val key = "${Convoy.myName}|${Explorer.xp}|${Xp.prestige}|${theme.name}|${MapState.dark}|${Xp.streak}|${c?.friends?.joinToString { it.fid + c.isOnline(it.fid) + c.nickname(it.fid) }}|" +
+        val key = "${Convoy.myName}|${Explorer.xp}|${Xp.prestige}|${theme.name}|${MapState.dark}|${Xp.streak}|${c?.status}|${c?.friends?.joinToString { it.fid + c.isOnline(it.fid) + c.isBusy(it.fid) + c.nickname(it.fid) }}|" +
             "${c?.requests?.size}|${c?.invites?.size}|${Xp.challenges().joinToString { "${it.have}" }}|${Offline.areas().size}"
         if (key == youKey && sheetHost.childCount > 0) return
         youKey = key
@@ -3583,6 +3637,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 addView(label(Xp.stars + L.t(Xp.title()), 14.5f, bold = true).apply { setTextColor(readable(accent)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(0, (2 * d).toInt(), 0, 0) })
                 addView(label(L.t("Level ${Explorer.level}") + " · $have / $of XP", 13.5f).apply { setTextColor(dim()) })
                 if (Xp.streak > 0) addView(label("🔥 " + L.t(if (Xp.streak == 1) "1-day streak" else "${Xp.streak}-day streak"), 13.5f, bold = true).apply { setTextColor(readable(Color.rgb(255, 176, 40))) })
+                // your status: who can reach you (Online / Do not disturb / Invisible)
+                if (c != null) addView(statusChip(c.status) { chooseStatus() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = (6 * d).toInt() })
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
         })
@@ -3652,7 +3708,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         isClickable = true; setOnClickListener { showFriendCard(f) }
                         addView(avatar(c.shownName(f), f.fid, on, 46), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.CENTER_HORIZONTAL })
                         addView(label(c.shownName(f), 13.5f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-                        addView(label(if (on) L.t("online") else L.t("offline"), 11.5f).apply { setTextColor(if (on) readable(Color.rgb(47, 180, 100)) else dim()); gravity = Gravity.CENTER })
+                        val busy = on && c.isBusy(f.fid)
+                        addView(label(if (busy) L.t("busy") else if (on) L.t("online") else L.t("offline"), 11.5f).apply { setTextColor(if (busy) readable(Color.rgb(230, 70, 70)) else if (on) readable(Color.rgb(47, 180, 100)) else dim()); gravity = Gravity.CENTER })
                     }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 }
                 addView(LinearLayout(context).apply {
@@ -3773,7 +3830,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         addView(label(name.trim().take(1).uppercase().ifBlank { "?" }, size * 0.4f, bold = true).apply {
             gravity = Gravity.CENTER; setTextColor(Color.rgb(17, 17, 17)); background = bg(col, radius = size / 2f)
         }, android.widget.FrameLayout.LayoutParams((size * d).toInt(), (size * d).toInt()))
-        if (online) addView(View(context).apply { background = bg(Color.rgb(72, 199, 116), panel, 2f, 7f) },
+        // green online, red Do not disturb (their invites wait)
+        val busy = online && Friends.ready && Friends.core.isBusy(fid)
+        if (online) addView(View(context).apply { background = bg(if (busy) Color.rgb(240, 82, 82) else Color.rgb(72, 199, 116), panel, 2f, 7f) },
             android.widget.FrameLayout.LayoutParams((13 * d).toInt(), (13 * d).toInt(), Gravity.END or Gravity.BOTTOM))
     }
 
@@ -3886,7 +3945,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     orientation = LinearLayout.VERTICAL
                     addView(label(c.shownName(f), 15f, bold = true).apply { setTextColor(ink) })
                     Friends.levelOf(f.fid).takeIf { it.isNotBlank() }?.let { addView(label(it, 12.5f, bold = true).apply { setTextColor(readable(accent)) }) }
-                    addView(label(if (online) "Online" else "Offline", 13f).apply { setTextColor(if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
+                    val busy = online && c.isBusy(f.fid)
+                    addView(label(if (busy) L.t("Do not disturb · invites wait") else if (online) "Online" else "Offline", 13f).apply { setTextColor(if (busy) readable(Color.rgb(230, 70, 70)) else if (online) readable(Color.rgb(47, 180, 100)) else dim()) })
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 val st = cv?.let { c.sentTo(f.fid, it)?.status }
                 if (st != null) addView(label(when (st) { "seen" -> "✓✓ Seen"; "joined" -> "✓ Joined"; "no" -> "Not now"; else -> "✓ Sent" }, 13.5f, bold = true).apply {

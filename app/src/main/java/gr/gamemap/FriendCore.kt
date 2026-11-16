@@ -70,9 +70,27 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
         return letters + "-" + (1000 + rnd.nextInt(9000))
     }
 
+    /**
+     * Your status: Online, Do not disturb (friends see you as busy; invites wait silently and show
+     * when you're back) or Invisible (you look offline; invites to you are not delivered at all, and
+     * nothing tells the sender). You can still see friends and invite them in every status.
+     * [statusUntil]: back to Online by itself after this moment (0 = never).
+     */
+    var status: String
+        get() {
+            val s = store.get("status") ?: (if (store.get("showOnline") == "0") INVISIBLE else ONLINE)
+            val until = store.get("statusUntil")?.toLongOrNull() ?: 0L
+            if (s != ONLINE && until > 0 && clock() >= until) { store.put("status", ONLINE); store.put("statusUntil", "0"); store.put("showOnline", "1"); return ONLINE }
+            return s
+        }
+        set(v) { store.put("status", v); store.put("showOnline", if (v == INVISIBLE) "0" else "1") }
+    var statusUntil: Long
+        get() = store.get("statusUntil")?.toLongOrNull() ?: 0L
+        set(v) = store.put("statusUntil", v.toString())
+
     var showOnline: Boolean
-        get() = store.get("showOnline") != "0"
-        set(v) = store.put("showOnline", if (v) "1" else "0")
+        get() = status != INVISIBLE
+        set(v) { status = if (v) ONLINE else INVISIBLE }
     var allowInvites: Boolean
         get() = store.get("allowInvites") != "0"
         set(v) = store.put("allowInvites", if (v) "1" else "0")
@@ -87,8 +105,9 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     val blocked: Set<String> get() = arr("blocked").map { it.getString("fid") }.toSet()
     val recent: List<Recent> get() = arr("recent").map { Recent(it.getString("fid"), it.optString("n"), it.optString("c"), it.optString("d"), it.optLong("at")) }
 
-    /** Current invites only: older than 2 h, or their convoy ended, and they're gone. */
+    /** Current invites only: older than 2 h, or their convoy ended, and they're gone. Do not disturb: none shown (they wait). */
     val invites: List<Invite> get() {
+        if (status == DND) return emptyList()
         val now = clock()
         return arr("invites").map { Invite(it.getString("iid"), it.getString("fid"), it.optString("n"), it.getString("cv"), it.optString("d"), it.optLong("at"), it.optInt("k", 1)) }
             .filter { now - it.at < INVITE_TTL && it.fid !in blocked && friend(it.fid) != null }
@@ -103,7 +122,12 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
 
     /** Online: their app was open in the last few minutes (and they let friends see it). */
     private val online = HashMap<String, Long>()
-    fun setOnline(fid: String, at: Long?) { synchronized(online) { if (at == null) online.remove(fid) else online[fid] = at } }
+    private val busy = HashSet<String>()
+    fun setOnline(fid: String, at: Long?, dnd: Boolean = false) {
+        synchronized(online) { if (at == null) online.remove(fid) else online[fid] = at; if (dnd && at != null) busy += fid else busy -= fid }
+    }
+    /** Online but set to Do not disturb: their invites wait until they're back. */
+    fun isBusy(fid: String) = synchronized(online) { fid in busy } && isOnline(fid)
     fun isOnline(fid: String) = synchronized(online) { online[fid]?.let { clock() - it < ONLINE_FOR } ?: false }
 
     // ------------------------------------------------------------------ sending
@@ -266,6 +290,8 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
         when (o.optString("t")) {
             "inv" -> {
                 val cv = o.optString("cv"); if (cv.isBlank() || clock() - o.optLong("at") > INVITE_TTL) return null
+                // invisible: not delivered (no "seen" either, so nothing gives me away)
+                if (status == INVISIBLE) return null
                 val old = arr("invites").firstOrNull { it.getString("cv") == cv }
                 val k = (old?.optInt("k", 1) ?: 0) + 1
                 removeWhere("invites") { it.getString("cv") == cv }
@@ -358,6 +384,7 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     companion object {
         const val INVITE_TTL = 2 * 3600_000L
         const val ONLINE_FOR = 5 * 60_000L
+        const val ONLINE = "online"; const val DND = "dnd"; const val INVISIBLE = "invisible"
         /** "kx7p 4821", "KX7P-4821" and a link with it all become "KX7P4821". */
         fun norm(code: String) = code.substringAfterLast('#').substringAfterLast('/').uppercase().filter { it in 'A'..'Z' || it in '0'..'9' }
         /** A name (1–6 letters) and 4 digits: "VYTO4821". */

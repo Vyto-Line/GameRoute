@@ -82,6 +82,7 @@ object Friends {
     /** The app is on screen (or not): check often, and show me online. */
     fun setVisible(v: Boolean) {
         onPhone = v
+        if (v && ready && core.started) { main.removeCallbacks(statusCheck); main.post(statusCheck) }
         if (visible) { ensureLoop(); kick(); Presence.start(); Live.start() } else { Presence.stop(); Live.stop() }
     }
 
@@ -168,6 +169,39 @@ object Friends {
     fun leftConvoy(code: String) = bg { core.cancelInvites(code) }
 
     fun setShowOnline(v: Boolean) { core.showOnline = v; Presence.restart(); changed.fire() }
+
+    /**
+     * Sets Online / Do not disturb / Invisible, back to Online after [untilMs] (0 = never). Coming
+     * back from Do not disturb shows the invites that waited (and tells their senders "Seen" only
+     * once they're actually shown).
+     */
+    fun setStatus(status: String, untilMs: Long = 0L) {
+        if (!ready) return
+        val was = core.status
+        core.status = status; core.statusUntil = untilMs
+        lastStatus = status
+        Presence.restart()
+        main.removeCallbacks(statusCheck)
+        if (untilMs > 0) main.postDelayed(statusCheck, (untilMs - System.currentTimeMillis()).coerceAtLeast(1000))
+        if (was == FriendCore.DND && status == FriendCore.ONLINE) heldInvites()
+        changed.fire()
+    }
+
+    /** "Back to Online after" came: the status is read again (the core switches back by itself). */
+    private val statusCheck = Runnable {
+        if (!ready) return@Runnable
+        val before = lastStatus
+        val now = core.status
+        if (before != now) { Presence.restart(); if (before == FriendCore.DND) heldInvites(); changed.fire() }
+        lastStatus = now
+    }
+    @Volatile private var lastStatus = FriendCore.ONLINE
+
+    /** The invites that waited during Do not disturb: a notification for each, now. */
+    private fun heldInvites() {
+        if (!visible) for (i in core.invites) if (core.allowInvites) notifyInvite(i)
+        main.post { arrived.fire() }
+    }
     fun setAllowInvites(v: Boolean) { core.allowInvites = v; changed.fire() }
 
     // ------------------------------------------------------------------ notifications
@@ -357,6 +391,7 @@ object Friends {
 
         private fun me(online: Boolean): MqttMessage {
             val o = JSONObject().put("on", online).put("at", System.currentTimeMillis())
+            if (online && core.status == FriendCore.DND) o.put("dnd", true)
             if (Xp.showToFriends) o.put("lv", Xp.badge()) // only if I chose to show it
             val body = o.toString()
             return MqttMessage(Seal.seal(core.presenceKey(), body).toByteArray()).apply { qos = 0; isRetained = true }
@@ -380,7 +415,7 @@ object Friends {
                         override fun messageArrived(topic: String, m: MqttMessage) {
                             val f = watching[topic] ?: return
                             val o = Seal.open(core.presenceKey(f.secret), String(m.payload))?.let { JSONObject(it) }
-                            core.setOnline(f.fid, if (o != null && o.optBoolean("on")) o.optLong("at") else null)
+                            core.setOnline(f.fid, if (o != null && o.optBoolean("on")) o.optLong("at") else null, o?.optBoolean("dnd") == true)
                             levels[f.fid] = o?.optString("lv").orEmpty()
                             main.post { changed.fire() }
                         }
