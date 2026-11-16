@@ -417,6 +417,7 @@ object OfflineRouter {
         }
         val via = roadLen.entries.sortedByDescending { it.value }.take(2).joinToString(" & ") { it.key }
         val distance = cumNow()
+        seconds *= 1.15
         return RouteOption(pts, steps, distance, seconds, via, toll, motorway).also { it.limits = limits }
     }
 
@@ -462,15 +463,29 @@ object OfflineRouter {
             if (o == e0 || o == e || !canLeave(g, o, v)) continue
             others++
             val od = turn(inB, outBearing(g, o, v))
-            if (abs(od - d) < 40) { closeOthers++; closeSide = od }
+            // a real fork: the other way is as big a road as ours (not a side street or a slip road)
+            if (abs(od - d) < 40 && g.cls(o) <= g.cls(e) && (g.flags(o) and 16 == 0 || f1 and 16 != 0)) { closeOthers++; closeSide = od }
         }
         val m = modifier(d)
         val ramp0 = f0 and 16 != 0; val ramp1 = f1 and 16 != 0
         val mw0 = f0 and 32 != 0; val mw1 = f1 and 32 != 0
+        // where a slip road leads: onto a motorway, or just to another road (and that road's name)
+        var leadsTo = -1
+        if (ramp1 && !ramp0) {
+            var j = i
+            while (j < leg.size && g.flags(leg[j] shr 1) and 16 != 0 && j < i + 12) j++
+            if (j < leg.size) leadsTo = leg[j] shr 1
+        }
+        val toMotorway = leadsTo >= 0 && g.flags(leadsTo) and 32 != 0
+        val side = if (m == "straight") (if (d < 0) "slight left" else "slight right") else m
         return when {
-            ramp1 && !ramp0 && mw0 -> NavStep("off ramp", if (m == "straight") "slight right" else m, name, 0, pos, null)
-            ramp1 && !ramp0 && !mw0 && others > 0 -> NavStep("on ramp", if (m == "straight") "slight right" else m, name, 0, pos, null)
+            ramp1 && !ramp0 && mw0 -> NavStep("off ramp", side, name.ifBlank { if (leadsTo >= 0) g.name(leadsTo) else "" }, 0, pos, null)
+            ramp1 && !ramp0 && toMotorway -> NavStep("on ramp", side, g.name(leadsTo), 0, pos, null)
+            // a slip road to an ordinary road: a turn onto that road
+            ramp1 && !ramp0 -> if (others > 0) NavStep("turn", side, if (leadsTo >= 0) g.name(leadsTo) else name, 0, pos, null) else null
             ramp0 && !ramp1 && mw1 -> NavStep("merge", if (d < 0) "slight left" else "slight right", name, 0, pos, null)
+            // the end of a slip road onto an ordinary road: already said when it began
+            ramp0 && !ramp1 && !mw0 -> if (others > 0 && m != "straight" && !m.startsWith("slight")) NavStep("turn", m, name, 0, pos, null) else null
             others == 0 -> null // no choice here: nothing to say
             m == "straight" && closeOthers > 0 -> NavStep("fork", if (closeSide > d) "slight left" else "slight right", name, 0, pos, null)
             m == "straight" -> if (name.isNotBlank() && name != name0) NavStep("new name", "straight", name, 0, pos, null) else null
