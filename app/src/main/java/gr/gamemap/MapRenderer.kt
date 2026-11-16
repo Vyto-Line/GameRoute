@@ -1263,9 +1263,12 @@ class MapRenderer(private val car: Boolean = false) {
         // Start · 10 min
         val sr = RectF(left, sTop, left + w, sTop + startH)
         val ready = !loading
-        glassButton(c, sr, d, t, if (ready) withAlpha(t.route, 240) else withAlpha(dim, 120))
+        // the route's colour, unless it hardly shows on this map (8-Bit): then the panel's, outlined
+        val sf = if (Ui.contrast(t.route, t.background) >= 1.8) t.route else Ui.panel(t)
+        glassButton(c, sr, d, t, if (ready) withAlpha(sf, 245) else withAlpha(dim, 120))
+        if (ready && sf != t.route) { stroke.color = accent; stroke.strokeWidth = 2.5f * d; c.drawRoundRect(sr, 6 * d, 6 * d, stroke) }
         text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 21 * d
-        text.color = if (Ui.contrast(Color.WHITE, t.route) >= 3) Color.WHITE else Color.BLACK
+        text.color = if (Ui.contrast(Color.WHITE, sf) >= 3) Color.WHITE else Color.BLACK
         val pick = opts.getOrNull(NavEngine.selected)
         c.drawText(if (ready && pick != null) gr.gamemap.L.t("Start") + " · " + NavEngine.formatDuration(pick.seconds) else gr.gamemap.L.t("Start"),
             sr.centerX(), sr.centerY() + 7 * d, text)
