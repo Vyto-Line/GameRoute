@@ -135,13 +135,13 @@ object OfflineRouter {
     private fun my(lat: Int) = lat * 0.1113195
 
     /** The drivable road nearest to [p] (within ~400 m), facing [heading] if given. */
-    private fun snap(g: Graph, p: LatLng, heading: Float?): Snap? {
+    private fun snap(g: Graph, p: LatLng, heading: Float?, max: Double = 400.0): Snap? {
         val r0 = ((p.lat - g.lat0) / g.cell).toInt(); val c0 = ((p.lon - g.lon0) / g.cell).toInt()
         val cosL = cos(Math.toRadians(p.lat))
         val pxm = p.lon * 1e6 * 0.1113195 * cosL; val pym = p.lat * 1e6 * 0.1113195
         var best: Snap? = null; var bestScore = Double.MAX_VALUE
         val seen = HashSet<Int>()
-        for (ring in 0..3) {
+        for (ring in 0..(if (max > 1000) 18 else 3)) {
             for (r in r0 - ring..r0 + ring) for (c in c0 - ring..c0 + ring) {
                 if (maxOf(abs(r - r0), abs(c - c0)) != ring) continue
                 if (r < 0 || c < 0 || r >= g.rows || c >= g.cols) continue
@@ -178,9 +178,10 @@ object OfflineRouter {
                     }
                 }
             }
-            if (best != null && best.dist < ring * 900.0) break // nothing nearer can be in the next ring
+            if (best != null && best.dist < ring * 900.0) break
+            if (best == null && ring * 900.0 > max) break // nothing nearer can be in the next ring
         }
-        return best?.takeIf { it.dist < 400 }
+        return best?.takeIf { it.dist < max }
     }
 
     // ---------------------------------------------------------------- the search
@@ -279,7 +280,7 @@ object OfflineRouter {
         var prevSnap = snap(g, from, heading) ?: return null
         snaps += prevSnap
         for (k in 1 until stops.size) {
-            val t = snap(g, stops[k], null) ?: return null
+            val t = snap(g, stops[k], null, if (k == stops.size - 1) 2000.0 else 400.0) ?: return null
             val path = synchronized(this) { search(g, prevSnap, t) } ?: return null
             legs += path; snaps += t
             prevSnap = t

@@ -36,6 +36,7 @@ class OfflineRouterTest {
             val s = System.currentTimeMillis()
             val r = OfflineRouter.route(a, b, null)
             val ms = System.currentTimeMillis() - s
+            if (r == null) { log.append("\n== $name: NO ROUTE ($ms ms)\n"); File(out, "offlinerouter.txt").writeText(log.toString()) }
             assertNotNull(name, r)
             val on = try { Osrm.routes(a, b, false)[0] } catch (e: Exception) { null }
             val ratio = on?.let { r!!.distance / it.distance }
@@ -44,6 +45,7 @@ class OfflineRouterTest {
                 (on?.let { " | OSRM ${"%.1f".format(it.distance / 1000)} km, ${(it.duration / 60).toInt()} min" } ?: "") + "\n")
             r.steps.take(14).forEach { st -> log.append("   ${st.type}/${st.direction} '${st.road}' exit=${st.exit} → ${st.text}\n") }
             if (r.steps.size > 14) log.append("   … ${r.steps.size - 14} more\n")
+            File(out, "offlinerouter.txt").writeText(log.toString())
             Thread.sleep(500)
         }
         // a second time: the arrays are ready (reroutes)
