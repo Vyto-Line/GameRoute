@@ -68,6 +68,24 @@ class Fix101Test {
         log.append("scrolled to ${sc.scrollY} of ${sc.getChildAt(0).height - sc.height}\n")
         assertTrue("scrolled to the end", sc.scrollY > 0 && sc.scrollY >= sc.getChildAt(0).height - sc.height - 2)
 
+        // no flicker: the open menu isn't rebuilt when the map or GPS changes (only when what it shows does)
+        for (kind in listOf("style", "settings", "report")) {
+            MainActivity::class.java.getDeclaredMethod("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, kind)
+            looper.idle()
+            val first = (host as ViewGroup).getChildAt(0)
+            repeat(5) { MapState.changed.fire(); NavEngine.changed.fire(); looper.idle() }
+            val same = host.getChildAt(0) === first
+            log.append("$kind: kept its views through 10 map/GPS changes: $same\n")
+            assertTrue("$kind rebuilt itself (flicker)", same)
+        }
+        // a real change still shows: Dark → Light redraws the style list
+        MainActivity::class.java.getDeclaredMethod("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "style")
+        looper.idle()
+        val before = (host as ViewGroup).getChildAt(0)
+        MapState.setLightMode(MapState.LightMode.LIGHT); looper.idle()
+        assertTrue("a change of look redraws it", host.getChildAt(0) !== before)
+        MapState.setLightMode(MapState.LightMode.DARK); looper.idle()
+
         // the rain moves: two frames 100 ms apart differ
         val r = MapRenderer().apply { forceLite = false }
         val a = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888); val b = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888)

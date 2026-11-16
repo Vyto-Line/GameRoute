@@ -2289,7 +2289,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (kind != sheetKind) { settingsPage = null; settingsQuery = "" }
         if (kind != sheetKind) styleScroll = 0
         // a sheet opened from another sheet (e.g. Settings › Convoy) must draw itself, not keep the old one's views
-        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""; progressKey = ""; garageKey = ""; youKey = ""
+        quickKey = ""; convoyKey = ""; offlineKey = ""; tripsKey = ""; friendsKey = ""; moreKey = ""; inviteKey = ""; progressKey = ""; garageKey = ""; youKey = ""; styleKey = ""; settingsKey = ""; reportKey = ""
         if ((kind == "friends" || kind == "addfriend") && Friends.ready && Friends.core.started) Friends.kick()
         sheetKind = kind
         if (sheetOverlay.visibility != View.VISIBLE) {
@@ -2343,6 +2343,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     internal fun showStylePicker() = openSheet("style")
 
     private fun renderStylePicker() {
+        // only when something it shows changed: rebuilt on every map or GPS change, the sheet
+        // flickered on slower phones (all the previews laid out again, many times a second)
+        val key = "${theme.name}|${MapState.theme}|${MapState.dark}|${MapState.lightMode}|${MapState.carTheme}|${L.greek}"
+        if (key == styleKey && sheetHost.childCount > 0) return
+        styleKey = key
         sheetHost.removeAllViews()
         sheetHost.background = bg(panel, radius = 24f, topOnly = true)
         sheetHost.addView(sheetHeader("Map style"))
@@ -2469,6 +2474,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun renderReport() {
+        val key = "${theme.name}|${MapState.dark}|${L.greek}"
+        if (key == reportKey && sheetHost.childCount > 0) return
+        reportKey = key
         sheetHost.removeAllViews()
         sheetHost.background = bg(panel, radius = 24f, topOnly = true)
         sheetHost.addView(sheetHeader("Report"))
@@ -2534,6 +2542,25 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** ☰ while driving: the things that used to be separate round buttons, plus Settings. */
     private var quickKey = ""
+    private var styleKey = ""
+    private var settingsKey = ""
+    private var reportKey = ""
+
+    /**
+     * Everything the settings pages show, in one number: every saved setting (friends' busy data
+     * left out: it changes every few minutes and isn't shown there) and the switches kept in memory.
+     */
+    private fun settingsState(): Int {
+        var h = 17
+        val dir = java.io.File(applicationInfo.dataDir, "shared_prefs")
+        for (f in dir.list().orEmpty().sorted()) {
+            val name = f.removeSuffix(".xml")
+            if (name == "friends") continue
+            h = h * 31 + getSharedPreferences(name, MODE_PRIVATE).all.hashCode()
+        }
+        h = h * 31 + "${Voice.muted}${Traffic.showLayer}${Perf.mode}${Perf.effects}${Perf.animations}${Perf.smoothness}${Perf.liveFriends}${Perf.saveGpsStopped}${Offline.downloading}".hashCode()
+        return h
+    }
 
     private fun renderQuick() {
         // rebuilt only when something on it changes (not on every convoy update)
@@ -2587,6 +2614,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun renderSettings() {
         // typing in the search box: don't rebuild under the keyboard
         if (settingsPage == null && sheetHost.findFocus() is EditText) return
+        // only when a setting (or the page, or the look) changed: see renderStylePicker
+        val key = "$settingsPage|$settingsQuery|${theme.name}|${MapState.dark}|${L.greek}|${settingsState()}"
+        if (key == settingsKey && sheetHost.childCount > 0) return
+        settingsKey = key
         sheetHost.removeAllViews()
         sheetHost.background = bg(panel, radius = 24f, topOnly = true)
         val maxH = minOf((resources.displayMetrics.heightPixels * 0.72f).toInt(), (640 * d).toInt())
