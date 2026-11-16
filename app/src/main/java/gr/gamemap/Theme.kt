@@ -56,6 +56,8 @@ class MapStyle(
     val trafficFree: Int = Color.rgb(46, 204, 96),
     val trafficSlow: Int = Color.rgb(255, 170, 0),
     val trafficJam: Int = Color.rgb(230, 30, 30),
+    /** Lit windows dotted on buildings when zoomed in (night styles), or null. */
+    val windows: IntArray? = null,
 )
 
 /** Everything that changes between a theme's light and dark version. */
@@ -93,6 +95,8 @@ enum class Theme(
     val dashedRoute: Boolean = false,
     val paper: Boolean = false,
     val sunGlow: Boolean = false,
+    /** Faint rain streaks and a haze at the top of the map. */
+    val rain: Boolean = false,
 ) {
     OPEN_WORLD(
         "Free Roam",
@@ -341,6 +345,43 @@ enum class Theme(
             hudText = rgb(210, 240, 236), hudPanel = argb(228, 20, 44, 52),
             traffic = TrafficLook(glow = listOf(12f to 50), core = 4f, casing = rgb(16, 36, 44), freeWidth = 2.5f, freeAlpha = 130),
         ),
+    ),
+    VIOLET_RAIN(
+        "Violet Rain",
+        light = Look(
+            style = MapStyle(
+                land = rgb(234, 228, 244), water = rgb(196, 186, 234), park = rgb(218, 226, 220),
+                wood = rgb(206, 218, 210), sand = rgb(238, 230, 226), farm = rgb(230, 228, 236),
+                urban = rgb(226, 218, 238), pitch = rgb(214, 226, 218),
+                building = rgb(220, 210, 238), buildingEdge = rgb(190, 172, 222), waterEdge = rgb(140, 110, 220),
+                motorway = rgb(140, 70, 214), major = rgb(176, 120, 240), minor = Color.WHITE,
+                path = rgb(210, 196, 232), rail = rgb(214, 60, 170), casing = rgb(192, 176, 224),
+                label = rgb(52, 22, 92), labelHalo = rgb(246, 242, 252),
+                trafficFree = rgb(30, 170, 120), trafficSlow = rgb(240, 140, 0), trafficJam = rgb(220, 30, 90),
+            ),
+            route = rgb(232, 124, 16), routeGlow = argb(100, 232, 124, 16),
+            player = rgb(222, 40, 160), playerOutline = rgb(52, 22, 92),
+            hudText = rgb(52, 22, 92), hudPanel = argb(232, 250, 246, 255),
+            traffic = TrafficLook(glow = listOf(10f to 40, 6f to 80), core = 3.5f, freeWidth = 2f, freeAlpha = 120),
+        ),
+        dark = Look(
+            style = MapStyle(
+                land = rgb(19, 10, 36), water = rgb(27, 17, 69), park = rgb(24, 22, 46),
+                wood = rgb(22, 20, 42), sand = rgb(40, 30, 56), farm = rgb(22, 14, 40),
+                urban = rgb(24, 14, 44), pitch = rgb(28, 22, 54),
+                building = rgb(32, 18, 56), buildingEdge = rgb(62, 36, 104), waterEdge = rgb(96, 64, 210),
+                motorway = rgb(233, 168, 255), major = rgb(163, 91, 255), minor = rgb(78, 48, 134),
+                path = rgb(60, 40, 100), rail = rgb(255, 79, 216), glow = true,
+                label = rgb(238, 221, 255), labelHalo = rgb(11, 6, 22),
+                trafficFree = rgb(60, 220, 160), trafficSlow = rgb(255, 170, 60), trafficJam = rgb(255, 60, 110),
+                windows = intArrayOf(argb(220, 255, 184, 105), argb(200, 197, 139, 255), argb(190, 255, 111, 224), argb(170, 143, 227, 255)),
+            ),
+            route = rgb(255, 160, 64), routeGlow = argb(130, 255, 160, 64),
+            player = rgb(255, 79, 216), playerOutline = Color.WHITE,
+            hudText = rgb(238, 221, 255), hudPanel = argb(215, 18, 9, 36),
+            traffic = TrafficLook(glow = listOf(16f to 45, 9f to 110), core = 3f, freeWidth = 2f, freeAlpha = 130),
+        ),
+        hud = HudShape.CHAMFER, rain = true,
     );
 
     /** The light or dark version, as chosen in MapState. */

@@ -239,6 +239,7 @@ class MapRenderer(private val car: Boolean = false) {
             if (theme.scanlines) drawScanlines(c, full, d, theme)
             if (theme.paper) drawPaper(c, full)
             if (theme.sunGlow) drawSunGlow(c, full)
+            if (theme.rain) drawRain(c, full, d)
         }
         if (theme.radar) drawRadarFrame(c, cx, cy, radius, bearing, d)
         prof("overlays", tp0); tp0 = System.nanoTime()
@@ -926,6 +927,39 @@ class MapRenderer(private val car: Boolean = false) {
         )
         c.drawRect(a, fill)
         fill.shader = null
+    }
+
+    /** Rain streaks: fixed positions (0..1), drifting slowly down with time. */
+    private val rainDrops by lazy {
+        val r = java.util.Random(11)
+        FloatArray(150 * 3) { i -> if (i % 3 == 2) 0.5f + r.nextFloat() else r.nextFloat() }
+    }
+
+    /**
+     * Violet Rain: a purple haze at the top and thin rain streaks. Faint on purpose: they never hide
+     * a road or the route (the route and HUD are drawn on top).
+     */
+    private fun drawRain(c: Canvas, a: Rect, d: Float) {
+        val dark = MapState.dark
+        val top = a.top.toFloat(); val hh = a.height() * 0.38f
+        fill.shader = LinearGradient(0f, top, 0f, top + hh,
+            intArrayOf(if (dark) Color.argb(150, 42, 15, 74) else Color.argb(90, 150, 110, 210), Color.TRANSPARENT),
+            null, Shader.TileMode.CLAMP)
+        c.drawRect(a.left.toFloat(), top, a.right.toFloat(), top + hh, fill)
+        fill.shader = null
+        stroke.color = if (dark) Color.argb(40, 217, 200, 255) else Color.argb(46, 90, 60, 150)
+        stroke.strokeWidth = 1f * d
+        val t = (android.os.SystemClock.uptimeMillis() % 60_000L) / 60_000f
+        val w = a.width().toFloat(); val h = a.height().toFloat()
+        val drops = rainDrops
+        var i = 0
+        while (i < drops.size) {
+            val len = drops[i + 2] * 18 * d
+            val x = a.left + drops[i] * w
+            val y = a.top + ((drops[i + 1] + t * 3f) % 1f) * h
+            c.drawLine(x, y, x + len * 0.22f, y + len, stroke)
+            i += 3
+        }
     }
 
     private fun drawSunGlow(c: Canvas, a: Rect) {

@@ -132,6 +132,33 @@ object VectorRenderer {
                     for (f in buildings) if (f.type == 3) c.drawPath(pathOf(f), line)
                 }
             }
+            // lit windows (night styles): a few small dots around each building's middle
+            s.windows?.let { cols ->
+                if (z >= 15 && aa) {
+                    val dot = px(if (z >= 17) 2.2f else 1.6f)
+                    for (f in buildings) {
+                        if (f.type != 3) continue
+                        val ring = f.parts.firstOrNull() ?: continue
+                        if (ring.size < 8) continue
+                        var sx = 0f; var sy = 0f; var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE; var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
+                        var j = 0
+                        while (j < ring.size) { val x = ring[j]; val y = ring[j + 1]; sx += x; sy += y; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; j += 2 }
+                        val n = ring.size / 2
+                        val cx = sx / n; val cy = sy / n
+                        val bw = maxX - minX; val bh = maxY - minY
+                        if (bw < dot * 4 || bh < dot * 4) continue
+                        var hsh = (ring[0].toInt() * 73856093) xor (ring[1].toInt() * 19349663)
+                        val lights = (hsh ushr 3) % 3 // 0, 1 or 2
+                        for (q in 0 until lights) {
+                            hsh = hsh * 1103515245 + 12345
+                            fill.color = cols[(hsh ushr 8).mod(cols.size)]
+                            val ox = (((hsh ushr 12) and 255) / 255f - 0.5f) * bw * 0.4f
+                            val oy = (((hsh ushr 20) and 255) / 255f - 0.5f) * bh * 0.4f
+                            c.drawRect(cx + ox, cy + oy, cx + ox + dot, cy + oy + dot, fill)
+                        }
+                    }
+                }
+            }
         }
 
         // ---- roads
