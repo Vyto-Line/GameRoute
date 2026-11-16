@@ -84,6 +84,14 @@ class CarTourTest {
             repeat(35) { fix?.let { l -> LocationTracker.onLocationChanged(Location(l).apply { time = System.currentTimeMillis() }) }; rr.draw(c, w, h, area, 1.6f, true); looper.idleFor(java.time.Duration.ofMillis(60)); Thread.sleep(30) }
             rr.draw(c, w, h, area, 1.6f, true)
             File(out, "car_$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            rr.draw(c, w, h, area, 1.6f, false)
+            File(out, "car_${name}_bare.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            if (name == "4_drive") {
+                val pr = MapRenderer(car = false); val pb = Bitmap.createBitmap(1170, 2532, Bitmap.Config.ARGB_8888); val pc = Canvas(pb)
+                repeat(30) { pr.draw(pc, 1170, 2532, Rect(0, 0, 1170, 2532), 3f, false); looper.idleFor(java.time.Duration.ofMillis(60)); Thread.sleep(30) }
+                pr.draw(pc, 1170, 2532, Rect(0, 0, 1170, 2532), 3f, false)
+                File(out, "phone_drive_bare.png").outputStream().use { pb.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            }
         }
         locate(300.0, 0f)
         MapState.car.zoomBy(16.0 - MapState.car.targetZoom)
