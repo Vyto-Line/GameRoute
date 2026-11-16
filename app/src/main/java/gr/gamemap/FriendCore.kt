@@ -299,6 +299,9 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     fun presenceTopic(s: String = secret) = "gameroute/p/" + hash("gr-presence-v1:$s").take(24)
     fun presenceKey(s: String = secret) = inboxKey(s)
 
+    /** The topics news comes on (my inbox and requests to my code), for listening live. */
+    fun myTopics(): List<String> = listOf(inboxTopic(secret), requestTopic(norm(code)))
+
     private fun inboxTopic(s: String) = "gmf" + hash("gr-inbox-v1:$s").take(24)
     private fun inboxKey(s: String) = MessageDigest.getInstance("SHA-256").digest("gr-inbox-key-v1:$s".toByteArray())
     private fun requestTopic(c: String) = "gmr" + hash("gr-request-v1:$c").take(24)

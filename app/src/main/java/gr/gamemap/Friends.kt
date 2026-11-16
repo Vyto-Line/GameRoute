@@ -64,7 +64,7 @@ object Friends {
     /** Friends opened for the first time (or again): make my code, and start checking. */
     fun start() {
         if (!ready) return
-        core.code; schedule(); ensureLoop(); if (visible) Presence.start()
+        core.code; schedule(); ensureLoop(); if (visible) { Presence.start(); Live.start() }
     }
 
     fun link(code: String = core.code) = PAGE + "#" + code
@@ -82,14 +82,14 @@ object Friends {
     /** The app is on screen (or not): check often, and show me online. */
     fun setVisible(v: Boolean) {
         onPhone = v
-        if (visible) { ensureLoop(); kick(); Presence.start() } else Presence.stop()
+        if (visible) { ensureLoop(); kick(); Presence.start(); Live.start() } else { Presence.stop(); Live.stop() }
     }
 
     /** Android Auto opened (or closed): the car shows invites itself, so it counts as on screen. */
     fun setInCar(v: Boolean) {
         if (!ready) return
         inCar = v
-        if (visible) { ensureLoop(); kick(); Presence.start() } else Presence.stop()
+        if (visible) { ensureLoop(); kick(); Presence.start(); Live.start() } else { Presence.stop(); Live.stop() }
     }
 
     /** Check right now (the app came back, Friends opened, a request sent): no waiting for the next round. */
@@ -147,7 +147,7 @@ object Friends {
     fun remove(f: FriendCore.Friend) = bg { core.remove(f.fid); main.post { Presence.refresh() } }
     fun block(fid: String, name: String) = bg { core.block(fid, name); main.post { Presence.refresh() } }
     fun unblock(fid: String) = bg { core.unblock(fid) }
-    fun newCode() = bg { core.newCode() }
+    fun newCode() = bg { core.newCode(); Live.reconnect() }
 
     /** Invites [f] to the convoy I'm in. */
     fun invite(f: FriendCore.Friend) {
@@ -252,6 +252,64 @@ object Friends {
             val done = goAsync()
             Thread { try { core.answer(cv, i.getStringExtra("st") ?: "no") } catch (_: Exception) {}; done.finish() }.start()
             cancelNotification(cv)
+        }
+    }
+
+    // ------------------------------------------------------------------ live
+
+    /**
+     * While GameRoute is on screen: one open connection to ntfy for my inbox and my code, so a
+     * friend request (or an answer, or an invite) shows up in a second or two, not at the next
+     * check. Any message just starts a check right away (the check reads and decrypts it).
+     */
+    object Live {
+        @Volatile private var thread: Thread? = null
+        @Volatile private var conn: HttpURLConnection? = null
+        @Volatile private var wanted = false
+
+        fun start() {
+            if (!ready || !core.started) return
+            wanted = true
+            if (thread?.isAlive == true) return
+            thread = Thread {
+                var wait = 2_000L
+                while (wanted) {
+                    val topics = try { core.myTopics() } catch (e: Exception) { break }
+                    try {
+                        val c = URL("https://ntfy.sh/${topics.joinToString(",")}/json").openConnection() as HttpURLConnection
+                        c.connectTimeout = 10_000; c.readTimeout = 90_000 // ntfy sends a keepalive every 45 s
+                        c.setRequestProperty("User-Agent", "GameRoute/1.0 (Android)")
+                        conn = c
+                        c.inputStream.bufferedReader().use { r ->
+                            wait = 2_000L
+                            while (wanted) {
+                                val line = r.readLine() ?: break
+                                if (line.contains("\"event\":\"message\"")) kick()
+                                // a new code: listen on the new topic
+                                if (core.myTopics() != topics) break
+                            }
+                        }
+                    } catch (e: Exception) {
+                        if (!wanted) break
+                        try { Thread.sleep(wait) } catch (_: InterruptedException) {}
+                        wait = (wait * 2).coerceAtMost(60_000L)
+                    } finally {
+                        try { conn?.disconnect() } catch (_: Exception) {}
+                        conn = null
+                    }
+                }
+                thread = null
+            }.apply { isDaemon = true; name = "friends-live"; start() }
+        }
+
+        /** Listen again (a new code means a new topic). */
+        fun reconnect() { val c = conn; if (c != null) Thread { try { c.disconnect() } catch (_: Exception) {} }.start() }
+
+        fun stop() {
+            wanted = false
+            val c = conn
+            if (c != null) Thread { try { c.disconnect() } catch (_: Exception) {} }.start()
+            thread?.interrupt()
         }
     }
 
