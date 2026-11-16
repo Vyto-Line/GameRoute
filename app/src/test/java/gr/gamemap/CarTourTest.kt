@@ -44,7 +44,7 @@ class CarTourTest {
                 (t.singleList?.items ?: emptyList()).forEach { r -> if (r is Row) log.append("  • ${r.title?.toCharSequence()}" + r.texts.joinToString("") { "  |  " + it.toCharSequence() } + "\n") }
             }
             is NavigationTemplate -> {
-                strip("action strip", t.actionStrip); strip("map action strip", t.mapController?.mapActionStrip)
+                strip("action strip", t.actionStrip); strip("map action strip", t.mapActionStrip)
                 log.append("  turn info: ${t.navigationInfo?.javaClass?.simpleName ?: "none"} · travel estimate: ${t.destinationTravelEstimate != null}\n")
             }
             else -> log.append("  $t\n")
