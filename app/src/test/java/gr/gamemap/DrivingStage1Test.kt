@@ -73,7 +73,7 @@ class DrivingStage1Test {
         val motorway = approach(3, 2500.0, 30f, 0, step("off ramp", "slight right", "Αθηνών"))
         log.append("motorway 110 km/h: $motorway\n")
         assertEquals("motorway: 1 km, 500 m and the exit", 3, motorway.size)
-        assertTrue(motorway[0], motorway[0].startsWith("In 1 kilometres") || motorway[0].startsWith("In 1 kilometre"))
+        assertTrue(motorway[0], motorway[0].startsWith("In 1 kilometre,"))
         assertTrue(motorway[1], motorway[1].startsWith("In 500 metres"))
         assertTrue(motorway[2], motorway[2].startsWith("Take the exit"))
 
@@ -185,10 +185,11 @@ class DrivingStage1Test {
                 bearing = Geo.bearing(r.points[i], r.points[i + 1])
             })
         }
-        val tn = System.currentTimeMillis()
-        on(200.0, 10f, tn)
+        val tn = t0 + 300_000 // well after the fixes above (no "jump" from there)
+        val m0 = NavEngine.along + 30
+        on(m0, 10f, tn)
         val alongStart = NavEngine.along
-        for (k in 1..8) { on(200.0 + k * 11, 70f, tn + k * 1000L); looper.idleFor(java.time.Duration.ofMillis(1000)) }
+        for (k in 1..8) { on(m0 + k * 11, 70f, tn + k * 1000L); looper.idleFor(java.time.Duration.ofMillis(1000)) }
         log.append("8 fixes at 70 m accuracy: along ${alongStart.toInt()} → ${NavEngine.along.toInt()} m, estimating=${NavEngine.estimating}\n")
         assertFalse("not guessing", NavEngine.estimating)
         assertTrue("the trip followed the fixes", NavEngine.along - alongStart > 60)
@@ -198,7 +199,7 @@ class DrivingStage1Test {
             val (x, yy) = f.nameWithoutExtension.split("_").map { it.toInt() }
             VectorSource.put(14, x, yy, VectorTile(f.readBytes()))
         }
-        on(320.0, 45f, System.currentTimeMillis())
+        on(m0 + 120, 45f, tn + 9_000)
         assertTrue("45 m accuracy while navigating = weak", LocationTracker.weak)
         val w = 1080; val h = 2340
         val rr = MapRenderer(car = false)
@@ -213,7 +214,7 @@ class DrivingStage1Test {
         MapState.setTheme(Theme.VIOLET_RAIN)
         repeat(30) { car.draw(cc, cw, ch, Rect(0, 0, cw, ch), 1.6f, true); looper.idleFor(java.time.Duration.ofMillis(60)); Thread.sleep(20) }
         File(out, "stage1_weak_gps_car.png").outputStream().use { cb.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        on(330.0, 6f, System.currentTimeMillis())
+        on(m0 + 131, 6f, tn + 10_000)
         assertFalse("a sharp fix clears it", LocationTracker.weak)
         NavEngine.stop()
         log.append("\nall stage 1 checks passed\n")

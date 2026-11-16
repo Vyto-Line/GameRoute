@@ -536,7 +536,7 @@ object Phrases {
             m >= 950 -> {
                 val km = Math.round(m / 100) / 10.0
                 val s = if (km % 1.0 == 0.0) km.toInt().toString() else String.format(Locale.US, "%.1f", km).let { if (g) it.replace('.', ',') else it }
-                if (g) "$s χιλιόμετρα" else "$s kilometres"
+                if (s == "1") (if (g) "1 χιλιόμετρο" else "1 kilometre") else if (g) "$s χιλιόμετρα" else "$s kilometres"
             }
             else -> {
                 val r = if (m >= 100) (Math.round(m / 50) * 50).toInt() else (Math.round(m / 10) * 10).toInt().coerceAtLeast(10)
