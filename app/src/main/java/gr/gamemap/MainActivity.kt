@@ -369,7 +369,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 val q = (12 * d).toInt(); setPadding(q, 0, q, 0); elevation = 6 * d
                 setOnClickListener { if (!Later.driving) showLater() }
             }
-            addView(laterPill, FrameLayout.LayoutParams(WRAP_CONTENT, (38 * d).toInt(), Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM))
+            addView(laterPill, FrameLayout.LayoutParams(WRAP_CONTENT, (38 * d).toInt(), Gravity.END or Gravity.BOTTOM).apply { marginEnd = (14 * d).toInt() })
             addView(navCard, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
             addView(preview, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
             addView(offerCard, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
@@ -2021,7 +2021,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             else -> insets.bottom
         }
         recenterBtn.translationY = -(bottom + 14 * d)
-        laterPill.translationY = -(bottom + 22 * d)
+        laterPill.translationY = -(bottom + 84 * d) // above the recenter button, clear of the speed
         if (map.insetTop != top || map.insetBottom != bottom) {
             map.insetTop = top
             map.insetBottom = bottom
