@@ -16,6 +16,8 @@ FONT_B = "/usr/share/fonts/opentype/inter/Inter-Bold.otf"
 TITLES = {
     "open_world": "Free Roam", "neon_noir": "Might City", "neon_racer": "Midnight Run", "blocky": "Blockworld",
     "parchment_quest": "Realm Map", "lookout": "Fire Tower", "retro": "8-Bit", "trailblazer": "Catch 'Em Trail",
+    "violet_rain": "Violet Rain", "rally": "Rally Roadbook", "blueprint": "Blueprint", "nautical": "Nautical Chart",
+    "arctic": "Arctic", "high_contrast": "High Contrast",
 }
 
 
@@ -116,18 +118,21 @@ def hero3():
     ImageDraw.Draw(glow).ellipse((W // 2 - 560, 120, W // 2 + 560, H + 260), fill=(140, 90, 255, 75))
     bg = bg.convert("RGBA")
     bg.alpha_composite(glow.filter(ImageFilter.GaussianBlur(140)))
-    for name, w, dx, dy in [("drive", 400, -470, 50), ("friends", 400, 470, 50), ("convoy", 460, 0, 0)]:
+    for name, w, dx, dy in [("lobby", 400, -470, 50), ("you", 400, 470, 50), ("drive", 460, 0, 0)]:
         p = phone(shot(name), w)
         bg.alpha_composite(p, (W // 2 + dx - p.width // 2, H // 2 - p.height // 2 + dy))
     bg.convert("RGB").save(os.path.join(OUT, "hero.jpg"), quality=86, optimize=True)
 
 
 def themes(dark):
-    tw, th = 330, 470
+    # three across: still big enough to tell apart on a phone, where the page is one column
+    tw, th = 330, 420
     gap, lab = 22, 54
     names = list(TITLES)
-    W = 4 * tw + 5 * gap
-    H = 2 * (th + lab) + 3 * gap
+    cols = 3
+    rows = (len(names) + cols - 1) // cols
+    W = cols * tw + (cols + 1) * gap
+    H = rows * (th + lab) + (rows + 1) * gap
     bg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     f = ImageFont.truetype(FONT_B, 26)
     for i, n in enumerate(names):
@@ -135,8 +140,8 @@ def themes(dark):
         # the middle of the screen: map, the player and a few streets (no bars)
         crop = img.crop((0, int(img.height * 0.17), img.width, int(img.height * 0.17) + int(img.width * th / tw)))
         crop = crop.resize((tw, th), Image.LANCZOS)
-        x = gap + (i % 4) * (tw + gap)
-        y = gap + (i // 4) * (th + lab + gap)
+        x = gap + (i % cols) * (tw + gap)
+        y = gap + (i // cols) * (th + lab + gap)
         card = Image.new("RGBA", (tw, th + lab), (24, 26, 34, 255) if dark else (255, 255, 255, 255))
         card.paste(crop, (0, 0))
         dd = ImageDraw.Draw(card)
@@ -155,9 +160,10 @@ if __name__ == "__main__":
             os.remove(os.path.join(OUT, f))
     hero3()
     # two phones per picture: one column on a phone, still readable
-    for a, b, out in [("search", "routes", "find.webp"), ("drive", "arrival", "drive.webp"), ("place", "fuel", "places.webp"),
-                      ("convoy", "convoy_list", "convoy.webp"), ("race", "convoy_qr", "race.webp"),
-                      ("friends", "together", "friends.webp"), ("countries", "styles", "map.webp")]:
+    for a, b, out in [("search", "routes", "find.webp"), ("drive", "quiet", "drive.webp"), ("place", "fuel", "places.webp"),
+                      ("convoy", "lobby", "convoy.webp"), ("invite", "race", "race.webp"),
+                      ("you", "friends", "friends.webp"), ("arrival", "progress", "xp.webp"), ("garage", "styles", "garage.webp"),
+                      ("countries", "settings", "map.webp")]:
         pair(a, b, out)
     for name in ["drive", "convoy", "place"]:
         car(name, f"car-{name}.webp")
