@@ -29,7 +29,10 @@ class ThumbnailsTest {
             for (theme in Theme.entries) {
                 MapState.setLightMode(mode); MapState.setTheme(theme)
                 MapState.zoomBy((if (theme == Theme.BLOCKY) 16.6 else 16.0) - MapState.targetZoom)
-                repeat(400) { MapState.tick(); Thread.sleep(2) }
+                // the clock moves (Robolectric keeps it still otherwise): the zoom settles, and a
+                // settled map asks for its squares instead of only peeking for them
+                val looper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                repeat(100) { MapState.tick(); looper.idleFor(java.time.Duration.ofMillis(20)); Thread.sleep(2) }
                 val r = MapRenderer().apply { forceLite = false }
                 val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                 val c = Canvas(bmp)
@@ -38,7 +41,7 @@ class ThumbnailsTest {
                 // (squares at the edge with no test data never come: wait until nothing changes)
                 var ready = 0; var last = -1
                 for (i in 0 until 600) {
-                    r.draw(c, w, h, Rect(0, 0, w, h), 1.6f, hud = false); Thread.sleep(50)
+                    r.draw(c, w, h, Rect(0, 0, w, h), 1.6f, hud = false); Thread.sleep(50); looper.idleFor(java.time.Duration.ofMillis(50))
                     if (r.squaresMissing == last && r.squaresMissing < r.squaresShown) ready++ else ready = 0
                     last = r.squaresMissing
                     if (ready >= 40) break // in, and two seconds more for the fades
