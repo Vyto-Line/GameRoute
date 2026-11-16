@@ -275,6 +275,9 @@ class MapRenderer(private val car: Boolean = false) {
         val trip = NavEngine.lastTrip
         if (trip !== tripSeen) { tripSeen = trip; tripSeenAt = System.currentTimeMillis() }
         val carTrip = car && carButtons && trip != null && selectedPlace == null && System.currentTimeMillis() - tripSeenAt < 30_000
+        // the convoy lobby takes the top-left corner (instead of Where to? and the saved places)
+        carLobbyShown = car && hud && carButtons && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planning &&
+            selectedPlace == null && Convoy.proposal == null && !Convoy.meSharing && !Convoy.underway && !carTrip
         if (car && hud && carButtons && !NavEngine.planning && !carTrip) drawCarButtons(c, area, d, theme)
         bannerBottom = area.top.toFloat()
         if (hud && !NavEngine.planning && NavEngine.offer == null && !carTrip) {
@@ -296,8 +299,7 @@ class MapRenderer(private val car: Boolean = false) {
         else if (hud && NavEngine.noSignal && NavEngine.active && !NavEngine.arrived) drawNoGps(c, area, d, theme, NavEngine.noSignalText())
         if (hud && !NavEngine.arrived) NavEngine.tollAhead?.let { (t, dist) -> drawTollChip(c, area, d, theme, t.price, dist) }
         if (car && hud && carButtons) Convoy.proposal?.let { drawCarProposal(c, area, d, theme, it) }
-        val carLobby = car && hud && carButtons && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planning &&
-            selectedPlace == null && Convoy.proposal == null && !Convoy.meSharing && !Convoy.underway && !carTrip
+        val carLobby = carLobbyShown
         if (hud && Convoy.counting) { drawCountdown(c, area, d, theme); animating = true }
         else if (carLobby) drawCarLobby(c, area, d, theme)
         else if (hud && Convoy.active && Convoy.meReady && !NavEngine.active) drawLobbyChip(c, area, d, theme)
@@ -1316,7 +1318,7 @@ class MapRenderer(private val car: Boolean = false) {
             text.color = white
             c.drawText(gr.gamemap.L.t("End"), r.left + 22 * d, r.centerY() + 6.5f * d, text)
             carHits += r to "end"
-        } else if (!NavEngine.active && selectedPlace == null) {
+        } else if (!NavEngine.active && selectedPlace == null && !carLobbyShown) {
             // "Where to?" and saved places, top left (a place's card takes the corner when open)
             val r = RectF(a.left + 14 * d, 12 * d, a.left + 14 * d + 300 * d, 12 * d + 50 * d)
             glassButton(c, r, d, t)
@@ -1780,6 +1782,7 @@ class MapRenderer(private val car: Boolean = false) {
     /** Where the phone's convoy strip is (taps open the list). */
     val convoyStrip = RectF()
     private var carConvoyBottom = 0f
+    private var carLobbyShown = false
 
     /** The others in the convoy: an arrow in their colour, name and speed. */
     private var friendGliding = false
