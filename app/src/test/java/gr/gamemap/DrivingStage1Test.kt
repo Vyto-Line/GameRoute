@@ -83,7 +83,7 @@ class DrivingStage1Test {
 
         val turnsOnly = approach(5, 600.0, 12.5f, 2)
         log.append("town, Turns only: $turnsOnly\n")
-        assertEquals(listOf("Turn right onto Αιόλου"), turnsOnly)
+        assertEquals(listOf("Turn right"), turnsOnly) // the voice says only the turn, no street name
 
         // a turn that starts 150 m after the last one: no "in 200 metres", just the turn
         val close = approach(6, 150.0, 12.5f, 0)
