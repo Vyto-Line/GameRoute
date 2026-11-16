@@ -61,7 +61,11 @@ class ReadmeShotsTest {
         val root = activity.window.decorView
         val looper = shadowOf(Looper.getMainLooper())
         var lastFix: Location? = null
-        fun fresh() { lastFix?.let { l -> LocationTracker.onLocationChanged(Location(l).apply { time = System.currentTimeMillis() }) } }
+        fun fresh() {
+            lastFix?.let { l -> LocationTracker.onLocationChanged(Location(l).apply { time = System.currentTimeMillis() }) }
+            // the convoy's made-up drivers keep "sending" (as real ones do every second): no "signal lost"
+            for (m in Convoy.members.values) m.seen = System.currentTimeMillis()
+        }
         fun shot(name: String, frames: Int = 30) {
             val tmp = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
             repeat(frames) { fresh(); looper.idleFor(java.time.Duration.ofMillis(60)); root.draw(Canvas(tmp)); Thread.sleep(30) }
