@@ -109,7 +109,6 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     private fun drawFrame(c: Canvas, w: Int, h: Int, fullArea: Rect, d: Float, hud: Boolean) {
-        val area = fullArea
         compassBounds.setEmpty()
         val zoomAnim = view.tick()
         interacting = view.gesture || (zoomAnim && view.userZooming)
@@ -120,8 +119,8 @@ class MapRenderer(private val car: Boolean = false) {
         val theme = if (car) MapState.carTheme ?: MapState.theme else MapState.theme
         // choosing a route in the car: the routes go on the map beside the cards
         val area = if (car && hud && carButtons && NavEngine.planning)
-            Rect(area.left + carRoutesWidth(area, d).toInt() + (28 * d).toInt(), area.top, area.right - (70 * d).toInt(), area.bottom).takeIf { it.width() > 100 } ?: area
-        else area
+            Rect(fullArea.left + carRoutesWidth(fullArea, d).toInt() + (28 * d).toInt(), fullArea.top, fullArea.right - (70 * d).toInt(), fullArea.bottom).takeIf { it.width() > 100 } ?: fullArea
+        else fullArea
         view.fitRequest?.let { fit(it, area, d, theme) }
         c.drawColor(theme.background)
         text.typeface = theme.typeface
