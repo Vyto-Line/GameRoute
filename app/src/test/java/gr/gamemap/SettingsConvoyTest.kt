@@ -51,7 +51,7 @@ class SettingsConvoyTest {
         tap("Sharing"); shot("set_sharing")
         tap("Convoy"); shot("set_convoy")
         val t = texts(root)
-        assertTrue("convoy sheet should show Create: $t", t.any { it.contains("Create") })
+        assertTrue("convoy sheet should show Start a convoy: $t", t.any { it.contains("Start a convoy") })
         activity.showSettings(); idle(); tap("App"); tap("Trip history")
         assertTrue("trips sheet should open: ${texts(root)}", texts(root).none { it == "Explorer profile" })
     }

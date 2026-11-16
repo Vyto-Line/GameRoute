@@ -155,6 +155,7 @@ object Convoy {
                 try { val o = JSONObject(s); Place(o.getString("n"), o.optString("a"), LatLng(o.getDouble("lat"), o.getDouble("lon"))) } catch (e: Exception) { null }
             }
             code = c; destination = d; destAt = prefs().getLong("convoyDestAt", 0); joinedAt = prefs().getLong("convoyJoinedAt", 0)
+            host = prefs().getString("convoyHost", null) == c
             listen(c)
             main.post { NavService.update(appContext) } // still in a convoy from before: keep sharing
         }
@@ -192,10 +193,26 @@ object Convoy {
     /** True while someone in the convoy is moving (their arrow glides, so keep drawing). */
     val anyMoving: Boolean get() = members.values.any { it.moving }
 
+    /** I started this convoy: my button says START, the others' say READY UP. */
+    @Volatile var host = false
+        private set
+
+    /** One short word for the convoy chip: how it's going. */
+    fun status(): String = when {
+        code == null -> ""
+        counting -> "3-2-1"
+        onConvoyRoute && NavEngine.arrived -> "arrived"
+        onConvoyRoute || underway -> "driving"
+        destination == null -> "no destination"
+        meReady -> "ready"
+        else -> "waiting"
+    }
+
     /** Starts a new convoy (to [dest], or the destination comes later); returns the invite link. */
     fun create(dest: Place?): String {
         leave(quiet = true)
         val c = randomCode(6)
+        host = true; prefs().edit().putString("convoyHost", c).apply()
         setCode(c, dest)
         publish(hello("ready"))
         return link()!!
@@ -207,6 +224,7 @@ object Convoy {
         if (c.length < 6) return false
         if (c == code) return true
         leave(quiet = true)
+        host = false
         setCode(c, null)
         publish(hello("ready"))
         // invited to it by friends: they see "Joined"
@@ -326,7 +344,8 @@ object Convoy {
         if (Friends.ready) Friends.leftConvoy(c) // my invites to it disappear on my friends' phones
         code = null; destination = null; members.clear()
         meReady = false; meAlong = false; meSharing = false; goAt = 0; main.removeCallbacks(countdown); proposal = null
-        prefs().edit().remove("convoyCode").remove("convoyDest").apply()
+        host = false
+        prefs().edit().remove("convoyCode").remove("convoyDest").remove("convoyHost").apply()
         listener?.interrupt(); listener = null
         ConvoyLink.stop(if (quiet) null else myId)
         main.post { LocationTracker.updateMode(); NavService.update(appContext) }
@@ -640,6 +659,7 @@ object Convoy {
 
     // ------------------------------------------------------------- tests
 
+    internal fun debugHost(on: Boolean) { host = on }
     internal fun debugStart(dest: Place) { code = "k7p2qx"; destination = dest; members.clear(); routeTotal = -1.0 }
 
     internal fun debugMember(name: String, pos: LatLng, kmh: Int, eta: Long, left: Double, total: Double, state: String) {
