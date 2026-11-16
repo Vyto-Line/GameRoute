@@ -120,7 +120,7 @@ class MapRenderer(private val car: Boolean = false) {
 
         val theme = if (car) MapState.carTheme ?: MapState.theme else MapState.theme
         // choosing a route in the car: the routes go on the map beside the cards
-        val area = if (car && hud && carButtons && NavEngine.planning)
+        val area = if (car && hud && carButtons && NavEngine.planningOn(car))
             Rect(fullArea.left + carRoutesWidth(fullArea, d).toInt() + (28 * d).toInt(), fullArea.top, fullArea.right - (70 * d).toInt(), fullArea.bottom).takeIf { it.width() > 100 } ?: fullArea
         else fullArea
         view.fitRequest?.let { fit(it, area, d, theme) }
@@ -191,7 +191,7 @@ class MapRenderer(private val car: Boolean = false) {
         labels.draw(c, camera!!, z, area, d, theme)
         prof("labels", tp0); tp0 = System.nanoTime()
         // places (fuel, parking, food…) at street level; while navigating only fuel and parking
-        if (MapState.showPlaces && !NavEngine.planning) {
+        if (MapState.showPlaces && !NavEngine.planningOn(car)) {
             pois.draw(c, camera!!, zoom, w, h, d, if (NavEngine.active) NAV_PLACES else null, selectedPlace?.pos)
         }
         // the fuel list's prices, while it's open
@@ -270,16 +270,16 @@ class MapRenderer(private val car: Boolean = false) {
 
         drawSpeed(c, area, d, theme)
         if (car && hud) drawCarEta(c, area, d, theme)
-        if (hud && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planning && !NavEngine.arrived) drawCurrentRoad(c, area, d, theme)
+        if (hud && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planningOn(car) && !NavEngine.arrived) drawCurrentRoad(c, area, d, theme)
         carHits.clear()
         // the car's trip card steps aside after 30 s, or as soon as a place is tapped
         val trip = NavEngine.lastTrip
         if (trip !== tripSeen) { tripSeen = trip; tripSeenAt = System.currentTimeMillis() }
         val carTrip = car && carButtons && trip != null && selectedPlace == null && System.currentTimeMillis() - tripSeenAt < 30_000
         // the convoy lobby takes the top-left corner (instead of Where to? and the saved places)
-        carLobbyShown = car && hud && carButtons && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planning &&
+        carLobbyShown = car && hud && carButtons && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planningOn(car) &&
             selectedPlace == null && Convoy.proposal == null && !Convoy.meSharing && !Convoy.underway && !carTrip
-        if (car && hud && carButtons && !NavEngine.planning && !carTrip) {
+        if (car && hud && carButtons && !NavEngine.planningOn(car) && !carTrip) {
             // Some Android Auto versions report a much narrower free area for a moment (after the
             // knob/touchpad focus or pan mode) and don't always widen it again: the buttons then
             // sat in the middle of the map. A real strip or panel never takes 30% of the width,
@@ -288,20 +288,20 @@ class MapRenderer(private val car: Boolean = false) {
             drawCarButtons(c, ra, d, theme)
         }
         bannerBottom = area.top.toFloat()
-        if (hud && !NavEngine.planning && NavEngine.offer == null && !carTrip) {
+        if (hud && !NavEngine.planningOn(car) && NavEngine.offer == null && !carTrip) {
             // in the car: smaller, in the very top-left corner
             if (car) drawBanner(c, Rect(area.left, 0, area.right, area.bottom), d * 0.8f, theme, pad = 8 * d)
             else drawBanner(c, area, d, theme)
         }
         convoyStrip.setEmpty(); carConvoyBottom = 0f
         // the convoy strip/box only on the convoy's own route (a route of my own looks like any other)
-        if (hud && Convoy.active && Convoy.onConvoyRoute && !NavEngine.arrived && !NavEngine.planning) {
+        if (hud && Convoy.active && Convoy.onConvoyRoute && !NavEngine.arrived && !NavEngine.planningOn(car)) {
             if (car) drawCarConvoy(c, area, d, theme) else drawConvoyStrip(c, area, d, theme)
         }
         if (hud && Convoy.active) drawConvoyMessage(c, area, d, theme)
-        if (car && hud && carButtons && NavEngine.planning) drawCarRoutes(c, fullArea, d, theme)
+        if (car && hud && carButtons && NavEngine.planningOn(car)) drawCarRoutes(c, fullArea, d, theme)
         if (carTrip) drawCarTrip(c, area, d, theme)
-        else if (car && carButtons && selectedPlace != null && !NavEngine.planning) drawCarPlace(c, area, d, theme)
+        else if (car && carButtons && selectedPlace != null && !NavEngine.planningOn(car)) drawCarPlace(c, area, d, theme)
         drawJamChip(c, area, d, theme, hud)
         if (hud && NavEngine.estimating) drawNoGps(c, area, d, theme)
         else if (hud && NavEngine.noSignal && NavEngine.active && !NavEngine.arrived) drawNoGps(c, area, d, theme, NavEngine.noSignalText())
@@ -356,7 +356,7 @@ class MapRenderer(private val car: Boolean = false) {
         val ty0 = floor((py - reach) / tilePx).toInt().coerceAtLeast(0)
         val ty1 = floor((py + reach) / tilePx).toInt().coerceAtMost(n - 1)
         val paint = if (theme.pixel > 1 || lite) pixelPaint else tilePaint
-        val showTraffic = Traffic.active && Traffic.showLayer && z >= 11 && !NavEngine.planning
+        val showTraffic = Traffic.active && Traffic.showLayer && z >= 11 && !NavEngine.planningOn(car)
 
         // Ask for the visible tiles far-to-near: the loader works newest-first, so the
         // tiles nearest the player are drawn first.
@@ -786,7 +786,7 @@ class MapRenderer(private val car: Boolean = false) {
         val pixel = theme.pixel != 1
         // the Garage's route colour, when it's readable on this map (else the style's own)
         val rc = Xp.routeColor(theme.look); val rg = Xp.routeGlow(theme.look)
-        if (NavEngine.planning) {
+        if (NavEngine.planningOn(car)) {
             val opts = NavEngine.options
             opts.forEachIndexed { i, o ->
                 if (i != NavEngine.selected) strokeRoute(c, o.points, world, z, px, py, scale, d,
@@ -1396,11 +1396,16 @@ class MapRenderer(private val car: Boolean = false) {
         val accent = Ui.onPanel(t, t.route, 3.0)
         val loading = opts.isEmpty() || opts.any { !NavEngine.timeKnown(it) }
         val note = NavEngine.endNote
-        val cardH = 84 * d; val gap = 8 * d
+        val gap = 8 * d
         val head = 64 * d
         val shown = if (loading) 0 else minOf(opts.size, 3)
         val noteH = if (note != null && !loading) 50 * d else 0f
         val startH = 60 * d
+        // every route fits on the screen (no scrolling in a car): on short screens the cards get
+        // shorter and drop the "via" line instead of the third route being cut off
+        val room = (a.bottom - 14 * d - startH - 10 * d) - (a.top + 14 * d + head + 6 * d) - noteH
+        val cardH = if (shown == 0) 84 * d else (room / shown - gap).coerceIn(50 * d, 84 * d)
+        val compact = cardH < 76 * d
         val bodyH = if (loading) 56 * d else shown * (cardH + gap) + noteH
         val box = RectF(left, a.top + 14 * d, left + w, a.top + 14 * d + head + bodyH + 6 * d)
         // Start below the panel (or at the bottom, whichever is higher up)
@@ -1433,9 +1438,10 @@ class MapRenderer(private val car: Boolean = false) {
                     stroke.color = withAlpha(ink, 45); stroke.strokeWidth = 1.2f * d; c.drawRoundRect(r, 10 * d, 10 * d, stroke)
                 }
                 // 10 min   2.9 km · 23:22 · €2.40        FASTEST / +4 min traffic
-                text.typeface = t.typeface; text.textSize = 24 * d; text.color = ink
+                text.typeface = t.typeface; text.textSize = (if (compact) 21 else 24) * d; text.color = ink
                 val tm = NavEngine.formatDuration(o.seconds)
-                c.drawText(tm, r.left + 14 * d, r.top + 32 * d, text)
+                val line1 = if (compact) r.top + (cardH - 12 * d) * 0.55f + 4 * d else r.top + 32 * d
+                c.drawText(tm, r.left + 14 * d, line1, text)
                 val tw = text.measureText(tm)
                 val toll = when { o.tollCost > 0 -> Tolls.money(o.tollCost); o.hasToll -> gr.gamemap.L.t("tolls"); anyToll -> gr.gamemap.L.t("No tolls"); else -> null }
                 val sub = listOfNotNull(NavEngine.formatDistance(o.distance), NavEngine.optionArrival(o), toll).joinToString(" · ")
@@ -1449,16 +1455,18 @@ class MapRenderer(private val car: Boolean = false) {
                 if (badge != null) {
                     text.color = if (i == fastest) accent else Color.rgb(229, 72, 77)
                     text.textAlign = Paint.Align.RIGHT
-                    c.drawText(badge, r.right - 12 * d, r.top + 30 * d, text)
+                    c.drawText(badge, r.right - 12 * d, line1 - 2 * d, text)
                     text.textAlign = Paint.Align.LEFT
                 }
                 text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 14.5f * d; text.color = dim
-                c.drawText(ellipsize(sub, r.width() - tw - bw - 46 * d), r.left + 24 * d + tw, r.top + 31 * d, text)
-                text.typeface = Typeface.DEFAULT; text.textSize = 14 * d
-                val via = if (o.via.isNotBlank()) gr.gamemap.L.t("via ${o.via}") else gr.gamemap.L.t("route ${i + 1}")
-                c.drawText(ellipsize(via + if (o.tolls.size > 1) " · " + gr.gamemap.L.t("${o.tolls.size} toll stations") else "", r.width() - 28 * d), r.left + 14 * d, r.top + 54 * d, text)
+                c.drawText(ellipsize(sub, r.width() - tw - bw - 46 * d), r.left + 24 * d + tw, line1 - 1 * d, text)
+                if (!compact) {
+                    text.typeface = Typeface.DEFAULT; text.textSize = 14 * d
+                    val via = if (o.via.isNotBlank()) gr.gamemap.L.t("via ${o.via}") else gr.gamemap.L.t("route ${i + 1}")
+                    c.drawText(ellipsize(via + if (o.tolls.size > 1) " · " + gr.gamemap.L.t("${o.tolls.size} toll stations") else "", r.width() - 28 * d), r.left + 14 * d, r.top + 54 * d, text)
+                }
                 // traffic along it
-                val bar = RectF(r.left + 14 * d, r.bottom - 17 * d, r.right - 14 * d, r.bottom - 11 * d)
+                val bar = RectF(r.left + 14 * d, r.bottom - (if (compact) 13 else 17) * d, r.right - 14 * d, r.bottom - (if (compact) 8 else 11) * d)
                 fill.color = if (o.trafficSeconds != null) Color.rgb(47, 210, 122) else withAlpha(dim, 90)
                 c.drawRoundRect(bar, 3 * d, 3 * d, fill)
                 if (o.length > 0) for (st in o.traffic) {

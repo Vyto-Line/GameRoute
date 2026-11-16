@@ -349,15 +349,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         placeCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; isClickable = true; elevation = 20 * d; visibility = View.GONE
         }
-        map.onPlaceTap = { if (!NavEngine.planning) showPlace(it, dropped = false) }
+        map.onPlaceTap = { if (!NavEngine.planningOn(false)) showPlace(it, dropped = false) }
         map.onMapTap = {
             if (placeShown != null) closePlace()
             // driving: a tap brings the buttons back for a few seconds
             if (NavEngine.active) { controlsUntil = System.currentTimeMillis() + 5000; refreshChrome(); main.postDelayed({ refreshChrome() }, 5100) }
         }
-        map.onLongPress = { p -> if (!NavEngine.planning) dropPin(p) }
+        map.onLongPress = { p -> if (!NavEngine.planningOn(false)) dropPin(p) }
         map.onConvoyTap = { openSheet("convoy") }
-        map.onFriendTap = { m -> if (!NavEngine.planning) showFriend(m.id) }
+        map.onFriendTap = { m -> if (!NavEngine.planningOn(false)) showFriend(m.id) }
 
         val root = FrameLayout(this).apply {
             addView(map, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -428,7 +428,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     askCard.visibility == View.VISIBLE -> Alerts.clearAsk()
                     sheetOverlay.visibility == View.VISIBLE -> sheetBack() // one step back (closes the first sheet)
                     suggestScroll.visibility == View.VISIBLE || pickFor != null -> closeSearch()
-                    NavEngine.planning -> NavEngine.cancelPlan()
+                    NavEngine.planningOn(false) -> NavEngine.cancelPlan()
                     NavEngine.active -> AlertDialog.Builder(this@MainActivity)
                         .setTitle("End navigation?")
                         .setPositiveButton("End") { _, _ -> NavEngine.stop() }
@@ -1306,7 +1306,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             if (wantsFuel || Reviews.enabled) io.execute {
                 val f = if (wantsFuel) try { Fuel.forPlace(place) } catch (e: Exception) { null } else null
                 if (Reviews.enabled) try { Reviews.details(place) } catch (e: Exception) {}
-                runOnUiThread { if (infoAsked == place && !isFinishing) { if (f != null) infoFuel = f; if (NavEngine.planning) renderPreview() } }
+                runOnUiThread { if (infoAsked == place && !isFinishing) { if (f != null) infoFuel = f; if (NavEngine.planningOn(false)) renderPreview() } }
             }
         }
         val info = Reviews.cached(place)
@@ -1820,7 +1820,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun refreshChrome() {
         // the screen stays on only while a route is being followed or chosen; otherwise the
         // phone dims and locks as usual (the biggest battery saver of all)
-        val keep = NavEngine.active || NavEngine.planning
+        val keep = NavEngine.active || NavEngine.planningOn(false)
         if (keep != screenKept) {
             screenKept = keep
             if (keep) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1834,7 +1834,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             if (!first && suggestScroll.visibility == View.VISIBLE) { main.post { if (lastResults.isNotEmpty()) renderResults(lastResults, null) else showSuggestions() } }
         }
         val nav = NavEngine.active
-        val planning = NavEngine.planning
+        val planning = NavEngine.planningOn(false)
         val searching = search.hasFocus() || suggestScroll.visibility == View.VISIBLE || pickFor != null
 
         searchCard.background = bg(panel, accent, 1.5f, 18f, pill = true)

@@ -70,6 +70,21 @@ class CarRoutesTest {
         // a tap on the second card picks it
         val second = rr.carButtonAt(300f * 1.6f / 1.6f, 0f)
         log.append("hit at the top-left: $second\n")
+        // every route can be tapped, also on a short screen (big text scale on the car): no third route cut off
+        for (dd in listOf(1.6f, 2.0f)) {
+            rr.draw(c, w, h, Rect(0, 0, w, h), dd, hud = true)
+            val ids = LinkedHashSet<String>()
+            var y = 0f
+            while (y < h) { rr.carButtonAt(60f * dd, y)?.takeIf { it.startsWith("route:") }?.let { ids += it }; y += 4f }
+            log.append("density $dd: route cards ${ids}\n")
+            if (dd == 2.0f) File(out, "car_routes_short.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            assertTrue("all ${minOf(opts.size, 3)} routes on screen at $dd: $ids", ids.size == minOf(opts.size, 3))
+        }
+        // started in the car: the phone doesn't show the choice
+        NavEngine.planInCar = true
+        log.append("planned in the car: phone sees planning=${NavEngine.planningOn(false)}, car=${NavEngine.planningOn(true)}\n")
+        assertTrue(!NavEngine.planningOn(false) && NavEngine.planningOn(true))
+        NavEngine.planInCar = false
         File(out, "car_routes.txt").writeText(log.toString())
     }
 }

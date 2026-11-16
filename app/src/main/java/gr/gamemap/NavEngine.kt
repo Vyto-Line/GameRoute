@@ -18,6 +18,16 @@ object NavEngine {
     // ------------------------------------------------------------- planning (route preview)
 
     var planning = false
+    /**
+     * The route choice was started in the car: it stays on the car's screen (the phone keeps its own
+     * map, untouched). Started on the phone, it shows on both, as before.
+     */
+    @Volatile var planInCar = false
+        internal set
+    /** Shows the routes being chosen: on the car only, when they were asked for there. */
+    private fun fitPlan(points: List<LatLng>) = if (planInCar) MapState.car.requestFit(points) else MapState.requestFit(points)
+    /** Planning, as this screen sees it. */
+    fun planningOn(car: Boolean) = planning && (car || !planInCar)
         private set
     var planPlace: Place? = null
         private set
@@ -297,6 +307,7 @@ object NavEngine {
     /** Shows the route choices to [place] (the preview), without starting. */
     fun plan(ctx: Context, place: Place) {
         CrashLog.note("plan route")
+        planInCar = ctx.javaClass.name.startsWith("androidx.car.app")
         appContext = ctx.applicationContext
         if (active) stop()
         planning = true
@@ -320,7 +331,7 @@ object NavEngine {
         }
         planLoading = true; planError = null
         changed.fire()
-        MapState.requestFit(listOf(from, place.pos))
+        if (planInCar) MapState.car.requestFit(listOf(from, place.pos)) else MapState.requestFit(listOf(from, place.pos))
         io.execute {
             var routes = try { Router.routes(from, place.goal, alternatives = true, heading = heading()).also { Tolls.annotate(it) } } catch (e: Exception) { null }
             // the last part is a dirt track or a footpath (a cave, a peak): the route ends where
@@ -347,7 +358,7 @@ object NavEngine {
                 options = preferAllowed(routes).take(3)
                 selected = 0
                 planLoading = false
-                MapState.requestFit(options.flatMap { o -> o.points.filterIndexed { i, _ -> i % 10 == 0 } } + place.pos)
+                fitPlan(options.flatMap { o -> o.points.filterIndexed { i, _ -> i % 10 == 0 } } + place.pos)
                 changed.fire()
                 evaluateOptions(seq)
             }
@@ -396,7 +407,7 @@ object NavEngine {
     fun cancelPlan() {
         if (!planning) return
         planning = false; planPlace = null; options = emptyList(); planSeq++
-        MapState.recenter()
+        if (planInCar) MapState.car.recenter() else MapState.recenter()
         changed.fire()
     }
 
@@ -960,7 +971,7 @@ object NavEngine {
     internal fun debugPlan(place: Place, opts: List<RouteOption>) {
         planning = true; planPlace = place; options = opts; selected = fastestIndex()
         planLoading = false; planError = null
-        MapState.requestFit(opts.flatMap { it.points } + place.pos)
+        fitPlan(opts.flatMap { it.points } + place.pos)
         changed.fire()
     }
 
