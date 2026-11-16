@@ -3522,32 +3522,35 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                 addView(sectionTitle(L.t("FRIENDS") + if (online > 0) " · " + L.t("$online ONLINE") else ""), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 if (c.friends.isNotEmpty()) addView(label(L.t("See all ${c.friends.size}") + " ›", 14f, bold = true).apply {
-                    setTextColor(readable(accent)); setPadding(0, (14 * d).toInt(), 0, 0); setOnClickListener { openSheet("friends") }
+                    setTextColor(readable(accent)); setPadding(p / 2, (14 * d).toInt(), p / 3, 0); maxLines = 1; setOnClickListener { openSheet("friends") }
                 })
             })
-            for (rq in c.requests.take(2)) body.addView(LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                setPadding(p, p * 2 / 3, p / 2, p * 2 / 3); background = bg(Color.argb(30, Color.red(accent), Color.green(accent), Color.blue(accent)), accent, 1.5f, 14f)
-                addView(avatar(rq.name, rq.fid, false, 38), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p })
+            // waiting: a card each, the text on top and the buttons under it (fits any text size)
+            fun waitingCard(avatarOf: Pair<String, String>?, title: String, sub: String, no: () -> Unit, yesText: String, yes: () -> Unit) = body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(p, p * 2 / 3, p, p * 2 / 3); background = bg(Color.argb(30, Color.red(accent), Color.green(accent), Color.blue(accent)), accent, 1.5f, 14f)
                 addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    addView(label(L.t("${rq.name} wants to be friends"), 15.5f, bold = true).apply { setTextColor(ink); maxLines = 2 })
-                    addView(label(since(rq.at), 12.5f).apply { setTextColor(dim()) })
-                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                addView(pill("✕") { Friends.decline(rq) }.apply { setTextColor(dim()); contentDescription = L.t("Not now") })
-                addView(pill("Accept") { Friends.accept(rq) }.apply { textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 12f) })
-            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
-            for (inv in c.invites.filter { it.convoy != Convoy.code }.take(1)) body.addView(LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                setPadding(p, p * 2 / 3, p / 2, p * 2 / 3); background = bg(Color.argb(30, Color.red(accent), Color.green(accent), Color.blue(accent)), accent, 1.5f, 14f)
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                    avatarOf?.let { (n, id) -> addView(avatar(n, id, false, 38), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p }) }
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(label(title, 15.5f, bold = true).apply { setTextColor(ink) })
+                        addView(label(sub, 12.5f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                    }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                })
                 addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    addView(label(L.t("${inv.from} invites you to a convoy"), 15.5f, bold = true).apply { setTextColor(ink); maxLines = 2 })
-                    addView(label(inv.dest.ifBlank { L.t("No destination yet") }, 12.5f).apply { setTextColor(dim()); maxLines = 1 })
-                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                addView(pill("✕") { Friends.answer(inv.convoy, "no") }.apply { setTextColor(dim()); contentDescription = L.t("Not now") })
-                addView(pill("Join") { closeSheet(); joinConvoy(inv.convoy) }.apply { textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 12f) })
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, p / 2, 0, 0)
+                    addView(pill("Not now") { no() }.apply { textSize = 14f; setTextColor(dim()); minHeight = (40 * d).toInt(); val q = (10 * d).toInt(); setPadding(q + q / 2, 0, q + q / 2, 0) },
+                        LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p / 2 })
+                    addView(pill(yesText) { yes() }.apply {
+                        textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 12f)
+                        minHeight = (40 * d).toInt(); val q = (10 * d).toInt(); setPadding(q * 2, 0, q * 2, 0)
+                    })
+                }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
+            for (rq in c.requests.take(2)) waitingCard(rq.name to rq.fid, L.t("${rq.name} wants to be friends"), since(rq.at), { Friends.decline(rq) }, "Accept") { Friends.accept(rq) }
+            for (inv in c.invites.filter { it.convoy != Convoy.code }.take(1)) waitingCard(null, L.t("${inv.from} invites you to a convoy"), inv.dest.ifBlank { L.t("No destination yet") },
+                { Friends.answer(inv.convoy, "no") }, "Join") { closeSheet(); joinConvoy(inv.convoy) }
             body.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 for (f in c.friends.sortedByDescending { c.isOnline(it.fid) }.take(4)) {
