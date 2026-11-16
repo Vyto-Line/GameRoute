@@ -75,6 +75,18 @@ object NavEngine {
     val currentStep: NavStep? get() = steps.getOrNull(nextStep)
 
     /** The maneuver after the next one, if it comes soon after it ("Then …"). */
+    /** How far the turn after the next one comes after it (metres), when it's close. */
+    val followingGap: Double?
+        get() {
+            val r = current ?: return null
+            val a = steps.getOrNull(nextStep) ?: return null
+            val b = followingStep ?: return null
+            return r.cum[b.routeIndex] - r.cum[a.routeIndex]
+        }
+
+    /** Driven so far on this trip, metres (the turn box's trip counter). */
+    val tripSoFar: Double get() = tripMeters
+
     val followingStep: NavStep?
         get() {
             val r = current ?: return null
@@ -457,6 +469,21 @@ object NavEngine {
             if (dd < bestD) { bestD = dd; best = r.cum[i] + Geo.distance(pts[i], c) }
         }
         return if (best < 0) null else best
+    }
+
+    /**
+     * The road you're on now: on a route, the road of the turn you last made (or the one you set off
+     * on); without one, the map's name for the street under the car. Blank on unnamed roads.
+     */
+    fun currentRoad(): String {
+        val r = current
+        if (active && r != null && !arrived) {
+            val prev = r.steps.getOrNull(nextStep - 1)?.road ?: r.steps.firstOrNull()?.road
+            if (!prev.isNullOrBlank()) return prev
+        }
+        val p = LocationTracker.position ?: return ""
+        if (LocationTracker.speedMps < 2f && !active) return ""
+        return RoadMatch.roadName(p, LocationTracker.heading).orEmpty()
     }
 
     /** The point at [dist] metres along this route. */

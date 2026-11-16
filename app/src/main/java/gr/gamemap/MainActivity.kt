@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
@@ -1882,8 +1883,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         overviewBtn.visibility = View.GONE
         styleBtn.visibility = if (nav) View.GONE else View.VISIBLE
         navMenuBtn.visibility = if (nav) View.VISIBLE else View.GONE
-        reportBtn.visibility = if (planning) View.GONE else View.VISIBLE
-        trafficBtn.visibility = if (Traffic.key.isEmpty() || nav) View.GONE else View.VISIBLE
+        // update 100: Report is gone (unused), Show traffic lives in Settings › Map
+        reportBtn.visibility = View.GONE
+        trafficBtn.visibility = View.GONE
         trafficBtn.alpha = if (Traffic.showLayer) 1f else 0.45f
         val ask = Alerts.askAbout
         askCard.visibility = if (ask != null && !planning) View.VISIBLE else View.GONE
@@ -1941,6 +1943,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             "settings" -> renderSettings()
             "report" -> renderReport()
             "trips" -> renderTrips()
+            "recap" -> renderRecap()
             "offline" -> renderOffline()
             "convoy" -> if (Convoy.counting) closeSheet() else renderConvoy() // the countdown shows on the map
             "quick" -> renderQuick()
@@ -2255,7 +2258,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun sheetTitle(kind: String) = when (kind) {
         "you" -> "You"; "settings" -> "Settings"; "more" -> "More"; "convoy", "friends", "addfriend" -> "Together"
-        "progress" -> "Progress"; "garage" -> "Garage"; "trips" -> "Trips"; "style" -> "Map style"; "offline" -> "Offline maps"
+        "progress" -> "Progress"; "garage" -> "Garage"; "trips" -> "Trips"; "recap" -> "Your recap"; "style" -> "Map style"; "offline" -> "Offline maps"
         "convoyinvite" -> "Invite"; else -> "Back"
     }
 
@@ -2534,7 +2537,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 MapState.phone.showOverview(r.filterIndexed { i, _ -> i % 5 == 0 } + r.last())
             } else null,
             settingRow("Map style", theme.title) { openSheet("style") },
-            if (Traffic.key.isNotEmpty()) switchRow("Traffic on the map", Traffic.showLayer) { Traffic.showLayer = it } else null,
             settingRow("Save my parking spot here", null) {
                 val here = LocationTracker.position
                 if (here == null) Toast.makeText(this, L.t("Waiting for your location…"), Toast.LENGTH_SHORT).show()
@@ -2620,6 +2622,24 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             return
         }
+        if (page == "whatsnew") {
+            // What's new: a list, back to Advanced (no pop-up after updates; the NEW tag is enough)
+            sheetHost.addView(sheetHeader("What's new", "Advanced" to { settingsPage = "advanced"; refreshChrome() }))
+            for ((ic, t, sub) in WHATS_NEW) body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                val q = (12 * d).toInt(); setPadding(q, q * 3 / 4, q, q * 3 / 4)
+                addView(label(ic, 22f).apply { gravity = Gravity.CENTER; background = bg(dim(26), radius = 12f) }, LinearLayout.LayoutParams((44 * d).toInt(), (44 * d).toInt()).apply { marginEnd = q })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(label(L.t(t), 16.5f, bold = true).apply { setTextColor(ink) })
+                    addView(label(L.t(sub), 13.5f).apply { setTextColor(dim()) })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            prefs().edit().putBoolean("seenWhatsNew100", true).apply()
+            sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            body.post { (body.parent as? View)?.let { sv -> if (body.height > maxH) { sv.layoutParams.height = maxH; sv.requestLayout() } } }
+            return
+        }
         val g = settingsGroups().first { it.key == page }
         sheetHost.addView(sheetHeader(g.title, "Settings" to { settingsPage = null; refreshChrome() }))
         val rows = settingsRowsFor(page)
@@ -2650,6 +2670,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Android Auto style", MapState.carTheme?.title ?: "Same as phone") { chooseCarStyle() },
                 switchRow("Car: dark map when headlights are on", MapState.followHeadlights) { MapState.followHeadlights = it },
                 switchRow("Places on the map (fuel, parking, food…)", MapState.showPlaces) { MapState.showPlaces = it },
+                switchRow("Show traffic (phone and car)", Traffic.showLayer) { Traffic.showLayer = it; MapState.changed.fire() },
                 settingRow("Offline maps", Offline.areas().let { a -> if (a.isEmpty()) "Regions, Wi-Fi only, updates" else "${a.size} · ${Offline.size(a.sumOf { it.bytes })}" }) { openSheet("offline") },
             )
             "nav" -> listOf(
@@ -2697,6 +2718,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Your progress", "${Xp.stars}${L.t(Xp.title())} · " + L.t("level ${Explorer.level}")) { openSheet("progress") },
                 settingRow("Garage", L.t("${Xp.items.count { it.unlocked }} of ${Xp.items.size} unlocked")) { openSheet("garage") },
                 if (Updater.ENABLED) settingRow("Check for updates", "build ${Updater.currentVersion(this)}") { checkForUpdates(manual = true) } else null,
+                settingRow("Backup & restore", L.t("Keep your progress in a file you save")) { chooseBackup() },
                 settingRow("Language", L.label) { chooseLanguage() },
                 settingRow("Privacy policy", null) {
                     try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://vyto-line.github.io/GameRoute/privacy/"))) } catch (_: Exception) {}
@@ -2719,6 +2741,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Star ratings & reviews", if (Reviews.enabled) "Google key set" else "Off: Reviews opens Google Maps") { chooseGoogleKey() },
                 settingRow("Show the welcome screens again", null) { closeSheet(); showWelcome() },
                 switchRow("Classic voice timing (exact distances)", Voice.classic) { Voice.classic = it },
+                settingRow(L.t("What's new") + if (!prefs().getBoolean("seenWhatsNew100", false)) "  · " + L.t("NEW") else "", L.t("Version 100")) { settingsPage = "whatsnew"; refreshChrome() },
             )
         }
     }
@@ -2793,6 +2816,68 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private val TALK = arrayOf("Normal", "Fewer", "Turns only")
+
+    /** Backup & restore: save everything to a file you keep, or bring it back from one. */
+    private fun chooseBackup() {
+        val opts = arrayOf(
+            L.t("Save a backup") + "\n" + L.t("Level, prestige, Garage, trips, places, friends and settings, in one file"),
+            L.t("Restore from a backup") + "\n" + L.t("Replaces what's on this phone, then the app restarts"))
+        AlertDialog.Builder(this).setTitle(L.t("Backup & restore")).setItems(opts) { _, k ->
+            try {
+                if (k == 0) {
+                    val name = "GameRoute backup " + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()) + ".json"
+                    startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/json").putExtra(Intent.EXTRA_TITLE, name), REQ_BACKUP_SAVE)
+                } else {
+                    startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), REQ_BACKUP_OPEN)
+                }
+            } catch (e: Exception) { Toast.makeText(this, L.t("No app here can save or open files"), Toast.LENGTH_LONG).show() }
+        }.showT()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) return
+        when (requestCode) {
+            REQ_BACKUP_SAVE -> try {
+                contentResolver.openOutputStream(uri, "wt")?.use { Backup.export(this, it) }
+                Toast.makeText(this, L.t("Backup saved"), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) { Toast.makeText(this, L.t("Couldn't save the backup"), Toast.LENGTH_LONG).show() }
+            REQ_BACKUP_OPEN -> {
+                val root = try { contentResolver.openInputStream(uri)?.use { Backup.peek(it) } } catch (e: Exception) { null }
+                if (root == null) { Toast.makeText(this, L.t("That isn't a GameRoute backup"), Toast.LENGTH_LONG).show(); return }
+                AlertDialog.Builder(this).setTitle(L.t("Restore this backup?")).setMessage(Backup.describe(root) + "\n\n" + L.t("What's on this phone now is replaced. The app restarts."))
+                    .setPositiveButton(L.t("Restore")) { _, _ ->
+                        if (Backup.restore(this, root)) {
+                            // start again, so everything reads the restored progress
+                            val again = packageManager.getLaunchIntentForPackage(packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                            if (again != null) startActivity(again)
+                            finishAffinity(); Runtime.getRuntime().exit(0)
+                        }
+                    }.setNegativeButton("Cancel", null).showT()
+            }
+        }
+    }
+
+    private val REQ_BACKUP_SAVE = 4101
+    private val REQ_BACKUP_OPEN = 4102
+
+    private fun prefs() = getSharedPreferences("gamemap", MODE_PRIVATE)
+
+    /** Settings › Advanced › What's new: version 100. */
+    private val WHATS_NEW = listOf(
+        Triple("🏆", "Prestige ranks", "Reach level 50, start again as Bronze, Silver… with rewards and more XP"),
+        Triple("🎉", "Celebrations every 5 levels", "In your map style, once you've parked"),
+        Triple("📅", "Your recap", "Your month or year on the road, as a card to share"),
+        Triple("🟢", "Your status", "Online, Do not disturb or Invisible"),
+        Triple("🧭", "New turn box", "A sketch of every junction, in every style, and the road you're on"),
+        Triple("🗣", "Clearer voice", "Round distances at the right moments; choose how much it talks"),
+        Triple("🚗", "Friends in the car", "Invite, start convoys, quick messages, turns on the car's own display"),
+        Triple("⚡", "Performance", "A smoother map and a longer battery, your choice in Settings"),
+        Triple("📡", "Better GPS", "Stays on the road, ignores jumps, warns when the signal is weak"),
+        Triple("💾", "Backup & restore", "Keep your XP, friends and places when you change phones"),
+    )
     private val PERF_MODE = arrayOf("Auto", "Smooth", "Battery")
     private val PERF_ANIM = arrayOf("Full", "Reduced", "Off")
     private val PERF_SMOOTH = arrayOf("High", "Normal", "Low")
@@ -2862,6 +2947,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             i.removeExtra("friend_join"); Friends.cancelNotification(cv); main.post { joinConvoy(cv) }; return
         }
         if (i.getStringExtra("friends") != null) { i.removeExtra("friends"); main.post { openSheet("friends") }; return }
+        // the home screen widget: Home or Work (routes to choose from), or just the app
+        i.getStringExtra("widget_go")?.let { k ->
+            i.removeExtra("widget_go")
+            Places.saved(k)?.let { pl -> main.postDelayed({ NavEngine.plan(this, pl) }, 300) } ?: main.post { Toast.makeText(this, L.t(if (k == "home") "Set Home first" else "Set Work first"), Toast.LENGTH_SHORT).show() }
+            return
+        }
         val u = i.data
         if (u != null && u.scheme == "gamemap" && u.host == "friend") {
             val code = u.lastPathSegment ?: u.fragment ?: return
@@ -4407,6 +4498,58 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var tripsKey = ""
 
     /** Past trips, newest first, with totals at the top. */
+    private var recapYear = false
+    private val recapShown = HashSet(Recap.LINES.map { it.first })
+    private var recapKey = ""
+
+    /** Your recap: this month or this year as a card; choose the lines; Share. */
+    private fun renderRecap() {
+        val key = "$recapYear|${recapShown.sorted()}|${theme.name}|${MapState.dark}|${Explorer.history().size}"
+        if (key == recapKey && sheetHost.childCount > 0) return
+        recapKey = key
+        sheetHost.removeAllViews()
+        sheetHost.background = bg(panel, radius = 22f, topOnly = true)
+        sheetHost.addView(sheetHeader("Your recap"))
+        val p = (12 * d).toInt()
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.78).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // month / year
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, p / 2, 0, p / 2)
+            for ((yr, t) in listOf(false to "This month", true to "This year")) addView(pill(L.t(t)) { recapYear = yr; recapKey = ""; refreshChrome() }.apply {
+                if (recapYear == yr) { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) } else { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 14f) }
+            }, LinearLayout.LayoutParams(0, (42 * d).toInt(), 1f).apply { marginEnd = p / 2 })
+        })
+        val stats = Recap.stats(recapYear)
+        val title = Xp.title()
+        // the card itself
+        body.addView(object : View(this) {
+            override fun onDraw(c: Canvas) { Recap.draw(c, width.toFloat(), height.toFloat(), stats, recapShown, theme, Convoy.myName, title) }
+        }, LinearLayout.LayoutParams(MATCH_PARENT, 0).apply { height = ((resources.displayMetrics.widthPixels - 2 * p) * 1.25f).toInt().coerceAtMost((440 * d).toInt()) })
+        // what's on it
+        body.addView(sectionTitle(L.t("ON THE CARD")))
+        for ((k, label) in Recap.LINES) body.addView(switchRow(label, k in recapShown) { on -> if (on) recapShown += k else recapShown -= k; recapKey = ""; refreshChrome() })
+        body.addView(label(L.t("Never on it: Home, Work, or where and when you drove."), 12.5f).apply { setTextColor(dim()); setPadding(p / 4, p / 3, 0, p / 2) })
+        sheetHost.addView(pill("⤴  " + L.t("Share")) { shareRecap(stats, title) }.apply {
+            setTextColor(onAccent(accent)); background = bg(accent, radius = 14f)
+        }, LinearLayout.LayoutParams(MATCH_PARENT, (50 * d).toInt()).apply { topMargin = p / 2 })
+    }
+
+    /** The card as a picture (1080 × 1350), shared to the app you pick. */
+    private fun shareRecap(stats: Recap.Stats, title: String) {
+        try {
+            val bmp = Bitmap.createBitmap(1080, 1350, Bitmap.Config.ARGB_8888)
+            Recap.draw(Canvas(bmp), 1080f, 1350f, stats, recapShown, theme, Convoy.myName, title)
+            val dir = java.io.File(cacheDir, "share").apply { mkdirs() }
+            val f = java.io.File(dir, "recap.png")
+            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.share", f)
+            val send = Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_TEXT, L.t("My ${stats.period} on the road with GameRoute")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(Intent.createChooser(send, L.t("Share your recap")))
+        } catch (e: Exception) { Toast.makeText(this, L.t("Couldn't share the card"), Toast.LENGTH_SHORT).show() }
+    }
+
     private fun renderTrips() {
         val list = Explorer.history()
         val key = "${list.size}|${list.firstOrNull()?.arrivedAt}|${theme.name}|${MapState.dark}"
@@ -4416,6 +4559,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sheetHost.background = bg(panel, radius = 22f, topOnly = true)
         sheetHost.addView(sheetHeader("Trip history"))
         val p = (12 * d).toInt()
+        if (list.isNotEmpty()) sheetHost.addView(pill("📅  " + L.t("Your recap")) { openSheet("recap") }.apply {
+            setTextColor(onAccent(accent)); background = bg(accent, radius = 14f)
+        }, LinearLayout.LayoutParams(MATCH_PARENT, (46 * d).toInt()).apply { topMargin = p / 2 })
         val km = list.sumOf { it.meters } / 1000
         val hours = list.sumOf { it.seconds } / 3600.0
         val saved = list.sumOf { it.savedSeconds } / 60
@@ -4532,13 +4678,32 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 addView(label(L.t(t), 16f, bold = now).apply { setTextColor(if (got) ink else dim()) })
             })
         }
-        // prestige
+        // prestige: the ranks, what the next one brings, and the button at level 50
         body.addView(sectionTitle(L.t("PRESTIGE")))
-        body.addView(label(if (Xp.canPrestige) "You reached level 50: start again at level 1 with a ★ next to your title. You keep everything you unlocked."
-            else "At level 50 you can start again at level 1 with a ★ next to your title, and keep everything you unlocked.", 13.5f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p / 2) })
-        if (Xp.canPrestige) body.addView(pill("★  Prestige") {
-            AlertDialog.Builder(this).setTitle(L.t("Start again at level 1?")).setMessage(L.t("Your title gets a ★ and you keep everything in the Garage."))
-                .setPositiveButton("★ Prestige") { _, _ -> Xp.doPrestige(); progressKey = ""; refreshChrome() }.setNegativeButton("Cancel", null).showT()
+        val (nextName, nextBoost, nextItems) = Xp.nextRank()
+        if (Xp.prestige > 0) body.addView(label("◆ " + L.t(Xp.rankName()) + " · +${Xp.boostPct}% XP", 16f, bold = true).apply {
+            setTextColor(readable(Xp.rankColor())); setPadding(p / 4, 0, 0, p / 3)
+        })
+        body.addView(label(if (Xp.canPrestige) L.t("You reached level 50. Prestige to start again at level 1 as $nextName: +$nextBoost% XP for good and new Garage rewards. Everything you unlocked stays.")
+            else L.t("At level 50 you can prestige: start again at level 1 as $nextName, with +$nextBoost% XP for good and new Garage rewards. Everything you unlocked stays."), 13.5f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p / 2) })
+        // the five ranks in a row: done, next, later
+        body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, p / 2)
+            Xp.ranks.forEachIndexed { i, rk ->
+                val got = Xp.prestige >= i + 1
+                val col = Xp.rankColors[i]
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+                    addView(label("◆", 22f, bold = true).apply { setTextColor(if (got) col else dim(90)); gravity = Gravity.CENTER })
+                    addView(label(L.t(rk), 11.5f, bold = got).apply { setTextColor(if (got) ink else dim()); gravity = Gravity.CENTER })
+                    addView(label("+${(i + 1) * 10}%", 11f).apply { setTextColor(dim()); gravity = Gravity.CENTER })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            }
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        if (nextItems.isNotEmpty()) body.addView(label(L.t("$nextName rewards: ") + nextItems.joinToString(", ") { L.t(it.name) }, 13f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p / 2) })
+        if (Xp.canPrestige) body.addView(pill("◆  " + L.t("Prestige to $nextName")) {
+            AlertDialog.Builder(this).setTitle(L.t("Become $nextName?")).setMessage(L.t("You start again at level 1 with +$nextBoost% XP for good. Everything in the Garage stays, and the $nextName rewards are added."))
+                .setPositiveButton(L.t("Prestige")) { _, _ -> Xp.doPrestige(); progressKey = ""; refreshChrome(); showPrestigeReveal() }.setNegativeButton("Cancel", null).showT()
         }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) }, LinearLayout.LayoutParams(MATCH_PARENT, (50 * d).toInt()))
         // friends
         body.addView(switchRow("Show my level to friends", Xp.showToFriends) { Xp.showToFriends = it; Friends.Presence.refresh() })
@@ -4601,6 +4766,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 addView(label(L.t(it.name), 15f, bold = true).apply { setTextColor(ink); setPadding(0, p / 2, 0, 0) })
                 addView(label(when {
                     sel -> L.t("In use")
+                    !it.unlocked && it.rank > 0 -> "◆ " + L.t(Xp.rankName(it.rank)) + " " + L.t("rank")
                     !it.unlocked && it.level >= 50 -> L.t("Prestige")
                     !it.unlocked -> "🔒 " + L.t("Level ${it.level}") + if (it.milestone) " · " + L.t("milestone") else ""
                     !readable -> L.t("Hard to see on this style")
@@ -4686,7 +4852,31 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     /** After a level-up (shown once you've parked): the new level, title and unlocks. */
+    /**
+     * Level up (after parking). Crossing a multiple of 5: first the celebration in this style's
+     * look (Settings › Performance › Animations: Full only), then the card.
+     */
     private fun showLevelUp(from: Int) {
+        val to = Explorer.level
+        if (to <= from || isFinishing) return
+        val milestone = (from + 1..to).lastOrNull { it % 5 == 0 }
+        if (milestone != null && Perf.anim == Perf.FULL) {
+            val host = window.decorView as ViewGroup
+            lateinit var view: Milestone
+            view = Milestone(this, milestone, Xp.title(theme, milestone), theme) {
+                host.removeView(view); showLevelUpCard(from)
+            }
+            view.elevation = 60 * d
+            host.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            return
+        }
+        showLevelUpCard(from)
+    }
+
+    /** For tests: the celebration for [level], drawn at [ms]. */
+    internal fun milestoneForTest(level: Int, ms: Long): Milestone = Milestone(this, level, Xp.title(theme, level), theme) {}.apply { fixedMs = ms }
+
+    private fun showLevelUpCard(from: Int) {
         val to = Explorer.level
         if (to <= from || isFinishing) return
         val p = (20 * d).toInt()
@@ -4718,13 +4908,47 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
                 addView(pill("Later") { dlg.dismiss() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 14f) },
                     LinearLayout.LayoutParams(0, (50 * d).toInt(), 1f).apply { marginEnd = p / 2 })
-                if (unlocks.isNotEmpty()) addView(pill("Use it now") {
+                if (to >= 50) addView(pill("See prestige") { dlg.dismiss(); openSheet("progress") }
+                    .apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) }, LinearLayout.LayoutParams(0, (50 * d).toInt(), 1.3f))
+                else if (unlocks.isNotEmpty()) addView(pill("Use it now") {
                     dlg.dismiss(); val u = unlocks.last(); if (Xp.readableOn(u, theme.look)) Xp.choose(u); garageTab = u.kind; openSheet("garage")
                 }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) }, LinearLayout.LayoutParams(0, (50 * d).toInt(), 1.3f))
             })
         }
         L.translateTree(box); Icons.applyTree(box)
         box.background = bg(panel, accent, 2f, 22f)
+        dlg = AlertDialog.Builder(this).setView(box).create()
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dlg.show()
+    }
+
+    /** Right after a prestige: the new rank, its boost and its rewards (Use it now: the Garage). */
+    private fun showPrestigeReveal() {
+        val p = (20 * d).toInt()
+        val col = Xp.rankColor()
+        val rewards = Xp.items.filter { it.rank == Xp.prestige.coerceAtMost(5) }
+        lateinit var dlg: AlertDialog
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(p, p, p, p)
+            addView(label(L.t("PRESTIGE"), 14f, bold = true).apply { setTextColor(readable(accent)); letterSpacing = 0.3f })
+            addView(label("◆", 64f, bold = true).apply { setTextColor(col); gravity = Gravity.CENTER })
+            addView(label(L.t(Xp.rankName()), 30f, bold = true).apply { setTextColor(ink); typeface = theme.typeface; gravity = Gravity.CENTER })
+            addView(label(L.t("+${Xp.boostPct}% XP on every drive, for good"), 15f).apply { setTextColor(dim()); gravity = Gravity.CENTER; setPadding(0, p / 4, 0, p / 2) })
+            for (u in rewards) addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                addView(GarageSwatch(context, u, theme.look), LinearLayout.LayoutParams((70 * d).toInt(), (48 * d).toInt()).apply { marginEnd = p / 2 })
+                addView(label(L.t(u.name), 16f, bold = true).apply { setTextColor(ink) })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 3 })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
+                addView(pill("Later") { dlg.dismiss() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 14f) },
+                    LinearLayout.LayoutParams(0, (50 * d).toInt(), 1f).apply { marginEnd = p / 2 })
+                if (rewards.isNotEmpty()) addView(pill("Use it now") { dlg.dismiss(); Xp.choose(rewards.first()); garageTab = rewards.first().kind; openSheet("garage") }
+                    .apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) }, LinearLayout.LayoutParams(0, (50 * d).toInt(), 1.3f))
+            })
+        }
+        L.translateTree(box); Icons.applyTree(box)
+        box.background = bg(panel, col, 2.5f, 22f)
         dlg = AlertDialog.Builder(this).setView(box).create()
         dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         dlg.show()
@@ -4895,6 +5119,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Friends.arrived -= friendsArrived
         Friends.setVisible(false)
         main.removeCallbacks(ticker)
+        HomeWidget.refresh(this)
         // in the background and not navigating: let the GPS rest
         LocationTracker.release(this, "phone")
         if (!LocationTracker.inUse && !NavEngine.active) Voice.shutdown()

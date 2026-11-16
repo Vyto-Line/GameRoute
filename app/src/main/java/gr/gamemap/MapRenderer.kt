@@ -270,6 +270,7 @@ class MapRenderer(private val car: Boolean = false) {
 
         drawSpeed(c, area, d, theme)
         if (car && hud) drawCarEta(c, area, d, theme)
+        if (hud && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planning && !NavEngine.arrived) drawCurrentRoad(c, area, d, theme)
         carHits.clear()
         // the car's trip card steps aside after 30 s, or as soon as a place is tapped
         val trip = NavEngine.lastTrip
@@ -1284,8 +1285,8 @@ class MapRenderer(private val car: Boolean = false) {
         // right: style, traffic / voice, report (below the ☰, whichever one is showing)
         var y = maxOf(stripBottom, a.top.toFloat()) + gap
         btn("style", y); y += size + gap
-        if (NavEngine.active) btn(if (Voice.muted) "unmute" else "mute", y) else btn("traffic", y)
-        y += size + gap
+        // (Show traffic moved to Settings › Map; driving, the sound button takes its place)
+        if (NavEngine.active) { btn(if (Voice.muted) "unmute" else "mute", y); y += size + gap }
         // Friends (where Report used to be): how many are online, in a green badge
         btn("friends", y)
         val online = if (Friends.ready && Friends.core.started) Friends.core.friends.count { Friends.core.isOnline(it.fid) } +
@@ -1482,23 +1483,24 @@ class MapRenderer(private val car: Boolean = false) {
         val ink = Ui.ink(t)
         CarParking.list?.let { drawParkingList(c, box, d, t, it); return }
         text.textAlign = Paint.Align.LEFT
+        // ARRIVED · 13:29, the whole name (two lines when long), time and distance. No XP in the car:
+        // it waits on the phone, where you look at it parked.
         text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 13 * d; text.color = Ui.onPanel(t, t.route, 3.0)
-        c.drawText(Explorer.completeTitle(t).uppercase(), box.left + 18 * d, box.top + 28 * d, text)
+        val at = if (trip.arrivedAt > 0) " · " + NavEngine.clock(trip.arrivedAt) else ""
+        c.drawText(gr.gamemap.L.t("ARRIVED") + at, box.left + 18 * d, box.top + 28 * d, text)
         text.typeface = t.typeface; text.textSize = 24 * d; text.color = ink
-        c.drawText(ellipsize(trip.place, w - 36 * d), box.left + 18 * d, box.top + 60 * d, text)
-        val stats = listOf(
-            NavEngine.formatDuration(trip.seconds.toDouble()) to "journey",
-            NavEngine.formatDistance(trip.meters) to "travelled",
-            (if (trip.xp == 0) "No XP" else "+${trip.xp} XP") to (if (trip.xp == 0) "under 200 m" else "level ${Explorer.level}"),
-        )
-        val col = (w - 36 * d) / 3
-        stats.forEachIndexed { i, (big, small) ->
-            val x = box.left + 18 * d + i * col
-            text.typeface = t.typeface; text.textSize = 22 * d; text.color = ink
-            c.drawText(gr.gamemap.L.t(big), x, box.top + 104 * d, text)
-            text.typeface = Typeface.DEFAULT; text.textSize = 13 * d; text.color = Ui.dim(t, 190)
-            c.drawText(gr.gamemap.L.t(small), x, box.top + 124 * d, text)
-        }
+        val maxW = w - 36 * d
+        val words = trip.place.split(' ')
+        var first = ""
+        var k = 0
+        while (k < words.size && text.measureText((first + " " + words[k]).trim()) <= maxW) { first = (first + " " + words[k]).trim(); k++ }
+        if (first.isEmpty()) { first = ellipsize(trip.place, maxW); k = words.size }
+        val second = words.drop(k).joinToString(" ")
+        c.drawText(first, box.left + 18 * d, box.top + 58 * d, text)
+        if (second.isNotEmpty()) c.drawText(ellipsize(second, maxW), box.left + 18 * d, box.top + 88 * d, text)
+        text.typeface = Typeface.DEFAULT; text.textSize = 18 * d; text.color = Ui.dim(t, 210)
+        c.drawText(NavEngine.formatDuration(trip.seconds.toDouble()) + " · " + NavEngine.formatDistance(trip.meters),
+            box.left + 18 * d, box.top + (if (second.isNotEmpty()) 120 else 92) * d, text)
         // buttons
         val by = box.bottom - 18 * d - 56 * d
         val half = (w - 36 * d - 12 * d) / 2
@@ -1744,6 +1746,28 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     /** Tunnel mode: a small chip saying the position is estimated. */
+    @Volatile private var roadName = ""
+    private var roadAt = 0L
+
+    /** The road you're on, small at the bottom of the map (hidden on unnamed roads). */
+    private fun drawCurrentRoad(c: Canvas, a: Rect, d: Float, t: Theme) {
+        val now = System.currentTimeMillis()
+        if (now - roadAt > 1000) { roadAt = now; roadName = try { NavEngine.currentRoad() } catch (_: Exception) { "" } }
+        val name = roadName
+        if (name.isBlank()) return
+        text.textAlign = Paint.Align.CENTER; text.textSize = (if (car) 17 else 15) * d
+        val tf = text.typeface; text.typeface = t.typeface
+        val shown = ellipsize(name, minOf(420 * d, a.width() * 0.5f))
+        val w = text.measureText(shown) + 32 * d
+        val h = (if (car) 38 else 34) * d
+        val bottom = a.bottom - (if (car) 18 else 14) * d
+        val r = RectF(a.exactCenterX() - w / 2, bottom - h, a.exactCenterX() + w / 2, bottom)
+        panel(c, r, d, t, outline = false)
+        text.color = Ui.ink(t)
+        c.drawText(shown, r.centerX(), r.centerY() + text.textSize * 0.35f, text)
+        text.typeface = tf; text.textAlign = Paint.Align.LEFT
+    }
+
     /** Weak GPS: a dashed amber ring round the arrow and a small note under it. */
     private fun drawWeakGps(c: Canvas, x: Float, y: Float, d: Float, a: Rect) {
         val amber = Color.rgb(255, 179, 71)
@@ -2044,6 +2068,8 @@ class MapRenderer(private val car: Boolean = false) {
     private fun drawBanner(c: Canvas, a: Rect, d: Float, t: Theme, pad: Float = 12 * d) {
         if (!NavEngine.active) return
         val step = NavEngine.currentStep
+        // update 100: the pace-note turn box (every style), whenever there is a turn to show
+        if (!NavEngine.arrived && !NavEngine.loading && NavEngine.error == null && step != null) { drawPaceNote(c, a, d, t, pad, step); return }
         val (title, sub) = when {
             NavEngine.arrived -> Explorer.completeTitle(t).uppercase() to NavEngine.destinationName
             NavEngine.error != null -> (NavEngine.error ?: "") to NavEngine.destinationName
@@ -2109,6 +2135,138 @@ class MapRenderer(private val car: Boolean = false) {
             text.typeface = t.typeface
             bannerBottom = tab.bottom
         }
+    }
+
+    /**
+     * The turn box, rally pace-note style, in the style's own panel, colours and letters:
+     * [distance + trip km] [a sketch of the junction, the way out in the route colour]
+     * [EXIT 2 / TURN RIGHT, then the road you turn into], and the next turn on a line underneath
+     * when it comes soon after. Lanes, when known, under it.
+     */
+    private fun drawPaceNote(c: Canvas, a: Rect, d: Float, t: Theme, pad: Float, step: NavStep) {
+        val then = NavEngine.followingStep
+        val lanes = step.lanes?.takeIf { NavEngine.distanceToNext < 900 }
+        val mainH = 96 * d
+        val thenH = if (then != null) 30 * d else 0f
+        val lanesH = if (lanes != null) 44 * d else 0f
+        val box = RectF(a.left + pad, a.top + pad, minOf(a.right - pad, a.left + pad + 400 * d), a.top + pad + mainH + thenH + lanesH)
+        panel(c, box, d, t, outline = true)
+        val ink = Ui.ink(t)
+        val accent = Ui.onPanel(t, t.route, 3.0)
+        val line = withAlpha(ink, 60)
+        val c1 = box.left + 80 * d; val c2 = c1 + 96 * d
+        stroke.color = line; stroke.strokeWidth = 1 * d
+        c.drawLine(c1, box.top + 8 * d, c1, box.top + mainH - 8 * d, stroke)
+        c.drawLine(c2, box.top + 8 * d, c2, box.top + mainH - 8 * d, stroke)
+        if (then != null || lanes != null) c.drawLine(box.left + 8 * d, box.top + mainH, box.right - 8 * d, box.top + mainH, stroke)
+        // 1) distance and the trip counter
+        val dist = NavEngine.formatDistance(NavEngine.distanceToNext)
+        val num = dist.substringBeforeLast(' '); val unit = dist.substringAfterLast(' ', "")
+        text.textAlign = Paint.Align.CENTER; text.typeface = t.typeface
+        text.textSize = 32 * d; text.color = accent
+        val nw = text.measureText(num); if (nw > 70 * d) text.textSize = 32 * d * 70 * d / nw
+        c.drawText(num, (box.left + c1) / 2, box.top + 44 * d, text)
+        text.textSize = 14 * d; text.color = ink
+        c.drawText(unit, (box.left + c1) / 2, box.top + 62 * d, text)
+        text.textSize = 12 * d; text.color = Ui.dim(t, 170)
+        c.drawText(String.format(java.util.Locale.US, "%.2f km", NavEngine.tripSoFar / 1000), (box.left + c1) / 2, box.top + 84 * d, text)
+        // 2) the junction
+        drawJunction(c, (c1 + c2) / 2, box.top + mainH / 2, 78 * d, step, ink, accent, d)
+        // 3) what to do, and the road you turn into
+        val tx = c2 + 12 * d; val maxW = box.right - tx - 10 * d
+        val roundabout = (step.type == "roundabout" || step.type == "rotary") && step.exit in 1..12
+        val what = (if (roundabout) gr.gamemap.L.t("Exit ${step.exit}") else step.text.substringBefore(" onto ").substringBefore(" στην ")).uppercase()
+        val road = step.road.takeIf { it.isNotBlank() && step.type != "arrive" } ?: step.text
+        text.textAlign = Paint.Align.LEFT
+        text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 12 * d; text.color = Ui.dim(t, 190)
+        c.drawText(ellipsize(what, maxW), tx, box.top + 30 * d, text)
+        text.typeface = t.typeface; text.color = ink
+        text.textSize = 26 * d
+        val rw = text.measureText(road); if (rw > maxW) text.textSize = (26 * d * maxW / rw).coerceAtLeast(17 * d)
+        c.drawText(ellipsize(road, maxW), tx, box.top + 64 * d, text)
+        // 4) the next turn, soon after
+        if (then != null) {
+            val y = box.top + mainH + thenH / 2
+            text.textSize = 14 * d; text.typeface = Typeface.DEFAULT_BOLD
+            text.color = Ui.dim(t, 170)
+            c.drawText(gr.gamemap.L.t("Then"), box.left + 14 * d, y + 5 * d, text)
+            val gap = NavEngine.followingGap?.let { NavEngine.formatDistance(it) } ?: ""
+            text.color = ink
+            val gx = box.left + 14 * d + text.measureText(gr.gamemap.L.t("Then")) + 10 * d
+            c.drawText(gap, gx, y + 5 * d, text)
+            val sx = gx + text.measureText(gap) + 16 * d
+            drawJunction(c, sx, y, 24 * d, then, ink, ink, d, mini = true)
+            val label = (if (then.road.isNotBlank() && then.type != "arrive") then.road else then.text)
+            c.drawText(ellipsize(label, box.right - sx - 24 * d), sx + 16 * d, y + 5 * d, text)
+        }
+        text.typeface = t.typeface
+        if (lanes != null) drawLanes(c, RectF(box.left, box.top + mainH + thenH, box.right, box.bottom), lanes, step.direction, d, t)
+        bannerBottom = box.bottom
+    }
+
+    /** Compass angle (0 = straight on, + to the right) of the way out of a junction. */
+    private fun exitAngle(s: NavStep): Float {
+        if ((s.type == "roundabout" || s.type == "rotary") && s.exit in 1..12) return (90f - (s.exit - 1) * 90f).coerceAtLeast(-150f)
+        val dir = s.direction
+        return when {
+            dir == "uturn" -> 180f
+            dir.contains("sharp left") -> -135f
+            dir.contains("slight left") -> -45f
+            dir.contains("left") -> -90f
+            dir.contains("sharp right") -> 135f
+            dir.contains("slight right") -> 45f
+            dir.contains("right") -> 90f
+            else -> 0f
+        }
+    }
+
+    /**
+     * A rally roadbook sketch: you come in from the bottom (a dot), the junction in the middle (a
+     * ring for a roundabout), the other ways faint, the way out in [accent] with an arrowhead.
+     */
+    private fun drawJunction(c: Canvas, cx: Float, cy: Float, size: Float, s: NavStep, ink: Int, accent: Int, d: Float, mini: Boolean = false) {
+        val h = size / 2
+        val roundabout = (s.type == "roundabout" || s.type == "rotary") && s.exit in 1..12
+        val arrive = s.direction == "arrive"
+        val jx = cx; val jy = cy - h * 0.12f
+        val w = if (mini) 2.4f * d else 4f * d
+        stroke.strokeCap = Paint.Cap.ROUND; stroke.strokeJoin = Paint.Join.ROUND
+        // the way in
+        stroke.color = ink; stroke.strokeWidth = w
+        c.drawLine(cx, cy + h * 0.78f, jx, jy + (if (roundabout) h * 0.28f else 0f), stroke)
+        fill.color = ink; c.drawCircle(cx, cy + h * 0.78f, w * 1.3f, fill)
+        if (arrive) { fill.color = accent; c.drawCircle(jx, jy, w * 2.2f, fill); stroke.strokeCap = Paint.Cap.BUTT; return }
+        val out = exitAngle(s)
+        // the other ways, faint (not for a mini sketch)
+        if (!mini) {
+            stroke.color = withAlpha(ink, 90); stroke.strokeWidth = w * 0.6f
+            for (o in if (roundabout) listOf(-90f, 0f, 90f) else listOf(-90f, 0f, 90f)) {
+                if (kotlin.math.abs(o - out) < 20) continue
+                val r0 = if (roundabout) h * 0.28f else 0f
+                val rad = Math.toRadians(o.toDouble())
+                c.drawLine(jx + (sin(rad) * r0).toFloat(), jy - (cos(rad) * r0).toFloat(), jx + (sin(rad) * h * 0.7f).toFloat(), jy - (cos(rad) * h * 0.7f).toFloat(), stroke)
+            }
+        }
+        if (roundabout) { stroke.color = ink; stroke.strokeWidth = w * 0.8f; c.drawCircle(jx, jy, h * 0.28f, stroke) }
+        // the way out
+        stroke.color = accent; stroke.strokeWidth = w * 1.4f
+        if (out == 180f) {
+            path.reset(); path.moveTo(jx + h * 0.2f, jy); path.cubicTo(jx + h * 0.2f, jy - h * 0.6f, jx - h * 0.35f, jy - h * 0.6f, jx - h * 0.35f, jy + h * 0.3f)
+            stroke.style = Paint.Style.STROKE; c.drawPath(path, stroke)
+            stroke.strokeCap = Paint.Cap.BUTT; return
+        }
+        val rad = Math.toRadians(out.toDouble())
+        val r0 = if (roundabout) h * 0.28f else 0f
+        val sx = jx + (sin(rad) * r0).toFloat(); val sy = jy - (cos(rad) * r0).toFloat()
+        val ex = jx + (sin(rad) * h * 0.78f).toFloat(); val ey = jy - (cos(rad) * h * 0.78f).toFloat()
+        c.drawLine(sx, sy, ex, ey, stroke)
+        // arrowhead
+        val ah = (if (mini) 4f else 9f) * d
+        val l = rad - Math.toRadians(150.0); val r = rad + Math.toRadians(150.0)
+        path.reset()
+        path.moveTo(ex + (sin(l) * ah).toFloat(), ey - (cos(l) * ah).toFloat()); path.lineTo(ex, ey); path.lineTo(ex + (sin(r) * ah).toFloat(), ey - (cos(r) * ah).toFloat())
+        c.drawPath(path, stroke)
+        stroke.strokeCap = Paint.Cap.BUTT; stroke.strokeJoin = Paint.Join.MITER
     }
 
     private fun ellipsize(s: String, maxW: Float): String {

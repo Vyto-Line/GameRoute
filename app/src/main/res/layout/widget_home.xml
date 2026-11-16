@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home screen widget: your level ring, then Home and Work with the drive time. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="8dp">
+    <ImageView
+        android:id="@+id/w_ring"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="8dp"
+        android:contentDescription="Your level" />
+    <LinearLayout
+        android:id="@+id/w_home"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:layout_marginEnd="6dp"
+        android:background="@drawable/widget_button"
+        android:gravity="center"
+        android:orientation="vertical">
+        <TextView android:id="@+id/w_home_t" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Home" android:textColor="#FFFFFFFF" android:textSize="15sp" android:textStyle="bold" />
+        <TextView android:id="@+id/w_home_s" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="" android:textColor="#CCFFFFFF" android:textSize="12sp" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/w_work"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="@drawable/widget_button"
+        android:gravity="center"
+        android:orientation="vertical">
+        <TextView android:id="@+id/w_work_t" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Work" android:textColor="#FFFFFFFF" android:textSize="15sp" android:textStyle="bold" />
+        <TextView android:id="@+id/w_work_s" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="" android:textColor="#CCFFFFFF" android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>

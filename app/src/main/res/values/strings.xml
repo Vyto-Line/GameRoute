@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GameRoute</string>
+    <string name="widget_description">Home and Work with the drive time, and your level</string>
 </resources>

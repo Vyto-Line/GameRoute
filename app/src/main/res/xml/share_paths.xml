@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pictures the app shares (the recap card): made in the cache, handed to the app you choose. -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

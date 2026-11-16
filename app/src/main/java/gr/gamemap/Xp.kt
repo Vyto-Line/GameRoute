@@ -124,6 +124,13 @@ object Xp {
             prefs().edit().putBoolean("xpPaid_${c.key}", true).apply()
             parts += Part("Weekly: ${c.title}", c.reward, "challenge done")
         }
+        // prestige rank: +10 % XP for every rank (Bronze +10 % … Diamond +50 %), for good
+        val boost = boostPct
+        if (boost > 0) {
+            val base = parts.sumOf { it.xp }
+            val extra = base * boost / 100
+            if (extra > 0) parts += Part("${rankName()} boost +$boost%", extra, "prestige rank")
+        }
         val total = parts.sumOf { it.xp }
         Explorer.addXp(total - landmarks * 25) // landmarks were added when found
         val lv = Explorer.level
@@ -190,7 +197,25 @@ object Xp {
         Explorer.changed.fire(); changed.fire()
     }
 
-    val stars: String get() = "★".repeat(prestige.coerceAtMost(5))
+    /** Before a title: the rank mark after a prestige ("◆ "), nothing before. */
+    val stars: String get() = if (prestige > 0) "◆ " else ""
+
+    /** The prestige ranks: each start-over moves you up one (Diamond from the fifth on). */
+    val ranks = listOf("Bronze", "Silver", "Gold", "Platinum", "Diamond")
+    val rankColors = intArrayOf(Color.rgb(205, 127, 50), Color.rgb(196, 204, 216), Color.rgb(255, 196, 40), Color.rgb(160, 215, 225), Color.rgb(120, 230, 255))
+
+    /** "Bronze", … "Diamond" (blank before the first prestige). */
+    fun rankName(p: Int = prestige): String = if (p <= 0) "" else ranks[(p - 1).coerceAtMost(4)]
+    fun rankColor(p: Int = prestige): Int = if (p <= 0) 0 else rankColors[(p - 1).coerceAtMost(4)]
+
+    /** Extra XP from the rank, in percent: +10 per rank, up to +50. */
+    val boostPct: Int get() = (prestige.coerceAtMost(5)) * 10
+
+    /** What the next prestige brings: the rank, its boost and its Garage rewards. */
+    fun nextRank(): Triple<String, Int, List<Item>> {
+        val p = (prestige + 1).coerceAtMost(5)
+        return Triple(rankName(prestige + 1), p * 10, items.filter { it.rank == p })
+    }
 
     // ------------------------------------------------------------------ titles
 
@@ -230,8 +255,8 @@ object Xp {
     // ------------------------------------------------------------------ the Garage
 
     /** Something to unlock: [kind] arrow, route, flag or arrival. */
-    class Item(val id: String, val kind: String, val name: String, val level: Int, val milestone: Boolean = false, val color: Int = 0) {
-        val unlocked: Boolean get() = if (level >= 50) prestige > 0 || maxLevel >= 50 else maxLevel >= level
+    class Item(val id: String, val kind: String, val name: String, val level: Int, val milestone: Boolean = false, val color: Int = 0, val rank: Int = 0) {
+        val unlocked: Boolean get() = if (rank > 0) prestige >= rank else if (level >= 50) prestige > 0 || maxLevel >= 50 else maxLevel >= level
     }
 
     val items: List<Item> = listOf(
@@ -255,6 +280,17 @@ object Xp {
         Item("arrival_confetti", "arrival", "Confetti", 7),
         Item("arrival_fireworks", "arrival", "Fireworks", 16),
         Item("arrival_lights", "arrival", "Light show", 40, milestone = true),
+        // prestige rewards: an arrow and a route in each rank's colour, only by reaching the rank
+        Item("arrow_bronze", "arrow", "Bronze arrow", 50, milestone = true, color = Color.rgb(205, 127, 50), rank = 1),
+        Item("route_bronze", "route", "Bronze", 50, color = Color.rgb(205, 127, 50), rank = 1),
+        Item("arrow_silver", "arrow", "Silver arrow", 50, milestone = true, color = Color.rgb(196, 204, 216), rank = 2),
+        Item("route_silver", "route", "Silver", 50, color = Color.rgb(176, 186, 200), rank = 2),
+        Item("arrow_goldrank", "arrow", "Gold arrow", 50, milestone = true, color = Color.rgb(255, 205, 60), rank = 3),
+        Item("route_goldrank", "route", "Gold", 50, color = Color.rgb(240, 180, 20), rank = 3),
+        Item("arrow_platinum", "arrow", "Platinum arrow", 50, milestone = true, color = Color.rgb(160, 215, 225), rank = 4),
+        Item("route_platinum", "route", "Platinum", 50, color = Color.rgb(120, 190, 205), rank = 4),
+        Item("arrow_diamond", "arrow", "Diamond arrow", 50, milestone = true, color = Color.rgb(120, 230, 255), rank = 5),
+        Item("route_diamond", "route", "Diamond", 50, color = Color.rgb(60, 210, 255), rank = 5),
     )
 
     fun kindItems(kind: String) = items.filter { it.kind == kind }
@@ -277,7 +313,7 @@ object Xp {
         private set
 
     /** What a level unlocks (for the level-up card). */
-    fun unlockedAt(level: Int): List<Item> = items.filter { it.level == level }
+    fun unlockedAt(level: Int): List<Item> = items.filter { it.level == level && it.rank == 0 }
 
     /** The next unlock, for the progress bar ("unlocks the Checkered flag"). */
     fun nextUnlock(level: Int = maxLevel): Item? = items.filter { it.level > level && it.level < 50 }.minByOrNull { it.level }
@@ -313,5 +349,5 @@ object Xp {
         set(v) { if (ready) { prefs().edit().putBoolean("xpShowFriends", v).apply(); changed.fire() } }
 
     /** "Lv 12 · Night Rider" (with stars after a prestige), for others to see. */
-    fun badge(): String = "${stars}Lv ${Explorer.level} · ${title()}"
+    fun badge(): String = (if (prestige > 0) "◆ ${rankName()} · " else "") + "Lv ${Explorer.level} · ${title()}"
 }

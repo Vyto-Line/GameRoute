@@ -28,6 +28,8 @@ object RoadMatch {
 
     private var tileKey = ""
     private var segs: List<Seg> = emptyList()
+    /** Named stretches (the map's street names), for "the road you're on" without a route. */
+    private var named: List<Pair<Seg, String>> = emptyList()
     private var originLat = 0.0
     private var originLon = 0.0
 
@@ -56,6 +58,7 @@ object RoadMatch {
         val key = "$tx/$ty"
         if (key == tileKey && segs.isNotEmpty()) return
         val out = ArrayList<Seg>()
+        val names = ArrayList<Pair<Seg, String>>()
         originLat = p.lat; originLon = p.lon
         var any = false
         for (dy in -1..1) for (dx in -1..1) {
@@ -63,6 +66,19 @@ object RoadMatch {
             val vt = VectorSource.peek(Z, x, y) ?: continue
             any = true
             for ((fi, f) in vt.features.withIndex()) {
+                if (f.layer == "transportation_name" && f.type == 2) {
+                    val nm = (if (L.greek) f["name:el"] else f["name:latin"]) ?: f["name"] ?: continue
+                    for (part in f.parts) {
+                        var i = 2
+                        while (i < part.size) {
+                            fun lon(v: Float) = (x + v / f.extent) / n * 360.0 - 180
+                            fun lat(v: Float) = atan(sinh(PI * (1 - 2 * (y + v / f.extent) / n))) * 180 / PI
+                            names += Seg(mx(lon(part[i - 2])), my(lat(part[i - 1])), mx(lon(part[i])), my(lat(part[i + 1])), "", 0, 0, false) to nm
+                            i += 2
+                        }
+                    }
+                    continue
+                }
                 if (f.layer != "transportation" || f.type != 2) continue
                 val cls = f["class"] ?: continue
                 if (cls !in DRIVABLE) continue
@@ -81,7 +97,7 @@ object RoadMatch {
             }
         }
         if (!any) return
-        tileKey = key; segs = out; last = null
+        tileKey = key; segs = out; named = names; last = null
     }
 
     /**
@@ -138,6 +154,27 @@ object RoadMatch {
         else if (b.oneway == 0 && bearing != null && abs(Geo.angleDiff(bearing, dir)) > 90) dir = (dir + 180) % 360
         if (bestDist < 0 || dir.isNaN()) return null
         return LatLng(latOf(qy), lonOf(qx)) to dir
+    }
+
+    /** The name of the street at [p] going [bearing] (within 20 m), or null on unnamed roads. */
+    fun roadName(p: LatLng, bearing: Float?): String? {
+        if (tileKey != "test") load(p)
+        val px = mx(p.lon); val py = my(p.lat)
+        var best: String? = null; var bestD = 20.0
+        for ((s, nm) in named) {
+            val vx = s.bx - s.ax; val vy = s.by - s.ay
+            val len2 = vx * vx + vy * vy
+            if (len2 < 0.01) continue
+            val t = (((px - s.ax) * vx + (py - s.ay) * vy) / len2).coerceIn(0.0, 1.0)
+            val d = kotlin.math.hypot(px - (s.ax + vx * t), py - (s.ay + vy * t))
+            if (d >= bestD) continue
+            if (bearing != null) {
+                val diff = abs(Geo.angleDiff(bearing, compass(vx, vy)))
+                if (minOf(diff, 180 - diff) > 40) continue // a crossing street
+            }
+            bestD = d; best = nm
+        }
+        return best
     }
 
     private fun joined(a: Seg, b: Seg): Boolean {

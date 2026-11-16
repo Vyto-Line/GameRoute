@@ -48,6 +48,8 @@ import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.car.app.navigation.model.RoutingInfo
 import androidx.car.app.navigation.model.Step
 import androidx.car.app.navigation.model.TravelEstimate
+import androidx.car.app.navigation.model.Trip
+import androidx.car.app.navigation.model.Destination
 import androidx.car.app.validation.HostValidator
 import androidx.car.app.versioning.CarAppApiLevels
 import androidx.core.graphics.drawable.IconCompat
@@ -433,6 +435,49 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             navigating = false
             try { nav.navigationEnded() } catch (_: Exception) {}
         }
+        if (navigating) syncTrip()
+    }
+
+    private var tripSentAt = 0L
+    private var tripFailed = false
+
+    /**
+     * The next turn and the time left, sent to the car itself: cars that support it show them on the
+     * display behind the wheel and the head-up display, and Android Auto shows a turn pop-up while
+     * another app (music) is on the screen. Once a second at most.
+     */
+    private fun syncTrip() {
+        if (!NavEngine.active || NavEngine.arrived || tripFailed) return
+        val now = System.currentTimeMillis()
+        if (now - tripSentAt < 1000) return
+        tripSentAt = now
+        val step = NavEngine.currentStep ?: return
+        try {
+            val zone = java.util.TimeZone.getDefault()
+            fun est(m: Double, secs: Double) = TravelEstimate.Builder(distance(m), DateTimeWithZone.create(now + (secs * 1000).toLong(), zone))
+                .setRemainingTimeSeconds(secs.toLong().coerceAtLeast(0)).build()
+            val toStep = NavEngine.distanceToNext / maxOf(LocationTracker.speedMps.toDouble(), 8.0)
+            val b = Trip.Builder()
+                .addStep(toCarStep(step, false), est(NavEngine.distanceToNext, toStep))
+                .addDestination(Destination.Builder().setName(NavEngine.destinationName.ifBlank { gr.gamemap.L.t("Destination") }).build(),
+                    est(NavEngine.remainingDistance, NavEngine.remainingSeconds))
+            NavEngine.currentRoad().takeIf { it.isNotBlank() }?.let { b.setCurrentRoad(it) }
+            nav.updateTrip(b.build())
+        } catch (e: Exception) {
+            tripFailed = true // an older car host: the map's own turn box is enough
+            gr.gamemap.CrashLog.note("car trip info: $e")
+        }
+    }
+
+    /** For tests: what the car is told about the trip right now. */
+    internal fun tripForTest(): Trip? {
+        val step = NavEngine.currentStep ?: return null
+        val now = System.currentTimeMillis(); val zone = java.util.TimeZone.getDefault()
+        fun est(m: Double, secs: Double) = TravelEstimate.Builder(distance(m), DateTimeWithZone.create(now + (secs * 1000).toLong(), zone)).setRemainingTimeSeconds(secs.toLong().coerceAtLeast(0)).build()
+        val b = Trip.Builder().addStep(toCarStep(step, false), est(NavEngine.distanceToNext, 10.0))
+            .addDestination(Destination.Builder().setName(NavEngine.destinationName).build(), est(NavEngine.remainingDistance, NavEngine.remainingSeconds))
+        NavEngine.currentRoad().takeIf { it.isNotBlank() }?.let { b.setCurrentRoad(it) }
+        return b.build()
     }
 
     /** "Faster route found" as an Android Auto alert with Switch / Keep (needs a newer car host). */
@@ -1131,9 +1176,7 @@ class CarMenuScreen(carContext: CarContext) : Screen(carContext) {
         else row(gr.gamemap.L.t("Map style"), (MapState.carTheme ?: MapState.theme).title) { MapState.nextCarTheme(); invalidate() }
         val stop = NavEngine.stops.firstOrNull()
         if (stop != null && NavEngine.active) row(gr.gamemap.L.t("Remove stop"), stop.name) { NavEngine.removeStop(stop); screenManager.pop() }
-        else row(gr.gamemap.L.t("Traffic"), if (gr.gamemap.Traffic.showLayer) gr.gamemap.L.t("On") else gr.gamemap.L.t("Off")) { gr.gamemap.Traffic.showLayer = !gr.gamemap.Traffic.showLayer; invalidate() }
         row(gr.gamemap.L.t("Spoken directions"), if (Voice.muted) gr.gamemap.L.t("Off") else gr.gamemap.L.t("On")) { Voice.muted = !Voice.muted; invalidate() }
-        row(gr.gamemap.L.t("Report")) { screenManager.pop(); screenManager.push(ReportScreen(carContext)) }
         // the car decides how many rows fit (often 6): the least needed go last
         rows.take(carListLimit(carContext)).forEach { list.addItem(it) }
         return ListTemplate.Builder().setTitle("GameRoute").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
