@@ -58,7 +58,10 @@ Mockups: the GameRoute mockups canvas, rows 18 (Friends) and 19 (Backup & restor
    (arrow, route colour, destination flag, arrival effect; no trails), a title ladder per style,
    a milestone every 10 levels, prestige at 50. Level ring on the home screen, Progress and Garage
    in the menu. Level-up only after you park.
-4. **You screen** (26c, later): one button for progress, Garage, friends, trips and settings;
+4. **More map styles** (28), one at a time after Violet Rain: Rally Roadbook (pace-note turn
+   cards), Blueprint, Nautical Chart, Arctic (bright day style), High Contrast. Not Comic Book
+   (too busy, confusing while driving). Every style draws buildings in its own way.
+5. **You screen** (26c, later): one button for progress, Garage, friends, trips and settings;
    friend request on top, friends' circles (online/offline only); tapping a friend (26h): Invite to
    a convoy (starts one if needed), Rename, Remove, Block, "Friends since · N drives together".
 
