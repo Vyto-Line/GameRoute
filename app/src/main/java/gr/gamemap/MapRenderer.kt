@@ -277,6 +277,7 @@ class MapRenderer(private val car: Boolean = false) {
         else if (car && carButtons && selectedPlace != null && !NavEngine.planning) drawCarPlace(c, area, d, theme)
         drawJamChip(c, area, d, theme, hud)
         if (hud && NavEngine.estimating) drawNoGps(c, area, d, theme)
+        else if (hud && NavEngine.noSignal && NavEngine.active && !NavEngine.arrived) drawNoGps(c, area, d, theme, NavEngine.noSignalText())
         if (hud && !NavEngine.arrived) NavEngine.tollAhead?.let { (t, dist) -> drawTollChip(c, area, d, theme, t.price, dist) }
         if (car && hud && carButtons) Convoy.proposal?.let { drawCarProposal(c, area, d, theme, it) }
         if (hud && Convoy.counting) { drawCountdown(c, area, d, theme); animating = true }
@@ -1499,8 +1500,8 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     /** Tunnel mode: a small chip saying the position is estimated. */
-    private fun drawNoGps(c: Canvas, a: Rect, d: Float, t: Theme) {
-        val label = gr.gamemap.L.t("No GPS: estimating")
+    private fun drawNoGps(c: Canvas, a: Rect, d: Float, t: Theme, message: String = "No GPS: estimating") {
+        val label = gr.gamemap.L.t(message)
         text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 13 * d
         val w = text.measureText(label) + 34 * d
         val x = if (car) a.left + 12 * d else a.centerX() - w / 2

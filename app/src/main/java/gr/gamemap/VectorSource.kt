@@ -163,7 +163,8 @@ object VectorSource {
         if (::offlineDir.isInitialized) {
             val off = File(offlineDir, "$z/$x/$y.pbf")
             if (off.exists()) {
-                if (System.currentTimeMillis() - off.lastModified() > 30L * 86_400_000) prefetcher.execute { try { saveOffline(z, x, y) } catch (_: Exception) {} }
+                // old: refreshed in the background (if automatic updates are on, on Wi-Fi if asked)
+                if (System.currentTimeMillis() - off.lastModified() > 30L * 86_400_000 && Offline.mayRefresh()) prefetcher.execute { try { saveOffline(z, x, y) } catch (_: Exception) {} }
                 return off.readBytes()
             }
         }

@@ -23,7 +23,26 @@ object OpenPlaces {
     private val missing = ConcurrentHashMap<String, Long>() // squares with no data (sea, abroad), and failures
     private val order = java.util.Collections.synchronizedList(ArrayList<String>())
 
-    fun init(ctx: Context) { dir = File(ctx.cacheDir, "places").apply { mkdirs() } }
+    /** Squares of downloaded regions (Offline maps): kept until deleted. */
+    private lateinit var offDir: File
+
+    fun init(ctx: Context) {
+        dir = File(ctx.cacheDir, "places").apply { mkdirs() }
+        offDir = File(ctx.filesDir, "places-offline").apply { mkdirs() }
+    }
+
+    /** Downloads one square into the offline store (Offline maps). */
+    fun saveOffline(key: String) {
+        if (!ready) return
+        val f = File(offDir, "$key.tsv.gz")
+        if (f.exists() && System.currentTimeMillis() - f.lastModified() < MONTH) return
+        val c = java.net.URL("$BASE$key.tsv.gz").openConnection() as java.net.HttpURLConnection
+        c.connectTimeout = 8000; c.readTimeout = 20000
+        c.setRequestProperty("User-Agent", "GameRoute/1.0 (Android)")
+        try {
+            if (c.responseCode == 200) { val tmp = File(offDir, "$key.part"); c.inputStream.use { i -> tmp.outputStream().use { i.copyTo(it) } }; tmp.renameTo(f) }
+        } finally { c.disconnect() }
+    }
     val ready get() = ::dir.isInitialized
 
     private fun keyOf(lat: Double, lon: Double) = "${Math.floor(lat * 10).toInt()}_${Math.floor(lon * 10).toInt()}"
@@ -48,8 +67,10 @@ object OpenPlaces {
     private fun load(key: String, download: Boolean): Cell? {
         cells[key]?.let { order.remove(key); order += key; return it } // used again: kept longest
         missing[key]?.let { if (System.currentTimeMillis() - it < 6 * 3_600_000) return null }
-        val f = File(dir, "$key.tsv.gz")
-        val fresh = f.exists() && System.currentTimeMillis() - f.lastModified() < MONTH
+        // a downloaded region's square first (works with no signal)
+        val off = File(offDir, "$key.tsv.gz")
+        val f = if (off.exists()) off else File(dir, "$key.tsv.gz")
+        val fresh = f.exists() && (f === off || System.currentTimeMillis() - f.lastModified() < MONTH)
         if (!fresh && download) {
             try {
                 val c = java.net.URL("$BASE$key.tsv.gz").openConnection() as java.net.HttpURLConnection

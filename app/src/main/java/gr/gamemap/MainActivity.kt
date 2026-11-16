@@ -2359,7 +2359,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 switchRow("Car: dark map when headlights are on", MapState.followHeadlights) { MapState.followHeadlights = it },
                 switchRow("Places on the map (fuel, parking, food…)", MapState.showPlaces) { MapState.showPlaces = it },
                 settingRow("Units", if (MapState.imperial) "Miles" else "Kilometres") { MapState.setImperial(!MapState.imperial) },
-                settingRow("Offline maps", Offline.areas().let { a -> if (a.isEmpty()) "None yet" else "${a.size} area${if (a.size == 1) "" else "s"} · ${Offline.size(a.sumOf { it.bytes })}" }) { openSheet("offline") },
+                settingRow("Offline maps", Offline.areas().let { a -> if (a.isEmpty()) "Regions, Wi-Fi only, updates" else "${a.size} · ${Offline.size(a.sumOf { it.bytes })}" }) { openSheet("offline") },
             )
             "nav" -> listOf(
                 settingRow("Spoken directions", voice) { chooseVoice() },
@@ -3595,50 +3595,95 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Offline maps: download the map around here, list and delete downloads. */
     private fun renderOffline() {
         val areas = Offline.areas()
-        val key = "${areas.size}|${Offline.downloading}|${Offline.done.get() / 10}|${theme.name}|${MapState.dark}"
+        val key = "${areas.size}|${Offline.downloading}|${Offline.done.get() / 20}|${Offline.waitingForWifi}|${Offline.wifiOnly}${Offline.autoUpdate}${Offline.alongRoutes}|${theme.name}|${MapState.dark}"
         if (key == offlineKey && sheetHost.childCount > 0) return
         offlineKey = key
         Offline.changed -= offlineListener; Offline.changed += offlineListener
+        // (rebuilt as a download goes on: keep where the list was scrolled to)
+        val keepScroll = (0 until sheetHost.childCount).map { sheetHost.getChildAt(it) }.filterIsInstance<ScrollView>().firstOrNull()?.scrollY ?: 0
         sheetHost.removeAllViews()
         sheetHost.background = bg(panel, radius = 22f, topOnly = true)
         sheetHost.addView(sheetHeader("Offline maps"))
         val p = (12 * d).toInt()
-        sheetHost.addView(label("The map, street names and places of an area, kept on your phone: it shows without signal and uses no data. " +
-            "Routes and search still need the internet.", 14f).apply { setTextColor(dim()); setPadding(0, p / 2, 0, p) })
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.78).apply { addView(body); post { scrollTo(0, keepScroll) } }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        body.addView(label("The map and the places of a region, kept on your phone: they show and search without signal and use no data. " +
+            "Every trip also keeps the map along its route.", 14f).apply { setTextColor(dim()); setPadding(0, p / 2, 0, p / 2) })
+        body.addView(label("${Offline.size(Offline.usedBytes())} used · ${Offline.size(Offline.freeBytes())} free on the phone", 13f, bold = true).apply {
+            setTextColor(dim()); setPadding(0, 0, 0, p / 2)
+        })
+        // settings
+        body.addView(switchRow("Download on Wi-Fi only", Offline.wifiOnly) { Offline.wifiOnly = it })
+        body.addView(switchRow("Update downloaded maps automatically", Offline.autoUpdate) { Offline.autoUpdate = it })
+        body.addView(switchRow("Keep the map along every route", Offline.alongRoutes) { Offline.alongRoutes = it })
+        // what's downloading
         val dl = Offline.downloading
         if (dl != null) {
-            sheetHost.addView(label("Downloading $dl… ${Offline.done.get()} / ${Offline.total}", 15f, bold = true).apply { setTextColor(readable(accent)) })
-            sheetHost.addView(android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            val shown = Offline.regions.firstOrNull { it.id == dl }?.name ?: dl
+            body.addView(label(if (Offline.waitingForWifi) "Waiting for Wi-Fi: $shown" else "Downloading $shown… ${Offline.done.get() * 100 / Offline.total.coerceAtLeast(1)}%", 15f, bold = true).apply {
+                setTextColor(readable(accent)); setPadding(0, p, 0, 0)
+            })
+            body.addView(android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 max = Offline.total.coerceAtLeast(1); progress = Offline.done.get()
                 progressTintList = android.content.res.ColorStateList.valueOf(accent)
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2; bottomMargin = p / 2 })
-            sheetHost.addView(pill("Stop") { Offline.cancelled = true }.apply { setTextColor(ink) })
-        } else {
+            body.addView(pill("Stop") { Offline.cancelled = true }.apply { setTextColor(ink) })
+        }
+        // regions
+        body.addView(label("REGIONS", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.06f; setPadding(0, p, 0, p / 3) })
+        val date = java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault())
+        for (r in Offline.regions) {
+            val have = Offline.downloaded(r)
+            body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(p, p / 2, p / 2, p / 2); background = bg(dim(if (have != null) 30 else 16), radius = 14f)
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(label((if (have != null) "✓ " else "") + r.name, 15.5f, bold = true).apply { setTextColor(ink) })
+                    addView(label(if (have != null) "${Offline.size(have.bytes)} · ${date.format(java.util.Date(have.at))}" + (if (Offline.autoUpdate) " · updates itself" else "")
+                        else "about ${Offline.size(Offline.estimate(Offline.tileCount(r)))}", 13f).apply { setTextColor(dim()) })
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                if (have != null) addView(pill("Delete") {
+                    AlertDialog.Builder(this@MainActivity).setMessage(L.t("Delete the offline map of ${r.name}?"))
+                        .setPositiveButton("Delete") { _, _ -> Offline.delete(have) }.setNegativeButton("Cancel", null).showT()
+                }.apply { textSize = 14f; setTextColor(readable(Color.rgb(220, 60, 60))) })
+                else if (dl == null) addView(pill("⬇ Download") {
+                    if (Offline.wifiOnly && !Offline.onWifi()) Toast.makeText(this@MainActivity, L.t("It starts as soon as you're on Wi-Fi"), Toast.LENGTH_LONG).show()
+                    Offline.download(r)
+                }.apply { textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
+        }
+        // around the map's centre (a smaller piece)
+        if (dl == null) {
             val center = map.center() ?: LocationTracker.position
-            if (center != null) for ((km, title) in listOf(5 to "City centre", 15 to "Wider area")) {
-                val n = Offline.tileCount(center, km)
-                sheetHost.addView(pill("⬇  $title · ${km} km around the map's centre · about ${Offline.size(n * 110_000L)}") {
-                    io.execute {
-                        val name = try { Places.addressAt(center).let { a -> a.address.split(", ").firstOrNull()?.takeIf { it.isNotBlank() } ?: a.name } } catch (e: Exception) { null }
-                            ?: "Area ${"%.2f".format(center.lat)}, ${"%.2f".format(center.lon)}"
-                        Offline.download("$name ($km km)", center, km)
-                    }
-                }.apply {
-                    textSize = 14f; setTextColor(onAccent(accent)); background = bg(accent, radius = 14f)
-                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
+            if (center != null) {
+                body.addView(label("AROUND THE MAP'S CENTRE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.06f; setPadding(0, p, 0, p / 3) })
+                for ((km, title) in listOf(5 to "City centre", 15 to "Wider area")) {
+                    val n = Offline.tileCount(center, km)
+                    body.addView(pill("⬇  $title · ${km} km · about ${Offline.size(Offline.estimate(n) * 3)}") {
+                        io.execute {
+                            val name = try { Places.addressAt(center).let { a -> a.address.split(", ").firstOrNull()?.takeIf { it.isNotBlank() } ?: a.name } } catch (e: Exception) { null }
+                                ?: "Area ${"%.2f".format(center.lat)}, ${"%.2f".format(center.lon)}"
+                            Offline.download("$name ($km km)", center, km)
+                        }
+                    }.apply {
+                        textSize = 14f; setTextColor(ink); background = bg(Color.TRANSPARENT, accent, 1.5f, 14f)
+                        gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                    }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
+                }
             }
         }
-        if (areas.isNotEmpty()) sheetHost.addView(label("ON THIS PHONE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.06f; setPadding(0, p, 0, p / 3) })
-        val date = java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault())
-        for (a in areas) {
-            sheetHost.addView(LinearLayout(this).apply {
+        // areas downloaded by distance (not regions)
+        val others = areas.filter { a -> Offline.regions.none { it.id == a.name } }
+        if (others.isNotEmpty()) body.addView(label("ON THIS PHONE", 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.06f; setPadding(0, p, 0, p / 3) })
+        for (a in others) {
+            body.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                 setPadding(p, p / 2, p / 2, p / 2); background = bg(dim(22), radius = 14f)
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(label(a.name, 16f, bold = true).apply { setTextColor(ink) })
-                    addView(label("${Offline.size(a.bytes)} · downloaded ${date.format(java.util.Date(a.at))} · updates itself", 13f).apply { setTextColor(dim()) })
+                    addView(label("${Offline.size(a.bytes)} · downloaded ${date.format(java.util.Date(a.at))}" + (if (Offline.autoUpdate) " · updates itself" else ""), 13f).apply { setTextColor(dim()) })
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 addView(pill("Delete") {
                     AlertDialog.Builder(this@MainActivity).setMessage("Delete the offline map of ${a.name}?")

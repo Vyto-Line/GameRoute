@@ -111,6 +111,12 @@ object NavEngine {
         } catch (e: Exception) { null }
     }
 
+    /** A new route couldn't be fetched (no signal): the one we have is still followed. */
+    @Volatile var noSignal = false
+        private set
+
+    fun noSignalText() = if (Offline.routingReady()) "No signal: offline routing" else "No signal: following your route"
+
     /** The route stops short of the place (dirt track or path after it): what to tell the driver. */
     @Volatile var endNote: String? = null
 
@@ -493,6 +499,7 @@ object NavEngine {
         CrashLog.note(if (keepResume) "navigation stopped by the car" else "stop navigation")
         if (!keepResume) clearResume()
         endNote = null
+        noSignal = false
         LiveShare.stop(if (arrived) "arrived" else "stopped")
         stops.clear()
         destination = null
@@ -647,7 +654,14 @@ object NavEngine {
                     Voice.say(endNote!!)
                 }
                 main.removeCallbacks(routeWatchdog)
-                if (r == null) {
+                if (r == null && reroute && current != null) {
+                    // no signal (or the routers down): keep driving the route we have, say so,
+                    // and try again every 15 s
+                    loading = false
+                    if (!noSignal) { noSignal = true; CrashLog.note("reroute failed: keeping the route") }
+                    changed.fire()
+                    main.postDelayed({ if (active && !arrived && noSignal && !loading) fetchRoute(reroute = true) }, 15_000)
+                } else if (r == null) {
                     loading = false; error = gr.gamemap.L.t("No route found"); changed.fire()
                     CrashLog.note("route failed; trying again")
                     main.postDelayed({ if (active && !arrived && error != null && !loading) fetchRoute(reroute = true) }, 5_000)
@@ -662,6 +676,8 @@ object NavEngine {
 
     private fun apply(r: RouteOption, announce: Boolean) {
         current = r
+        noSignal = false
+        Offline.saveAlong(r)
         if (tripPlanned < 0) tripPlanned = r.distance
         secondsPerMeter = if (r.distance > 0) r.duration / r.distance else 0.08
         trafficRatio = r.trafficSeconds?.let { (it / maxOf(r.duration, 1.0)).coerceIn(0.6, 4.0) } ?: trafficRatio
