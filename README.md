@@ -16,7 +16,9 @@ Android · Android Auto · English and Ελληνικά
 </div>
 
 > [!TIP]
-> **New in build 100:** prestige ranks from Bronze to Diamond, a celebration every 5 levels, your monthly recap, a new turn box with a sketch of every junction, clearer spoken directions, better GPS, your status (Online / Do not disturb / Invisible), friends and convoys in Android Auto, a smoother map with a Performance page, a home screen widget, and backup & restore.
+> **New in build 109:** see what your friends are up to (driving, in a convoy, last seen), leave a convoy or drive to it from the car, all route choices on the car screen, the map zooming with the road even without a route, street names in Latin letters in English, and turn-only spoken directions. Also fixed: Friends crashing on Android Auto, the car screen freezing after switching apps, and flickering menus.
+>
+> **Build 100** brought prestige ranks, a celebration every 5 levels, your monthly recap, the junction-sketch turn box, better GPS, your status (Online / Do not disturb / Invisible), friends and convoys in Android Auto, the Performance page, a home screen widget, and backup & restore.
 
 ## ✨ At a glance
 
@@ -45,7 +47,9 @@ Pick from up to **three routes**, each timed with live traffic, with the jams an
 
 A **turn box like a rally roadbook**: the distance, a sketch of the junction with your way out marked, and the next turn underneath, in every style. The road you're on shows at the bottom.
 
-- **Clear voice:** "In 200 metres, turn right", then "Turn right" at the right moment (1 km and 500 m on the motorway). Choose how much it talks
+- **Clear voice:** "In 200 metres, turn right", then "Turn right" at the right moment (1 km and 500 m on the motorway). Just the turn, no street names. Choose how much it talks
+- **Street names your way:** in English, Greek street names show in Latin letters, like the road signs ("Aiolou", "Panagi Tsaldari")
+- **Zooms with the road:** out on highways, in on small streets, with or without a route
 - **Better GPS:** the arrow stays on the road, ignores jumps between tall buildings, and tells you when the signal is weak
 - **Calm while moving:** the buttons fade; tap the map to bring them back
 - **Nothing pops up at speed:** landmarks and friend news wait for when you stop
@@ -80,6 +84,8 @@ Download a region in **Settings ▸ Offline maps** and the map and places work w
 
 **Your status:** Online, **Do not disturb** (invites wait quietly) or **Invisible** (you look offline), back to Online by itself when you choose.
 
+**What friends are up to:** driving now, in a convoy, or when they were last online. Never where: Invisible friends show nothing.
+
 **Your location is never shared with friends,** only inside a convoy you both join.
 
 ## 🏆 XP and the Garage
@@ -107,7 +113,8 @@ Fuel, parking and food on the map. Fuel sorted by price for your fuel; chargers 
 The same map on the car screen, with the convoy box, places to tap, and its own style. It turns dark with your headlights.
 
 - **Turns on the car's own display** behind the wheel and the head-up display, where the car supports it
-- **Friends in the car:** see who's online, invite in one tap, start a convoy, READY UP in the lobby, send a quick message
+- **Friends in the car:** see who's online and what they're doing, invite in one tap, start a convoy, READY UP in the lobby, send a quick message, drive to the convoy's destination, or leave the convoy
+- **Choose your route on the car screen:** up to three routes, all on screen, and the choice stays in the car (your phone keeps its own map)
 
 <details>
 <summary><b>More car screens</b></summary>
