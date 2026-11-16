@@ -170,7 +170,7 @@ fun drawUTurn(c: android.graphics.Canvas, x: Float, y: Float, s: Float, stroke: 
     stroke.style = android.graphics.Paint.Style.STROKE
     stroke.strokeCap = android.graphics.Paint.Cap.ROUND; stroke.strokeJoin = android.graphics.Paint.Join.ROUND
     c.drawPath(shaft, stroke)
-    val hw = maxOf(s * 0.38f, stroke.strokeWidth * 1.3f)
+    val hw = maxOf(s * 0.3f, stroke.strokeWidth * 1.0f)
     val head = android.graphics.Path().apply {
         moveTo(x - r - hw, y + s * 0.2f)
         lineTo(x - r + hw, y + s * 0.2f)
