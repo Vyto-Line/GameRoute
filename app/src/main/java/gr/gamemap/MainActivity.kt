@@ -422,6 +422,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
+                    popups.isNotEmpty() -> popups.last().cancel()
                     welcome.visibility == View.VISIBLE -> if (welcomePage > 0) showWelcome(welcomePage - 1)
                     tripOverlay.visibility == View.VISIBLE -> NavEngine.dismissTrip()
                     placeShown != null -> closePlace()
@@ -429,7 +430,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     sheetOverlay.visibility == View.VISIBLE -> sheetBack() // one step back (closes the first sheet)
                     suggestScroll.visibility == View.VISIBLE || pickFor != null -> closeSearch()
                     NavEngine.planningOn(false) -> NavEngine.cancelPlan()
-                    NavEngine.active -> AlertDialog.Builder(this@MainActivity)
+                    NavEngine.active -> GameBuilder(this@MainActivity)
                         .setTitle("End navigation?")
                         .setPositiveButton("End") { _, _ -> NavEngine.stop() }
                         .setNegativeButton("Keep going", null)
@@ -455,7 +456,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** After a crash: offer to send the saved report (shared like any text; nothing is sent by itself). */
     private fun offerCrashReport(report: String) {
-        AlertDialog.Builder(this)
+        GameBuilder(this@MainActivity)
             .setTitle("GameRoute closed unexpectedly")
             .setMessage("A report of what happened was saved on your phone. Send it so the problem can be fixed?")
             .setPositiveButton("Send report") { _, _ ->
@@ -1171,7 +1172,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             background = bg(Color.argb(60, 255, 196, 0), radius = 18f)
             contentDescription = "Stop at ${st.name}. Tap to remove"
             setOnClickListener {
-                AlertDialog.Builder(this@MainActivity).setMessage("Remove the stop at ${st.name}?")
+                GameBuilder(this@MainActivity).setMessage("Remove the stop at ${st.name}?")
                     .setPositiveButton("Remove") { _, _ -> NavEngine.removeStop(st) }.setNegativeButton("Keep", null).showT()
             }
         }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = (6 * d).toInt() })
@@ -1214,7 +1215,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun shareEta() {
         val opts = if (LiveShare.active) arrayOf("Send the live link again", "Stop sharing live", "Send arrival time only")
             else arrayOf("Share live location (link)", "Send arrival time only")
-        AlertDialog.Builder(this).setTitle("Share your trip")
+        GameBuilder(this@MainActivity).setTitle("Share your trip")
             .setItems(opts) { _, i ->
                 when (opts[i]) {
                     "Share live location (link)", "Send the live link again" -> {
@@ -1547,6 +1548,164 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         dlg.window?.decorView?.let { dv -> L.translateTree(dv); Icons.applyTree(dv); dv.viewTreeObserver.addOnPreDrawListener { L.translateTree(dv); Icons.applyTree(dv); true } }
     }
 
+    // ------------------------------------------------------------------ GameRoute's own pop-ups
+
+    /** Pop-ups open now (newest last): the back button closes the newest first. */
+    private val popups = ArrayList<GameDialog>()
+
+    /**
+     * A pop-up in GameRoute's own look instead of Android's grey dialog: it slides up from the
+     * bottom like the other sheets, in the style's panel, accent, corners and font. Built with the
+     * same calls as Android's dialogs (title, message, list, single choice, buttons, a view).
+     */
+    inner class GameDialog : android.content.DialogInterface {
+        var title: CharSequence? = null
+        var message: CharSequence? = null
+        var view: View? = null
+        var items: Array<out CharSequence>? = null
+        var checked = -1
+        var single = false
+        var itemsListener: android.content.DialogInterface.OnClickListener? = null
+        var positive: Pair<CharSequence, android.content.DialogInterface.OnClickListener?>? = null
+        var negative: Pair<CharSequence, android.content.DialogInterface.OnClickListener?>? = null
+        var neutral: Pair<CharSequence, android.content.DialogInterface.OnClickListener?>? = null
+        var dismissListener: android.content.DialogInterface.OnDismissListener? = null
+        var cancelable = true
+        /** A coloured dot before each choice (Your status: green, red, grey). */
+        var dots: IntArray? = null
+        private var shade: FrameLayout? = null
+        val isShowing get() = shade != null
+
+        /** The red button: for things that can't be undone. */
+        private fun risky(t: CharSequence): Boolean {
+            val w = L.t(t.toString()).lowercase()
+            return listOf("remove", "delete", "leave", "block", "end", "clear", "αφαίρεση", "διαγραφή", "αποχώρηση", "αποκλεισμός", "τέλος", "καθαρισμός").any { w.startsWith(it) }
+        }
+
+        fun show(): GameDialog {
+            val root = window.decorView as ViewGroup
+            val p = (18 * d).toInt()
+            val panelV = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL; isClickable = true
+                background = bg(panel, accent, 2f, 24f, topOnly = true)
+                setPadding(p, (10 * d).toInt(), p, p + insets.bottom)
+                elevation = 40 * d
+                // the grabber
+                addView(View(context).apply { background = bg(dim(70), radius = 2f, pill = true) },
+                    LinearLayout.LayoutParams((40 * d).toInt(), (4 * d).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = (12 * d).toInt() })
+            }
+            val body = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+            title?.let { t ->
+                panelV.addView(label(t.toString(), 21f, bold = true).apply {
+                    setTextColor(ink); typeface = theme.typeface; gravity = Gravity.CENTER; setPadding(0, 0, 0, (8 * d).toInt())
+                })
+            }
+            message?.let { m ->
+                body.addView(label(m.toString(), 15f).apply {
+                    setTextColor(dim()); gravity = if (m.length < 160 && !m.contains("\n\n")) Gravity.CENTER else Gravity.START
+                    setLineSpacing(0f, 1.15f); setPadding((4 * d).toInt(), 0, (4 * d).toInt(), (12 * d).toInt())
+                })
+            }
+            view?.let { v -> (v.parent as? ViewGroup)?.removeView(v); body.addView(v, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
+            items?.let { list ->
+                list.forEachIndexed { i, it ->
+                    val on = single && i == checked
+                    body.addView(LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                        minimumHeight = (52 * d).toInt()
+                        val q = (14 * d).toInt(); setPadding(q, (8 * d).toInt(), q, (8 * d).toInt())
+                        background = if (on) bg(Color.argb(28, Color.red(ink), Color.green(ink), Color.blue(ink)), accent, 2f, 12f)
+                            else bg(Color.argb(14, Color.red(ink), Color.green(ink), Color.blue(ink)), radius = 12f)
+                        dots?.getOrNull(i)?.let { col ->
+                            addView(View(context).apply { background = bg(col, radius = 7f, pill = true) },
+                                LinearLayout.LayoutParams((14 * d).toInt(), (14 * d).toInt()).apply { marginEnd = (14 * d).toInt() })
+                        }
+                        // "Title\nwhat it does": the title bold, the rest under it, quieter
+                        val txt = it.toString()
+                        val head = txt.substringBefore('\n'); val more = txt.substringAfter('\n', "")
+                        addView(LinearLayout(context).apply {
+                            orientation = LinearLayout.VERTICAL
+                            addView(label(head, 16.5f, bold = on || more.isNotEmpty()).apply { setTextColor(ink) })
+                            if (more.isNotEmpty()) addView(label(more, 14f).apply { setTextColor(dim()); setLineSpacing(0f, 1.1f); setPadding(0, (2 * d).toInt(), 0, 0) })
+                        }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                        if (on) addView(label("✓", 17f, bold = true).apply { setTextColor(readable(accent)) })
+                        setOnClickListener { _ ->
+                            if (single) checked = i
+                            itemsListener?.onClick(this@GameDialog, i)
+                            if (!single) dismiss()
+                        }
+                    }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = (8 * d).toInt() })
+                }
+            }
+            panelV.addView(SheetScroll(0.62).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            neutral?.let { (t, l) ->
+                panelV.addView(label(t.toString(), 15f, bold = true).apply {
+                    setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, (10 * d).toInt(), 0, (6 * d).toInt())
+                    setOnClickListener { dismiss(); l?.onClick(this@GameDialog, android.content.DialogInterface.BUTTON_NEUTRAL) }
+                })
+            }
+            if (positive != null || negative != null) panelV.addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL; setPadding(0, (10 * d).toInt(), 0, 0)
+                negative?.let { (t, l) ->
+                    addView(pill(t.toString()) { dismiss(); l?.onClick(this@GameDialog, android.content.DialogInterface.BUTTON_NEGATIVE) }.apply {
+                        setTextColor(ink); background = bg(Color.argb(20, Color.red(ink), Color.green(ink), Color.blue(ink)), dim(90), 1.5f, 14f)
+                    }, LinearLayout.LayoutParams(0, (52 * d).toInt(), 1f).apply { if (positive != null) marginEnd = (10 * d).toInt() })
+                }
+                positive?.let { (t, l) ->
+                    val red = risky(t)
+                    val fill = if (red) Color.rgb(229, 72, 77) else accent
+                    addView(pill(t.toString()) { dismiss(); l?.onClick(this@GameDialog, android.content.DialogInterface.BUTTON_POSITIVE) }.apply {
+                        setTextColor(if (red) Color.WHITE else onAccent(accent)); background = bg(fill, radius = 14f)
+                    }, LinearLayout.LayoutParams(0, (52 * d).toInt(), 1f))
+                }
+            })
+            val sh = FrameLayout(this@MainActivity).apply {
+                setBackgroundColor(Color.argb(120, 0, 0, 0))
+                elevation = 60 * d
+                setOnClickListener { if (cancelable) cancel() }
+                addView(panelV, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
+            }
+            L.translateTree(panelV); Icons.applyTree(panelV)
+            panelV.viewTreeObserver.addOnPreDrawListener { L.translateTree(panelV); Icons.applyTree(panelV); true }
+            root.addView(sh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            shade = sh; popups += this
+            sh.alpha = 0f; sh.animate().alpha(1f).setDuration(animMs(150)).start()
+            panelV.translationY = 80 * d
+            panelV.animate().translationY(0f).setDuration(animMs(220)).setInterpolator(android.view.animation.DecelerateInterpolator(1.8f)).start()
+            return this
+        }
+
+        override fun cancel() = dismiss()
+        override fun dismiss() {
+            val sh = shade ?: return
+            shade = null; popups -= this
+            (sh.parent as? ViewGroup)?.removeView(sh)
+            dismissListener?.onDismiss(this)
+        }
+    }
+
+    /** Builds a [GameDialog] with the same calls as Android's AlertDialog.Builder. */
+    inner class GameBuilder(@Suppress("UNUSED_PARAMETER") ctx: Context) {
+        private val g = GameDialog()
+        private fun s(t: CharSequence?) = t
+        fun setTitle(t: CharSequence?) = apply { g.title = s(t) }
+        fun setMessage(t: CharSequence?) = apply { g.message = s(t) }
+        fun setView(v: View?) = apply { g.view = v }
+        fun setCancelable(c: Boolean) = apply { g.cancelable = c }
+        fun setItems(items: Array<out CharSequence>, l: android.content.DialogInterface.OnClickListener?) = apply { g.items = items; g.single = false; g.itemsListener = l }
+        fun setSingleChoiceItems(items: Array<out CharSequence>, checked: Int, l: android.content.DialogInterface.OnClickListener?) = apply { g.items = items; g.single = true; g.checked = checked; g.itemsListener = l }
+        fun setPositiveButton(t: CharSequence, l: android.content.DialogInterface.OnClickListener?) = apply { g.positive = t to l }
+        fun setNegativeButton(t: CharSequence, l: android.content.DialogInterface.OnClickListener?) = apply { g.negative = t to l }
+        fun setNeutralButton(t: CharSequence, l: android.content.DialogInterface.OnClickListener?) = apply { g.neutral = t to l }
+        fun setOnDismissListener(l: android.content.DialogInterface.OnDismissListener?) = apply { g.dismissListener = l }
+        fun setDots(c: IntArray) = apply { g.dots = c }
+        fun show(): GameDialog = g.show()
+        fun showT(): GameDialog = g.show()
+    }
+
+    /** For tests: the pop-ups open now. */
+    internal fun popupsForTest(): List<GameDialog> = popups.toList()
+
     private fun sharePlace(pl: Place) {
         val url = "https://www.google.com/maps/search/?api=1&query=${pl.pos.lat},${pl.pos.lon}"
         val send = Intent(Intent.ACTION_SEND).apply {
@@ -1573,7 +1732,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             })
             list.addView(TextView(this).apply { text = r.text; textSize = 14f })
         }
-        AlertDialog.Builder(this)
+        GameBuilder(this@MainActivity)
             .setTitle(listOfNotNull(place.name, Reviews.stars(info.rating, info.count)).joinToString("  "))
             .setView(ScrollView(this).apply { addView(list) })
             .setPositiveButton("Close", null)
@@ -2020,7 +2179,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val items = Later.take()
         if (items.isEmpty()) return
         laterShowing = true
-        AlertDialog.Builder(this).setTitle(L.t("While you were driving"))
+        GameBuilder(this@MainActivity).setTitle(L.t("While you were driving"))
             .setMessage(items.joinToString("\n\n"))
             .setPositiveButton("OK", null)
             .setOnDismissListener { laterShowing = false; refreshChrome() }
@@ -2418,7 +2577,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun chooseCarStyle() {
         val names = arrayOf("Same as phone") + Theme.entries.map { it.title }.toTypedArray()
         val cur = MapState.carTheme?.let { it.ordinal + 1 } ?: 0
-        AlertDialog.Builder(this).setTitle("Android Auto style")
+        GameBuilder(this@MainActivity).setTitle("Android Auto style")
             .setSingleChoiceItems(names, cur) { dlg, i ->
                 MapState.setCarTheme(if (i == 0) null else Theme.entries[i - 1]); dlg.dismiss()
             }.showT()
@@ -2732,7 +2891,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 switchRow("Accidents & roadworks", Alerts.incidentsOn) { Alerts.incidentsOn = it },
                 settingRow("Cameras you marked", "${Alerts.myCameras().size}") {
                     val n = Alerts.myCameras().size
-                    AlertDialog.Builder(this).setTitle("Cameras you marked")
+                    GameBuilder(this@MainActivity).setTitle("Cameras you marked")
                         .setMessage(if (n == 0) "None yet. While driving, tap ⚠ › Speed camera or Red-light camera to mark one where you are."
                             else "$n camera${if (n == 1) "" else "s"} saved on this phone. GameRoute warns you before each one.")
                         .apply { if (n > 0) setNeutralButton("Delete all") { _, _ -> Alerts.clearMyCameras(); showSettings() } }
@@ -2752,7 +2911,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     Toast.makeText(this, L.t("Code copied"), Toast.LENGTH_SHORT).show()
                 },
                 settingRow("Make a new friend code", null) {
-                    AlertDialog.Builder(this).setTitle("Make a new friend code?").setMessage("Your friends stay. Old links and QR codes stop working.")
+                    GameBuilder(this@MainActivity).setTitle("Make a new friend code?").setMessage("Your friends stay. Old links and QR codes stop working.")
                         .setPositiveButton("Make a new code") { _, _ -> Friends.newCode(); main.postDelayed({ showSettings() }, 300) }
                         .setNegativeButton("Cancel", null).showT()
                 },
@@ -2827,7 +2986,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             })
             addView(input)
         }
-        AlertDialog.Builder(this).setTitle("Star ratings & reviews").setView(box)
+        GameBuilder(this@MainActivity).setTitle("Star ratings & reviews").setView(box)
             .setPositiveButton("Save") { _, _ -> Reviews.key = input.text.toString(); showSettings() }
             .setNeutralButton("Remove") { _, _ -> Reviews.key = ""; showSettings() }
             .setNegativeButton("Cancel", null)
@@ -2837,7 +2996,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun chooseLanguage() {
         val opts = arrayOf("Auto (phone's language)", "English", "Ελληνικά")
         val cur = when (L.mode) { "en" -> 1; "el" -> 2; else -> 0 }
-        AlertDialog.Builder(this).setTitle("Language")
+        GameBuilder(this@MainActivity).setTitle("Language")
             .setSingleChoiceItems(opts, cur) { dlg, k ->
                 dlg.dismiss()
                 L.setMode(when (k) { 1 -> "en"; 2 -> "el"; else -> "auto" })
@@ -2848,7 +3007,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun chooseVoice() {
         val opts = arrayOf("English", "Ελληνικά", "Off")
         val cur = if (Voice.muted) 2 else if (Voice.lang == Phrases.GREEK) 1 else 0
-        AlertDialog.Builder(this).setTitle("Spoken directions")
+        GameBuilder(this@MainActivity).setTitle("Spoken directions")
             .setSingleChoiceItems(opts, cur) { dlg, k ->
                 when (k) {
                     0 -> { Voice.lang = Phrases.ENGLISH; Voice.muted = false }
@@ -2867,7 +3026,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val opts = arrayOf(
             L.t("Save a backup") + "\n" + L.t("Level, prestige, Garage, trips, places, friends and settings, in one file"),
             L.t("Restore from a backup") + "\n" + L.t("Replaces what's on this phone, then the app restarts"))
-        AlertDialog.Builder(this).setTitle(L.t("Backup & restore")).setItems(opts) { _, k ->
+        GameBuilder(this@MainActivity).setTitle(L.t("Backup & restore")).setItems(opts) { _, k ->
             try {
                 if (k == 0) {
                     val name = "GameRoute backup " + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()) + ".json"
@@ -2892,7 +3051,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             REQ_BACKUP_OPEN -> {
                 val root = try { contentResolver.openInputStream(uri)?.use { Backup.peek(it) } } catch (e: Exception) { null }
                 if (root == null) { Toast.makeText(this, L.t("That isn't a GameRoute backup"), Toast.LENGTH_LONG).show(); return }
-                AlertDialog.Builder(this).setTitle(L.t("Restore this backup?")).setMessage(Backup.describe(root) + "\n\n" + L.t("What's on this phone now is replaced. The app restarts."))
+                GameBuilder(this@MainActivity).setTitle(L.t("Restore this backup?")).setMessage(Backup.describe(root) + "\n\n" + L.t("What's on this phone now is replaced. The app restarts."))
                     .setPositiveButton(L.t("Restore")) { _, _ ->
                         if (Backup.restore(this, root)) {
                             // start again, so everything reads the restored progress
@@ -2942,7 +3101,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 L.t("Normal") + "\n" + L.t("30 while driving, 20 when slow"),
                 L.t("Low") + "\n" + L.t("15, best for older phones and long trips")), Perf.smoothness)
         }
-        AlertDialog.Builder(this).setTitle(L.t(title))
+        GameBuilder(this@MainActivity).setTitle(L.t(title))
             .setSingleChoiceItems(opts, cur) { dlg, k ->
                 when (what) { "mode" -> Perf.mode = k; "anim" -> Perf.animations = k; else -> Perf.smoothness = k }
                 dlg.dismiss(); showSettings()
@@ -2954,14 +3113,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val opts = arrayOf(L.t("Normal") + "\n" + L.t("In 200 m, then at the turn (motorway: 1 km, 500 m)"),
             L.t("Fewer") + "\n" + L.t("One heads-up, then at the turn"),
             L.t("Turns only") + "\n" + L.t("Only at the turn"))
-        AlertDialog.Builder(this).setTitle(L.t("How much the voice talks"))
+        GameBuilder(this@MainActivity).setTitle(L.t("How much the voice talks"))
             .setSingleChoiceItems(opts, Voice.talk) { dlg, k -> Voice.talk = k; dlg.dismiss(); showSettings() }
             .showT()
     }
 
     private fun chooseAutoSwitch() {
         val opts = arrayOf("Switch automatically", "Ask me (keep my route)")
-        AlertDialog.Builder(this).setTitle("When a faster route is found")
+        GameBuilder(this@MainActivity).setTitle("When a faster route is found")
             .setSingleChoiceItems(opts, if (NavEngine.autoSwitch) 0 else 1) { dlg, k ->
                 NavEngine.autoSwitch = k == 0; dlg.dismiss(); refreshChrome()
             }.showT()
@@ -2969,7 +3128,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun chooseLightMode() {
         val modes = MapState.LightMode.entries
-        AlertDialog.Builder(this)
+        GameBuilder(this@MainActivity)
             .setTitle("Light / dark mode")
             .setSingleChoiceItems(modes.map { it.label }.toTypedArray(), MapState.lightMode.ordinal) { dlg, m ->
                 MapState.setLightMode(modes[m]); dlg.dismiss()
@@ -3063,7 +3222,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** How to make tapped map links open here, with the two Android pages one tap away. */
     private fun explainMapLinks() {
         if (Build.VERSION.SDK_INT < 31) {
-            AlertDialog.Builder(this).setTitle("Open map links in GameRoute")
+            GameBuilder(this@MainActivity).setTitle("Open map links in GameRoute")
                 .setMessage("When you tap a Google Maps, Apple Maps, Waze or geo: link, Android asks which app to use: pick GameRoute (and \"Always\" if you like).\n\nYou can also share any link or coordinates to GameRoute, or paste them in the search box.")
                 .setPositiveButton("OK", null).showT()
             return
@@ -3073,7 +3232,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val steps = (if (hasMaps) "1. Google Maps › Open by default: turn off \"Open supported links\".\n2. " else "") +
             "GameRoute › Open by default: turn on \"Open supported links\", tap \"Add link\" and tick the maps addresses.\n\n" +
             "Android lets only one app open these links${if (hasMaps) ", which is why Google Maps goes first" else ""}. Without this, you can still share a link to GameRoute or paste it in the search box."
-        val b = AlertDialog.Builder(this).setTitle("Open map links in GameRoute").setMessage(L.t(steps))
+        val b = GameBuilder(this@MainActivity).setTitle("Open map links in GameRoute").setMessage(L.t(steps))
             .setPositiveButton("GameRoute settings") { _, _ ->
                 try { startActivity(Intent(android.provider.Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, android.net.Uri.parse("package:$packageName"))) }
                 catch (e: Exception) { try { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))) } catch (_: Exception) {} }
@@ -3092,7 +3251,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             hint = "Your name"; setSingleLine(); setText(Convoy.myName); setSelection(text.length)
             filters = arrayOf(android.text.InputFilter.LengthFilter(16))
         }
-        AlertDialog.Builder(this).setTitle("Your name in convoys").setMessage("Shown next to your arrow on the others' maps.")
+        GameBuilder(this@MainActivity).setTitle("Your name in convoys").setMessage("Shown next to your arrow on the others' maps.")
             .setView(input)
             .setPositiveButton("Save") { _, _ -> Convoy.myName = input.text.toString().ifBlank { "Driver" }; convoyKey = ""; refreshChrome(); then?.invoke() }
             .setNegativeButton("Cancel", null).showT()
@@ -3101,7 +3260,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun withConvoyName(then: () -> Unit) {
         if (Convoy.myName.isNotBlank()) { then(); return }
         val input = EditText(this).apply { hint = "Your name"; setSingleLine() }
-        AlertDialog.Builder(this).setTitle("Your name in convoys").setMessage("Shown next to your arrow on the others' maps.")
+        GameBuilder(this@MainActivity).setTitle("Your name in convoys").setMessage("Shown next to your arrow on the others' maps.")
             .setView(input)
             .setPositiveButton("OK") { _, _ -> Convoy.myName = input.text.toString().ifBlank { "Driver" }; then() }
             .setNegativeButton("Cancel", null).showT()
@@ -3181,7 +3340,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }, LinearLayout.LayoutParams(0, (42 * d).toInt(), 1f))
         paintIcons()
         box.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(iconRow, LinearLayout.LayoutParams((icons.size * 42 * d).toInt(), WRAP_CONTENT)) })
-        val dlg = AlertDialog.Builder(this)
+        val dlg = GameBuilder(this@MainActivity)
             .setTitle(if (old != null) "Saved place" else "Save place")
             .setView(box)
             .setPositiveButton("Save") { _, _ ->
@@ -3240,7 +3399,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (place == null) {
             // they removed the destination
             val mine = Convoy.destination?.takeIf { Convoy.onConvoyRoute }
-            AlertDialog.Builder(this)
+            GameBuilder(this@MainActivity)
                 .setTitle("${p.from} removed the destination")
                 .setMessage(L.t("The convoy now just shares where everyone is.") +
                     (if (mine != null) "\n\n" + L.t("You're driving to ${mine.name}: your route stays unless you end it.") else ""))
@@ -3250,7 +3409,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 .showT()
             return
         }
-        AlertDialog.Builder(this)
+        GameBuilder(this@MainActivity)
             .setTitle("${p.from} suggests a place")
             .setMessage(place.name + (if (place.address.isNotBlank()) "\n" + place.address else "") +
                 (if (driving) "\n\n" + L.t("Your route will change to it.") else ""))
@@ -3272,7 +3431,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun confirmLeaveConvoy() {
-        AlertDialog.Builder(this).setMessage("Leave the convoy? The others will stop seeing you.")
+        GameBuilder(this@MainActivity).setTitle("Leave the convoy?").setMessage("The others will stop seeing you.")
             .setPositiveButton("Leave") { _, _ -> Convoy.leave(); if (sheetKind == "convoy" || sheetKind == "quick") closeSheet() }
             .setNegativeButton("Stay", null).showT()
     }
@@ -3732,7 +3891,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             L.t("Online") + "\n" + L.t("Friends see you online. Requests and convoy invites arrive straight away."),
             L.t("Do not disturb") + "\n" + L.t("Friends see you as busy. Requests and invites wait silently until you switch back."),
             L.t("Invisible") + "\n" + L.t("You look offline to everyone. Invites to you aren't delivered. You can still see friends and invite them."))
-        AlertDialog.Builder(this).setTitle(L.t("Your status"))
+        GameBuilder(this@MainActivity).setTitle(L.t("Your status"))
+            .setDots(intArrayOf(Color.rgb(76, 211, 138), Color.rgb(255, 92, 92), Color.rgb(138, 143, 153)))
             .setSingleChoiceItems(opts, keys.indexOf(Friends.core.status).coerceAtLeast(0)) { dlg, k ->
                 dlg.dismiss()
                 if (keys[k] == FriendCore.ONLINE) { Friends.setStatus(FriendCore.ONLINE); youKey = ""; refreshChrome(); return@setSingleChoiceItems }
@@ -3740,7 +3900,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 val now = System.currentTimeMillis()
                 val tonight = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 23); set(java.util.Calendar.MINUTE, 59) }.timeInMillis
                 val untils = longArrayOf(now + 3_600_000L, if (tonight > now + 600_000) tonight else now + 86_400_000L, 0L)
-                AlertDialog.Builder(this).setTitle(L.t("Back to Online after"))
+                GameBuilder(this@MainActivity).setTitle(L.t("Back to Online after"))
                     .setItems(arrayOf(L.t("1 hour"), L.t("Tonight"), L.t("Never (until I change it)"))) { _, u ->
                         Friends.setStatus(keys[k], untils[u]); youKey = ""; refreshChrome()
                     }.showT()
@@ -4210,7 +4370,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (!FriendCore.valid(k)) { Toast.makeText(this, L.t("That isn't a friend code"), Toast.LENGTH_SHORT).show(); return }
         Friends.start()
         if (k == FriendCore.norm(Friends.core.code)) { Toast.makeText(this, L.t("That's your own code"), Toast.LENGTH_SHORT).show(); return }
-        AlertDialog.Builder(this).setTitle("Add a friend?")
+        GameBuilder(this@MainActivity).setTitle("Add a friend?")
             .setMessage(L.t("Send a friend request to ${FriendCore.pretty(k)}?") + "\n\n" + L.t("They choose Accept or Decline. Your location is never shared with friends."))
             .setPositiveButton("Send request") { _, _ -> sendFriendRequest(k, "") { openSheet("friends") } }
             .setNegativeButton("Cancel", null).showT()
@@ -4232,7 +4392,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Tap a friend: invite, remove or block (no location: friends only see each other in a convoy). */
     private fun showFriendCard(f: FriendCore.Friend) {
         val p = (16 * d).toInt()
-        lateinit var dlg: AlertDialog
+        lateinit var dlg: GameDialog
         val online = Friends.core.isOnline(f.fid)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(p + p / 2, p, p + p / 2, p / 2) }
         box.addView(LinearLayout(this).apply {
@@ -4256,7 +4416,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(pill("Rename") {
                 dlg.dismiss()
                 val input = EditText(this@MainActivity).apply { setText(Friends.core.shownName(f)); setSingleLine(); selectAll() }
-                AlertDialog.Builder(this@MainActivity).setTitle(L.t("Your name for ${f.name}")).setMessage(L.t("Only you see it."))
+                GameBuilder(this@MainActivity).setTitle(L.t("Your name for ${f.name}")).setMessage(L.t("Only you see it."))
                     .setView(LinearLayout(this@MainActivity).apply { val q = (20 * d).toInt(); setPadding(q, 0, q, 0); addView(input, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) })
                     .setPositiveButton("Save") { _, _ -> Friends.core.setNickname(f.fid, input.text.toString().takeIf { it != f.name }.orEmpty()); friendsKey = ""; youKey = ""; refreshChrome() }
                     .setNegativeButton("Cancel", null).showT()
@@ -4264,18 +4424,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p / 2 })
             addView(pill("Remove") {
                 dlg.dismiss()
-                AlertDialog.Builder(this@MainActivity).setTitle(L.t("Remove ${f.name}?")).setMessage("You can add each other again later.")
+                GameBuilder(this@MainActivity).setTitle(L.t("Remove ${f.name}?")).setMessage("You can add each other again later.")
                     .setPositiveButton("Remove") { _, _ -> Friends.remove(f) }.setNegativeButton("Cancel", null).showT()
             }.apply { textSize = 14.5f; setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 14f) },
                 LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = p / 2 })
             addView(pill("Block") {
                 dlg.dismiss()
-                AlertDialog.Builder(this@MainActivity).setTitle(L.t("Block ${f.name}?")).setMessage("They're removed, and their requests and invites won't reach you. You can unblock them in Settings › Sharing.")
+                GameBuilder(this@MainActivity).setTitle(L.t("Block ${f.name}?")).setMessage("They're removed, and their requests and invites won't reach you. You can unblock them in Settings › Sharing.")
                     .setPositiveButton("Block") { _, _ -> Friends.block(f.fid, f.name) }.setNegativeButton("Cancel", null).showT()
             }.apply { textSize = 14.5f; setTextColor(readable(Color.rgb(230, 80, 80))); background = bg(Color.TRANSPARENT, Color.rgb(160, 70, 70), 1.5f, 14f) },
                 LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         })
-        dlg = AlertDialog.Builder(this).setView(box).showT()
+        dlg = GameBuilder(this@MainActivity).setView(box).showT()
     }
 
     /** A friend invited me to a convoy: ask (not while driving: then the chip on the map shows it). */
@@ -4287,7 +4447,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (k == inviteAsked) return
         inviteAsked = k
         Friends.cancelNotification(i.convoy)
-        AlertDialog.Builder(this)
+        GameBuilder(this@MainActivity)
             .setTitle(L.t("${i.from} invites you to a convoy"))
             .setMessage((if (i.dest.isNotBlank()) i.dest else L.t("No destination yet")) +
                 (if (i.count > 1) "\n" + L.t("${i.count} invites") else "") +
@@ -4398,11 +4558,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }?.apply { layoutParams = LinearLayout.LayoutParams(sz, sz).apply { marginStart = (8 * d).toInt() } }
     }
 
-    private var blockedDialog: AlertDialog? = null
+    private var blockedDialog: GameDialog? = null
     private fun showBlocked() {
         val list = Friends.core.blockedNames()
         if (list.isEmpty()) { Toast.makeText(this, L.t("Nobody is blocked"), Toast.LENGTH_SHORT).show(); return }
-        AlertDialog.Builder(this).setTitle("Blocked")
+        GameBuilder(this@MainActivity).setTitle("Blocked")
             .setItems(list.map { L.t("Unblock ${it.second}") }.toTypedArray()) { _, w -> Friends.unblock(list[w].first); showSettings() }
             .setNegativeButton("Close", null).showT()
     }
@@ -4468,7 +4628,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             when {
                 OfflineRouter.downloading -> {}
                 OfflineRouter.present -> addView(pill("Delete") {
-                    AlertDialog.Builder(this@MainActivity).setMessage(L.t("Delete the offline roads? Routes will need the internet again."))
+                    GameBuilder(this@MainActivity).setMessage(L.t("Delete the offline roads? Routes will need the internet again."))
                         .setPositiveButton("Delete") { _, _ -> OfflineRouter.delete(); Offline.changed.fire() }.setNegativeButton("Cancel", null).showT()
                 }.apply { textSize = 14f; setTextColor(readable(Color.rgb(220, 60, 60))) })
                 else -> addView(pill("⬇ Download") {
@@ -4491,7 +4651,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         else "about ${Offline.size(Offline.estimate(Offline.tileCount(r)))}", 13f).apply { setTextColor(dim()) })
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 if (have != null) addView(pill("Delete") {
-                    AlertDialog.Builder(this@MainActivity).setMessage(L.t("Delete the offline map of ${r.name}?"))
+                    GameBuilder(this@MainActivity).setMessage(L.t("Delete the offline map of ${r.name}?"))
                         .setPositiveButton("Delete") { _, _ -> Offline.delete(have) }.setNegativeButton("Cancel", null).showT()
                 }.apply { textSize = 14f; setTextColor(readable(Color.rgb(220, 60, 60))) })
                 else if (dl == null) addView(pill("⬇ Download") {
@@ -4533,7 +4693,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     addView(label("${Offline.size(a.bytes)} · downloaded ${date.format(java.util.Date(a.at))}" + (if (Offline.autoUpdate) " · updates itself" else ""), 13f).apply { setTextColor(dim()) })
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 addView(pill("Delete") {
-                    AlertDialog.Builder(this@MainActivity).setMessage("Delete the offline map of ${a.name}?")
+                    GameBuilder(this@MainActivity).setMessage("Delete the offline map of ${a.name}?")
                         .setPositiveButton("Delete") { _, _ -> Offline.delete(a) }.setNegativeButton("Cancel", null).showT()
                 }.apply { textSize = 14f; setTextColor(readable(Color.rgb(220, 60, 60))) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
@@ -4639,7 +4799,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p / 2 })
         }
         if (list.isNotEmpty()) body.addView(pill("Clear history") {
-            AlertDialog.Builder(this).setMessage("Delete all ${list.size} trips from the history? Your XP stays.")
+            GameBuilder(this@MainActivity).setMessage("Delete all ${list.size} trips from the history? Your XP stays.")
                 .setPositiveButton("Delete") { _, _ -> Explorer.clearHistory(); tripsKey = ""; refreshChrome() }
                 .setNegativeButton("Cancel", null).showT()
         }.apply { setTextColor(dim()) })
@@ -4747,7 +4907,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         if (nextItems.isNotEmpty()) body.addView(label(L.t("$nextName rewards: ") + nextItems.joinToString(", ") { L.t(it.name) }, 13f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p / 2) })
         if (Xp.canPrestige) body.addView(pill("◆  " + L.t("Prestige to $nextName")) {
-            AlertDialog.Builder(this).setTitle(L.t("Become $nextName?")).setMessage(L.t("You start again at level 1 with +$nextBoost% XP for good. Everything in the Garage stays, and the $nextName rewards are added."))
+            GameBuilder(this@MainActivity).setTitle(L.t("Become $nextName?")).setMessage(L.t("You start again at level 1 with +$nextBoost% XP for good. Everything in the Garage stays, and the $nextName rewards are added."))
                 .setPositiveButton(L.t("Prestige")) { _, _ -> Xp.doPrestige(); progressKey = ""; refreshChrome(); showPrestigeReveal() }.setNegativeButton("Cancel", null).showT()
         }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) }, LinearLayout.LayoutParams(MATCH_PARENT, (50 * d).toInt()))
         // friends
@@ -5003,7 +5163,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun showXpParts(trip: Explorer.Trip) {
         val lines = if (trip.parts.isEmpty()) listOf("+${trip.xp} XP")
             else trip.parts.map { "${if (it.xp > 0) "+${it.xp}" else "0"}  ${L.t(it.label)}" + (if (it.note.isNotBlank()) " · " + L.t(it.note) else "") }
-        AlertDialog.Builder(this).setTitle(L.t("+${trip.xp} XP on this trip"))
+        GameBuilder(this@MainActivity).setTitle(L.t("+${trip.xp} XP on this trip"))
             .setMessage(lines.joinToString("\n") + "\n\n" + L.t("No XP for speed: race places count only after a clean drive."))
             .setPositiveButton("OK", null).showT()
     }
@@ -5058,7 +5218,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     @Suppress("unused")
     private fun showProfileOld() {
         val (have, of) = Explorer.progress()
-        AlertDialog.Builder(this)
+        GameBuilder(this@MainActivity)
             .setTitle("Explorer · level ${Explorer.level}")
             .setMessage("${Explorer.xp} XP in total ($have / $of to the next level)\n" +
                 "${Explorer.foundCount} landmarks discovered\n\n" +
@@ -5069,7 +5229,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private fun showAbout() {
-        AlertDialog.Builder(this)
+        GameBuilder(this@MainActivity)
             .setTitle("GameRoute build ${Updater.currentVersion(this)}")
             .setMessage("Map data and speed cameras © OpenStreetMap contributors\nVector tiles: OpenFreeMap\nTraffic, incidents, speed limits: TomTom\nRouting: OSRM (TomTom as backup)\nSearch: Photon (komoot), Nominatim\nVoice: your phone's text-to-speech")
             .setPositiveButton("OK", null).showT()
@@ -5085,7 +5245,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     if (manual) Toast.makeText(this, L.t("You have the latest version (build ${Updater.currentVersion(this)})"), Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
-                AlertDialog.Builder(this)
+                GameBuilder(this@MainActivity)
                     .setTitle("Update available")
                     .setMessage("${r.tag} is ready (you have build ${Updater.currentVersion(this)}). Download and install it?")
                     .setPositiveButton("Update") { _, _ -> downloadAndInstall(r) }
@@ -5105,7 +5265,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     return@runOnUiThread
                 }
                 val viaUnknownAuto = Updater.hasUnknownAuto(this)
-                AlertDialog.Builder(this)
+                GameBuilder(this@MainActivity)
                     .setTitle("Install update")
                     .setMessage(
                         if (viaUnknownAuto)
