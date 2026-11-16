@@ -2309,12 +2309,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         setOnClickListener { onClick() }
     }
 
-    private fun sheetHeader(title: String) = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        sheetStack.lastOrNull()?.let { from -> addView(backPill(sheetTitle(from)) { sheetBack() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() }) }
-        addView(label(title, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
+    /** A sheet's title, centred, with the way back on the left and ✕ on the right. */
+    private fun sheetHeader(title: String, back: Pair<String, () -> Unit>? = sheetStack.lastOrNull()?.let { from -> sheetTitle(from) to { sheetBack() } }) = FrameLayout(this).apply {
+        val side = if (back != null) (104 * d).toInt() else (52 * d).toInt()
+        addView(label(title, 22f, bold = true).apply {
+            setTextColor(ink); typeface = theme.typeface; gravity = Gravity.CENTER; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            setPadding(side, 0, side, 0)
+        }, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+        back?.let { (to, go) -> addView(backPill(to, go), FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.START or Gravity.CENTER_VERTICAL)) }
+        addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) }, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
     }
 
     /** Shows a card with a short slide up and fade in (only when it wasn't showing already). */
@@ -2612,12 +2615,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             return
         }
         val g = settingsGroups().first { it.key == page }
-        sheetHost.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            addView(backPill("Settings") { settingsPage = null; refreshChrome() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() })
-            addView(label(g.title, 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
-        })
+        sheetHost.addView(sheetHeader(g.title, "Settings" to { settingsPage = null; refreshChrome() }))
         val rows = settingsRowsFor(page)
         group("", *rows.toTypedArray()).forEach { body.addView(it) }
         sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { height = WRAP_CONTENT })
@@ -3402,12 +3400,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         inviteKey = key
         sheetHost.removeAllViews()
         sheetHost.background = bg(panel, radius = 22f, topOnly = true)
-        sheetHost.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            addView(backPill(sheetTitle(sheetStack.lastOrNull() ?: "convoy")) { if (sheetStack.isEmpty()) switchSheet("convoy") else sheetBack() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() })
-            addView(label("Invite", 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) })
-        })
+        sheetHost.addView(sheetHeader("Invite", sheetTitle(sheetStack.lastOrNull() ?: "convoy") to { if (sheetStack.isEmpty()) switchSheet("convoy") else sheetBack() }))
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         sheetHost.addView(SheetScroll(0.72).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         val p = (12 * d).toInt()
