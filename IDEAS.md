@@ -44,33 +44,17 @@ Mockups: the GameRoute mockups canvas, rows 18 (Friends) and 19 (Backup & restor
 - Location is **never** shared with friends: only inside a convoy you join, as today.
 - Positions stay end-to-end encrypted, like convoys.
 
-## Next (planned 16 Nov 2026, mockups rows 25–27)
+## Done 16 Nov 2026
 
-1. ~~**Violet Rain** map style (27)~~ · done in build-95.
-2. **Declutter** (26): a round More button first (26j, option B), then Home, Work + the 2
-   places you go to most at this hour; More opens a sheet (fuel, parking, chargers, start or join
-   a convoy, saved places); while driving only turn, speed and arrival
-   (buttons back for 5 s on a tap); non-urgent messages wait in a "for when you stop" counter
-   (safety and convoy news still show; convoy invites still pop up in the car); short arrival card
-   (XP as one line); settings search + Advanced group.
-2b. **Convoy, rebuilt** (29): a solid Convoy chip right after the More button (live status while in
-   one: "Convoy · 3 · waiting"); tap: Start a convoy / Join (QR or code) / invite an online friend;
-   lobby: destination + Change, who's in with badges, one Invite (QR, code, link, friends with
-   Sent/Seen/Joined), Race · Drive along · Just share switch, host START, others READY UP, then
-   3-2-1; a card on the home screen to get back. Every chip gets a solid background in every style.
-3. **XP and levels** (25): XP for new roads, clean drives, convoys, race places (only if you kept
-   near the limits), daily streak, weekly challenges. Levels unlock cosmetics in a Garage
-   (arrow, route colour, destination flag, arrival effect; no trails), a title ladder per style,
-   a milestone every 10 levels, prestige at 50. Level ring on the home screen, Progress and Garage
-   in the menu. Level-up only after you park.
-   Private by default; an opt-in "Show my level to friends" (off by default) shows level and title
-   next to your name in friends' lists and convoys, never trips, km or places.
-4. **More map styles** (28), one at a time after Violet Rain: Rally Roadbook (pace-note turn
-   cards), Blueprint, Nautical Chart, Arctic (bright day style), High Contrast. Not Comic Book
-   (too busy, confusing while driving). Every style draws buildings in its own way.
-5. **You screen** (26c, later): one button for progress, Garage, friends, trips and settings;
-   friend request on top, friends' circles (online/offline only); tapping a friend (26h): Invite to
-   a convoy (starts one if needed), Rename, Remove, Block, "Friends since · N drives together".
+- build-95: Violet Rain. build-96: declutter (More, Convoy chip, frequent places, quiet driving,
+  messages for when you stop, settings search) and the convoy rebuilt (start/join, lobby,
+  invite, START / READY UP). build-97: XP and levels (Garage, titles, prestige, opt-in level for
+  friends), Rally Roadbook, Blueprint, Nautical Chart, Arctic, High Contrast, and the You screen.
+
+## Ideas left from the style mockups
+
+- Rally Roadbook: turn cards drawn as pace notes (junction diagram, distance boxes), not only the colours.
+- Arctic: light snow on the map at night.
 
 ## Later
 
