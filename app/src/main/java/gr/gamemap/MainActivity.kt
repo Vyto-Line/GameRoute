@@ -2313,9 +2313,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun sheetHeader(title: String, back: Pair<String, () -> Unit>? = sheetStack.lastOrNull()?.let { from -> sheetTitle(from) to { sheetBack() } }) = FrameLayout(this).apply {
         val side = if (back != null) (104 * d).toInt() else (52 * d).toInt()
         addView(label(title, 22f, bold = true).apply {
-            setTextColor(ink); typeface = theme.typeface; gravity = Gravity.CENTER; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            setTextColor(ink); typeface = theme.typeface; gravity = Gravity.CENTER; maxLines = 1
             setPadding(side, 0, side, 0)
-        }, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+            // a long title next to the back button shrinks to fit instead of being cut
+            setAutoSizeTextTypeUniformWithConfiguration(14, 22, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }, FrameLayout.LayoutParams(MATCH_PARENT, (44 * d * maxOf(1f, resources.configuration.fontScale)).toInt(), Gravity.CENTER_VERTICAL))
         back?.let { (to, go) -> addView(backPill(to, go), FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.START or Gravity.CENTER_VERTICAL)) }
         addView(pill("✕") { closeSheet() }.apply { setTextColor(ink) }, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
     }
