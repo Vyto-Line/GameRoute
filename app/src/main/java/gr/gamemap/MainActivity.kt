@@ -2934,7 +2934,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         // played over the Developer page: when it's done you're back here, not on the map
                         .setItems(lv.map { "Level $it" }.toTypedArray()) { _, i -> playCelebration(lv[i]) }.showT()
                 },
-                settingRow("Show the level card", "Level ${Explorer.level}") { showLevelUpCard((Explorer.level - 1).coerceAtLeast(1)) },
+                settingRow("Show a level card", "What each level unlocks") {
+                    val lv = (2..50).toList()
+                    GameBuilder(this@MainActivity).setTitle("Show a level card")
+                        .setItems(lv.map { l -> "Level $l" + if (Xp.unlockedAt(l).isNotEmpty()) " · " + Xp.unlockedAt(l).joinToString { L.t(it.name) } else "" }.toTypedArray()) { _, i ->
+                            showLevelUpCard(lv[i] - 1, lv[i], preview = true)
+                        }.showT()
+                },
                 settingRow("What the app noted lately", "Reroute times, GPS, car screen") {
                     val notes = CrashLog.recentNotes().ifBlank { "Nothing yet." }
                     GameBuilder(this@MainActivity).setTitle("Lately").setMessage(notes)
@@ -5176,7 +5182,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun playCelebration(level: Int) {
         val host = window.decorView as ViewGroup
         lateinit var view: Milestone
-        view = Milestone(this, level, Xp.title(theme, level), theme) { host.post { (view.parent as? ViewGroup)?.removeView(view); showLevelUpCard((Explorer.level - 1).coerceAtLeast(1)) } }
+        // then the card for that same level, with what it unlocks
+        view = Milestone(this, level, Xp.title(theme, level), theme) { host.post { (view.parent as? ViewGroup)?.removeView(view); showLevelUpCard(level - 1, level, preview = true) } }
         view.elevation = 60 * d
         host.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
@@ -5184,8 +5191,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** For tests: the celebration for [level], drawn at [ms]. */
     internal fun milestoneForTest(level: Int, ms: Long): Milestone = Milestone(this, level, Xp.title(theme, level), theme) {}.apply { fixedMs = ms }
 
-    private fun showLevelUpCard(from: Int) {
-        val to = Explorer.level
+    /** [preview]: the Developer page showing the card for [toLevel] (nothing is chosen or unlocked). */
+    private fun showLevelUpCard(from: Int, toLevel: Int = Explorer.level, preview: Boolean = false) {
+        val to = toLevel
         if (to <= from || isFinishing) return
         val p = (20 * d).toInt()
         lateinit var dlg: AlertDialog
@@ -5216,7 +5224,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
                 addView(pill("Later") { dlg.dismiss() }.apply { setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 14f) },
                     LinearLayout.LayoutParams(0, (50 * d).toInt(), 1f).apply { marginEnd = p / 2 })
-                if (to >= 50) addView(pill("See prestige") { dlg.dismiss(); openSheet("progress") }
+                if (preview) addView(label(L.t("Preview (test build)"), 13f).apply { setTextColor(dim()); gravity = Gravity.CENTER },
+                    LinearLayout.LayoutParams(0, (50 * d).toInt(), 1.3f))
+                else if (to >= 50) addView(pill("See prestige") { dlg.dismiss(); openSheet("progress") }
                     .apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 14f) }, LinearLayout.LayoutParams(0, (50 * d).toInt(), 1.3f))
                 else if (unlocks.isNotEmpty()) addView(pill("Use it now") {
                     dlg.dismiss(); val u = unlocks.last(); if (Xp.readableOn(u, theme.look)) Xp.choose(u); garageTab = u.kind; openSheet("garage")
