@@ -1548,6 +1548,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         dlg.window?.decorView?.let { dv -> L.translateTree(dv); Icons.applyTree(dv); dv.viewTreeObserver.addOnPreDrawListener { L.translateTree(dv); Icons.applyTree(dv); true } }
     }
 
+    /** This build's name as people see it: "109", "109.1", "110". */
+    private fun shownBuild(): String = try { packageManager.getPackageInfo(packageName, 0).versionName.orEmpty().removePrefix("build-") } catch (_: Exception) { "" }
+
     // ------------------------------------------------------------------ GameRoute's own pop-ups
 
     /** Pop-ups open now (newest last): the back button closes the newest first. */
@@ -2820,7 +2823,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             body.addView(groupsBox)
             for (g in settingsGroups()) groupsBox.addView(settingsEntry(g), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (8 * d).toInt() })
             fill(settingsQuery)
-            body.addView(label("GameRoute build ${Updater.currentVersion(this)}", 12f).apply {
+            body.addView(label("GameRoute build ${shownBuild()}", 12f).apply {
                 setTextColor(dim(150)); gravity = Gravity.CENTER; setPadding(0, (14 * d).toInt(), 0, (4 * d).toInt())
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -2921,7 +2924,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Trip history", "${Explorer.history().size} trips") { openSheet("trips") },
                 settingRow("Your progress", "${Xp.stars}${L.t(Xp.title())} · " + L.t("level ${Explorer.level}")) { openSheet("progress") },
                 settingRow("Garage", L.t("${Xp.items.count { it.unlocked }} of ${Xp.items.size} unlocked")) { openSheet("garage") },
-                if (Updater.ENABLED) settingRow("Check for updates", "build ${Updater.currentVersion(this)}") { checkForUpdates(manual = true) } else null,
+                if (Updater.ENABLED) settingRow("Check for updates", "build ${shownBuild()}") { checkForUpdates(manual = true) } else null,
                 settingRow("Backup & restore", L.t("Keep your progress in a file you save")) { chooseBackup() },
                 settingRow("Language", L.label) { chooseLanguage() },
                 settingRow("Privacy policy", null) {
@@ -5230,7 +5233,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun showAbout() {
         GameBuilder(this@MainActivity)
-            .setTitle("GameRoute build ${Updater.currentVersion(this)}")
+            .setTitle("GameRoute build ${shownBuild()}")
             .setMessage("Map data and speed cameras © OpenStreetMap contributors\nVector tiles: OpenFreeMap\nTraffic, incidents, speed limits: TomTom\nRouting: OSRM (TomTom as backup)\nSearch: Photon (komoot), Nominatim\nVoice: your phone's text-to-speech")
             .setPositiveButton("OK", null).showT()
     }
@@ -5242,12 +5245,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 if (r == null) {
-                    if (manual) Toast.makeText(this, L.t("You have the latest version (build ${Updater.currentVersion(this)})"), Toast.LENGTH_SHORT).show()
+                    if (manual) Toast.makeText(this, L.t("You have the latest version (build ${shownBuild()})"), Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
                 GameBuilder(this@MainActivity)
                     .setTitle("Update available")
-                    .setMessage("${r.tag} is ready (you have build ${Updater.currentVersion(this)}). Download and install it?")
+                    .setMessage("${r.tag} is ready (you have build ${shownBuild()}). Download and install it?")
                     .setPositiveButton("Update") { _, _ -> downloadAndInstall(r) }
                     .setNegativeButton("Later", null)
                     .showT()

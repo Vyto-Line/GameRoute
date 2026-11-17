@@ -14,7 +14,9 @@ android {
         // CI passes -PbuildNumber=<run number>; the updater compares against it.
         val build = (project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 1
         versionCode = build
-        versionName = "build-$build"
+        // From 1091 on the number is the build times 10 plus the fix: 1091 = "109.1", 1100 = "110"
+        // (older builds, up to 109, keep their plain number)
+        versionName = "build-" + if (build >= 1000) (build / 10).toString() + (if (build % 10 != 0) ".${build % 10}" else "") else "$build"
         // Built-in TomTom key, from the TOMTOM_KEY secret at build time (never stored in the code).
         buildConfigField("String", "REPORTS_URL", "\"${System.getenv("REPORTS_URL") ?: ""}\"")
         buildConfigField("String", "TOMTOM_KEY", "\"${System.getenv("TOMTOM_KEY") ?: ""}\"")
