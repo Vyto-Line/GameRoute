@@ -45,7 +45,7 @@ Pick from up to **three routes**, each timed with live traffic, with the jams an
 
 ## 🧭 Drive
 
-<img src="docs/screenshots/drive.webp" alt="Driving in Violet Rain, and the calm driving screen with messages waiting" width="100%">
+<img src="docs/screenshots/drive.webp" alt="Driving in Violet Rain (a little over the limit: orange; the road name under the arrow), and the calm driving screen with messages waiting" width="100%">
 
 A **turn box like a rally roadbook**: the distance, a sketch of the junction with your way out marked, and the next turn underneath, in every style. The road you're on shows at the bottom.
 
@@ -72,7 +72,7 @@ Download a region in **Settings ▸ Offline maps** and the map and places work w
 - 🚗 **Drive along:** same route, no race
 - 📍 **Just share:** be on the map without driving
 
-<img src="docs/screenshots/race.webp" alt="The invite screen with QR code, and the 3-2-1 start" width="100%">
+<img src="docs/screenshots/race.webp" alt="A friend's convoy invite, and the 3-2-1 start" width="100%">
 
 **Invite** with a QR code, a link, or your friends in one tap. Everyone's arrow, name and speed update every second, distances match on every phone, and the 3-2-1 starts at the same moment for all.
 
@@ -80,7 +80,7 @@ Download a region in **Settings ▸ Offline maps** and the map and places work w
 
 ## 🤝 You and your friends
 
-<img src="docs/screenshots/friends.webp" alt="The You screen, and the friends list" width="100%">
+<img src="docs/screenshots/friends.webp" alt="The You screen with your avatar, and the friends list with theirs" width="100%">
 
 **One button** for everything that's yours: your level, the Garage, friends, trips and settings. Friend requests and convoy invites wait on top.
 

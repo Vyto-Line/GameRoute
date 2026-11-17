@@ -161,7 +161,7 @@ if __name__ == "__main__":
     hero3()
     # two phones per picture: one column on a phone, still readable
     for a, b, out in [("search", "routes", "find.webp"), ("drive", "quiet", "drive.webp"), ("place", "fuel", "places.webp"),
-                      ("convoy", "lobby", "convoy.webp"), ("invite", "race", "race.webp"),
+                      ("convoy", "lobby", "convoy.webp"), ("invitecard", "race", "race.webp"),
                       ("you", "friends", "friends.webp"), ("arrival", "progress", "xp.webp"), ("garage", "styles", "garage.webp"),
                       ("countries", "settings", "map.webp")]:
         pair(a, b, out)

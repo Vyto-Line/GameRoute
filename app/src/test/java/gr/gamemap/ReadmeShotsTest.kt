@@ -104,10 +104,20 @@ class ReadmeShotsTest {
         val map = find(root)!!
         mapView = map
         Friends.core.setOnline("f1nikos", now); Friends.core.setOnline("f3maria", now)
+        // avatars: mine and my friends'
+        Avatars.mine = "fox"
+        Friends.avatars["f1nikos"] = "bolt:0891b2"; Friends.avatars["f3maria"] = "owl:7c3aed"; Friends.avatars["f2giorgos"] = "peak:059669"
         Explorer.addXp(3400)
 
         // home
         style(Theme.OPEN_WORLD, false); MapState.zoomBy(16.5 - MapState.targetZoom); shot("home")
+        // a convoy invite while parked: the small card under Where to?
+        style(Theme.VIOLET_RAIN, true)
+        Friends.core.addTestInvite("f1nikos", "Nikos", "conv7777777", "Sounio")
+        Friends.core.invites.firstOrNull { it.convoy == "conv7777777" }?.let { InvitePop.resetForTest(); InvitePop.offer(it) }
+        shot("invitecard", frames = 12)
+        InvitePop.close(); Friends.core.removeInviteForTest("conv7777777"); looper.idle()
+        style(Theme.OPEN_WORLD, false)
         // search: a shop only the new places data has
         val run = MainActivity::class.java.getDeclaredMethod("runQuery", String::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
         Places.prepareGazetteer(LatLng(37.9755, 23.7348)); OpenPlaces.prepare(LatLng(37.9755, 23.7348))
@@ -125,7 +135,7 @@ class ReadmeShotsTest {
         NavEngine.debugPlan(dest, opts); shot("routes")
         // driving
         style(Theme.VIOLET_RAIN, true); clean()
-        NavEngine.debugDrive(dest, r, 120); locate(400.0)
+        NavEngine.debugDrive(dest, r, 120); locate(400.0, 14.7f) // 53 in a 50: orange
         repeat(200) { MapState.tick(); LocationTracker.tick(); looper.idleFor(java.time.Duration.ofMillis(10)) }
         shot("drive")
         // convoy while driving

@@ -391,6 +391,9 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     internal fun addTestInvite(fid: String, from: String, convoy: String, dest: String) {
         edit("invites") { it.put(JSONObject().put("iid", "test-" + clock()).put("fid", fid).put("n", from).put("cv", convoy).put("d", dest).put("at", clock()).put("k", 1)) }
     }
+    /** For tests: an invite gone. */
+    internal fun removeInviteForTest(convoy: String) = removeWhere("invites") { it.optString("cv") == convoy }
+
     /** Every made-up friend and their invites, gone. */
     fun removeTestFriends() {
         removeWhere("friends") { it.optString("fid").startsWith("test-") }
