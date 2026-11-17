@@ -497,6 +497,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         setOnClickListener { onClick() }
     }
 
+    /** The prestige ◆ before a title, in the rank's colour (Bronze, Silver…) and a little bigger. */
+    private fun TextView.rankMark(): TextView {
+        val t = text?.toString() ?: return this
+        if (Xp.prestige <= 0 || !t.startsWith("◆")) return this
+        text = android.text.SpannableString(t).apply {
+            setSpan(android.text.style.ForegroundColorSpan(Xp.rankColor()), 0, 1, 0)
+            setSpan(android.text.style.RelativeSizeSpan(1.2f), 0, 1, 0)
+        }
+        return this
+    }
+
     private fun label(t: String, size: Float, bold: Boolean = false) = TextView(this).apply {
         text = t; textSize = size
         if (bold) typeface = Typeface.DEFAULT_BOLD
@@ -4125,7 +4136,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     contentDescription = L.t("Your name, tap to change it")
                     setOnClickListener { editConvoyName { youKey = ""; refreshChrome() } }
                 })
-                addView(label(Xp.stars + L.t(Xp.title()), 14.5f, bold = true).apply { setTextColor(readable(accent)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(0, (2 * d).toInt(), 0, 0) })
+                addView(label(Xp.stars + L.t(Xp.title()), 14.5f, bold = true).apply { setTextColor(readable(accent)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(0, (2 * d).toInt(), 0, 0) }.rankMark())
                 addView(label(L.t("Level ${Explorer.level}") + " · $have / $of XP", 13.5f).apply { setTextColor(dim()) })
                 if (Xp.streak > 0) addView(label("🔥 " + L.t(if (Xp.streak == 1) "1-day streak" else "${Xp.streak}-day streak"), 13.5f, bold = true).apply { setTextColor(readable(Color.rgb(255, 176, 40))) })
                 // your status: who can reach you (Online / Do not disturb / Invisible)
@@ -5088,7 +5099,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(label(Convoy.myName.ifBlank { L.t("You") }, 20f, bold = true).apply { setTextColor(ink); typeface = theme.typeface; maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
-                addView(label(Xp.stars + L.t(Xp.title()) + " · " + L.t(theme.title), 14f, bold = true).apply { setTextColor(readable(accent)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                addView(label(Xp.stars + L.t(Xp.title()) + " · " + L.t(theme.title), 14f, bold = true).apply { setTextColor(readable(accent)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }.rankMark())
                 addView(label(L.t("Level $lvl · ${Explorer.xp} XP") + (if (Xp.prestige > 0) " · " + L.t("prestige ${Xp.prestige}") else ""), 13.5f).apply { setTextColor(dim()) })
                 addView(bar(have.toFloat() / maxOf(of, 1), accent), LinearLayout.LayoutParams(MATCH_PARENT, (9 * d).toInt()).apply { topMargin = p / 2 })
                 val next = Xp.nextUnlock(lvl)
@@ -5194,7 +5205,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sheetHost.background = bg(panel, radius = 22f, topOnly = true)
         sheetHost.addView(sheetHeader("Garage"))
         val p = (12 * d).toInt()
-        sheetHost.addView(label(Xp.stars + L.t(Xp.title()) + " · " + L.t("level ${Explorer.level}") + " · " + L.t(theme.title), 13.5f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p / 2) })
+        sheetHost.addView(label(Xp.stars + L.t(Xp.title()) + " · " + L.t("level ${Explorer.level}") + " · " + L.t(theme.title), 13.5f).apply { setTextColor(dim()); setPadding(p / 4, 0, 0, p / 2) }.rankMark())
         // tabs
         sheetHost.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -5379,9 +5390,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             val oldT = Xp.title(theme, from); val newT = Xp.title(theme, to)
             if (oldT != newT) {
                 addView(label(L.t("New title"), 13f).apply { setTextColor(dim()) })
-                addView(label(Xp.stars + L.t(newT), 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+                addView(label(Xp.stars + L.t(newT), 22f, bold = true).apply { setTextColor(ink); typeface = theme.typeface }.rankMark())
                 addView(label(L.t(oldT) + " → " + L.t(newT), 13f).apply { setTextColor(dim()) })
-            } else addView(label(Xp.stars + L.t(newT), 18f, bold = true).apply { setTextColor(ink) })
+            } else addView(label(Xp.stars + L.t(newT), 18f, bold = true).apply { setTextColor(ink) }.rankMark())
             val unlocks = (from + 1..to).flatMap { Xp.unlockedAt(it) }
             if (unlocks.isNotEmpty()) {
                 addView(label(L.t("UNLOCKED"), 12f, bold = true).apply { setTextColor(readable(accent)); letterSpacing = 0.12f; setPadding(0, p, 0, p / 3) })
