@@ -61,6 +61,18 @@ class DialogsTest {
         val all = texts(host)
         log.append("what's new: ${all.size} texts, has build 3: ${all.any { it.startsWith("First version") }}, has 99: ${"99" in all}\n")
         assertTrue("older builds listed", all.any { it.startsWith("First version") } && "99" in all)
+        // level 5 reached without the phone's arrival card (no route, or only in the car): the
+        // celebration still comes, once, the next time the phone is on the map
+        activity.popupsForTest().forEach { it.dismiss() }
+        MainActivity::class.java.getDeclaredMethod("closeSheet").apply { isAccessible = true }.invoke(activity)
+        Perf.animations = Perf.FULL
+        Explorer.addXp(1000 - Explorer.xp + 10)
+        activity.getSharedPreferences("gamemap", android.content.Context.MODE_PRIVATE).edit().putInt("celebratedLevel", 4).commit()
+        activity.refreshForTest(); looper.idle()
+        fun find(v: android.view.View): Milestone? = if (v is Milestone) v else (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
+        val ms = find(root)
+        log.append("level ${Explorer.level}: celebration shown=${ms != null}\n")
+        assertTrue("the level-5 celebration shows", ms != null)
         File(out, "popups.txt").writeText(log.toString())
     }
 }

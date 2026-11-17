@@ -2150,6 +2150,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             shownTrip = null
             // the arrival card is closed: now the level-up (never while driving)
             if (pendingLevelFrom > 0 && !Later.driving && (!NavEngine.active || NavEngine.arrived)) { val f = pendingLevelFrom; pendingLevelFrom = 0; main.post { showLevelUp(f) } }
+            // a level reached without the phone's arrival card (driving without a route, only on
+            // Android Auto, or the app closed in between): celebrated the next time you're parked
+            else if (pendingLevelFrom == 0 && !Later.driving && !NavEngine.active && sheetKind.isEmpty()) {
+                val seen = celebratedLevel()
+                if (Explorer.level > seen) main.post { showLevelUp(seen) }
+            }
         }
         if (nav) {
             etaTraffic.text = ""
@@ -5102,9 +5108,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
      * Level up (after parking). Crossing a multiple of 5: first the celebration in this style's
      * look (Settings › Performance › Animations: Full only), then the card.
      */
+    /** The highest level already celebrated (remembered, so a level-up is never missed nor shown twice). */
+    private fun celebratedLevel(): Int {
+        val p = prefs()
+        if (!p.contains("celebratedLevel")) p.edit().putInt("celebratedLevel", (Explorer.level - 1).coerceAtLeast(1)).apply()
+        return p.getInt("celebratedLevel", Explorer.level)
+    }
+
     private fun showLevelUp(from: Int) {
         val to = Explorer.level
         if (to <= from || isFinishing) return
+        if (to <= celebratedLevel()) return
+        prefs().edit().putInt("celebratedLevel", to).apply()
         val milestone = (from + 1..to).lastOrNull { it % 5 == 0 }
         if (milestone != null && Perf.anim == Perf.FULL) {
             val host = window.decorView as ViewGroup
