@@ -277,7 +277,7 @@ class MapRenderer(private val car: Boolean = false) {
         if (trip !== tripSeen) { tripSeen = trip; tripSeenAt = System.currentTimeMillis() }
         val carTrip = car && carButtons && trip != null && selectedPlace == null && System.currentTimeMillis() - tripSeenAt < 30_000
         // the convoy lobby takes the top-left corner (instead of Where to? and the saved places)
-        carLobbyShown = car && hud && carButtons && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planningOn(car) &&
+        carLobbyShown = car && hud && carButtons && carFriends == null && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planningOn(car) &&
             selectedPlace == null && Convoy.proposal == null && !Convoy.meSharing && !Convoy.underway && !carTrip
         if (car && hud && carButtons && !NavEngine.planningOn(car) && !carTrip) {
             // Some Android Auto versions report a much narrower free area for a moment (after the
@@ -311,6 +311,7 @@ class MapRenderer(private val car: Boolean = false) {
         if (hud && Convoy.counting) { drawCountdown(c, area, d, theme); animating = true }
         else if (carLobby) drawCarLobby(c, area, d, theme)
         else if (hud && Convoy.active && Convoy.meReady && !NavEngine.active) drawLobbyChip(c, area, d, theme)
+        if (car && hud && carButtons && carFriends != null && !NavEngine.planningOn(car) && !carTrip) drawCarFriends(c, area, d, theme)
         drawDiscovery(c, area, d, theme)
         if (hud && (view.userBearing != null || !following)) drawCompass(c, area, bearing, d, theme)
         drawAttribution(c, area, d, theme)
@@ -1340,7 +1341,7 @@ class MapRenderer(private val car: Boolean = false) {
             text.color = white
             c.drawText(gr.gamemap.L.t("End"), r.left + 22 * d, r.centerY() + 6.5f * d, text)
             carHits += r to "end"
-        } else if (!NavEngine.active && selectedPlace == null && !carLobbyShown) {
+        } else if (!NavEngine.active && selectedPlace == null && !carLobbyShown && carFriends == null) {
             // "Where to?" and saved places, top left (a place's card takes the corner when open)
             val r = RectF(a.left + 14 * d, 12 * d, a.left + 14 * d + 300 * d, 12 * d + 50 * d)
             glassButton(c, r, d, t)
@@ -1750,6 +1751,145 @@ class MapRenderer(private val car: Boolean = false) {
         carHits += go to "convoy:go"
         text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface
         bannerBottom = r.bottom
+    }
+
+    /**
+     * Friends drawn on the car map in the style (instead of Android Auto's plain list): null closed,
+     * "list" your friends, "convoy" the convoy you're in. ‹ goes back one step.
+     */
+    @Volatile var carFriends: String? = null
+
+    private fun drawCarFriends(c: Canvas, a: Rect, d: Float, t: Theme) {
+        val F = Friends; val C = Convoy; val L = gr.gamemap.L
+        val ink = Ui.ink(t); val dimInk = withAlpha(ink, 170); val accentInk = Ui.onPanel(t, t.route, 3.0)
+        val w = minOf(560 * d, a.width() * 0.5f)
+        val top = maxOf(bannerBottom, a.top.toFloat()) + 10 * d
+        val r = RectF(a.left + 12 * d, top, a.left + 12 * d + w, a.bottom - 12 * d)
+        panel(c, r, d, t, outline = true)
+        val pad = 14 * d
+        text.textAlign = Paint.Align.LEFT
+        // header: ‹, the title, one button on the right
+        val back = RectF(r.left + pad, r.top + pad, r.left + pad + 48 * d, r.top + pad + 48 * d)
+        glassButton(c, back, d, t)
+        text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 26 * d; text.color = ink
+        c.drawText("‹", back.centerX(), back.centerY() + 9 * d, text)
+        carHits += back to "fp:back"
+        fun button(rr: RectF, label: String, id: String, fillCol: Int? = null, inkCol: Int = ink) {
+            glassButton(c, rr, d, t, fillCol)
+            text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 16 * d; text.color = inkCol
+            c.drawText(ellipsize(label, rr.width() - 16 * d), rr.centerX(), rr.centerY() + 6 * d, text)
+            carHits += rr to id
+        }
+        val onRoute = if (Ui.contrast(Color.WHITE, t.route) >= 3) Color.WHITE else Color.BLACK
+        val convoyView = carFriends == "convoy" && C.active
+        val title = if (convoyView) L.t("Convoy") + (C.pretty()?.let { " · $it" } ?: "") else L.t("Friends")
+        val headBtn = when {
+            convoyView -> L.t("Message") to "fp:msg"
+            C.active -> L.t("Convoy") + " ›" to "fp:convoy"
+            else -> L.t("Start a convoy") to "fp:start"
+        }
+        text.textSize = 16 * d; text.typeface = Typeface.DEFAULT_BOLD
+        val hbW = text.measureText(headBtn.first) + 36 * d
+        val hb = RectF(r.right - pad - hbW, back.top, r.right - pad, back.bottom)
+        button(hb, headBtn.first, headBtn.second, t.route, onRoute)
+        text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface; text.textSize = 22 * d; text.color = ink
+        c.drawText(ellipsize(title, hb.left - back.right - 24 * d), back.right + 12 * d, back.centerY() + 8 * d, text)
+        var y = back.bottom + 12 * d
+        val rowH = 60 * d
+        fun section(label: String) {
+            text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 12.5f * d; text.color = dimInk
+            text.letterSpacing = 0.1f
+            c.drawText(label.uppercase(), r.left + pad + 2 * d, y + 14 * d, text)
+            text.letterSpacing = 0f
+            y += 22 * d
+        }
+        fun row(name: String, sub: String, seed: String, btn: Pair<String, String>?, rowId: String?, btnFill: Int? = null, btnInk: Int = ink) {
+            val rr = RectF(r.left + pad, y, r.right - pad, y + rowH - 8 * d)
+            fill.color = withAlpha(ink, 22); c.drawRoundRect(rr, 10 * d, 10 * d, fill)
+            if (rowId != null) carHits += rr to rowId
+            val cx = rr.left + 30 * d; val cy = rr.centerY()
+            fill.color = Color.HSVToColor(floatArrayOf((seed.hashCode() and 0xffff) % 360f, 0.55f, 0.78f))
+            c.drawCircle(cx, cy, 19 * d, fill)
+            text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = Color.WHITE
+            c.drawText(name.take(1).uppercase(), cx, cy + 6 * d, text)
+            var bw = 0f
+            btn?.let { (label, id) ->
+                text.textSize = 16 * d
+                bw = text.measureText(label) + 30 * d
+                button(RectF(rr.right - 8 * d - bw, rr.top + 6 * d, rr.right - 8 * d, rr.bottom - 6 * d), label, id, btnFill, btnInk)
+            }
+            val tx = cx + 30 * d; val tw = rr.right - tx - bw - 18 * d
+            text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = ink
+            c.drawText(ellipsize(name, tw), tx, cy - 2 * d, text)
+            text.typeface = Typeface.DEFAULT; text.textSize = 14 * d; text.color = dimInk
+            c.drawText(ellipsize(sub, tw), tx, cy + 17 * d, text)
+            y += rowH
+        }
+        val room = { r.bottom - pad - y }
+        if (convoyView) {
+            // the two big ones: drive there, leave
+            val dest = C.destination
+            val bh = 50 * d
+            val leaveW = (r.width() - 2 * pad) * 0.36f
+            if (dest != null && !NavEngine.active) {
+                button(RectF(r.left + pad, y, r.right - pad - leaveW - 10 * d, y + bh), "▶ " + L.t("Drive to ${dest.name}"), "fp:drive", t.route, onRoute)
+                button(RectF(r.right - pad - leaveW, y, r.right - pad, y + bh), L.t("Leave"), "fp:leave", Color.rgb(229, 72, 77), Color.WHITE)
+            } else button(RectF(r.left + pad, y, r.right - pad, y + bh), L.t("Leave the convoy"), "fp:leave", Color.rgb(229, 72, 77), Color.WHITE)
+            y += bh + 12 * d
+            val members = C.members.values.filter { it.state != "left" && !it.sharing }.sortedBy { it.name.lowercase() }
+            section(L.t("In your convoy"))
+            if (members.isEmpty()) {
+                text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT; text.textSize = 15 * d; text.color = dimInk
+                c.drawText(L.t("Nobody else yet: invite friends from Friends"), r.left + pad + 2 * d, y + 18 * d, text)
+            }
+            val fit = (room() / rowH).toInt().coerceAtLeast(0)
+            members.take(fit).forEach { m ->
+                val st = when { m.stale -> L.t("no signal"); m.lostSecs > 0 -> L.t(C.lostText(m.lostSecs)); m.state == "arrived" -> L.t("arrived"); m.state == "ready" -> L.t(if (m.ready) "ready ✓" else "joined"); else -> L.t("${m.kmh} km/h") }
+                row(m.name, st + " · " + L.t("tap to see on the map"), m.id, null, "fp:member:${m.id}")
+            }
+            text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface
+            return
+        }
+        if (!F.ready || !F.core.started) {
+            text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT; text.textSize = 15 * d; text.color = dimInk
+            c.drawText(L.t("Add friends on your phone: You › Friends"), r.left + pad, y + 20 * d, text)
+            text.typeface = t.typeface
+            return
+        }
+        val core = F.core
+        // invites to me, then online friends, then the rest; as many as fit, the rest behind "+N more"
+        val inv = core.invites.filter { it.convoy != C.code }
+        val fr = core.friends.sortedWith(compareByDescending<FriendCore.Friend> { core.isOnline(it.fid) }.thenBy { core.shownName(it).lowercase() })
+        val online = fr.filter { core.isOnline(it.fid) }; val offline = fr.filter { !core.isOnline(it.fid) }
+        val total = inv.size + fr.size
+        if (total == 0) {
+            text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT; text.textSize = 15 * d; text.color = dimInk
+            c.drawText(L.t("Add friends on your phone: You › Friends"), r.left + pad, y + 20 * d, text)
+            text.typeface = t.typeface
+            return
+        }
+        val sections = (if (inv.isNotEmpty()) 1 else 0) + (if (online.isNotEmpty()) 1 else 0) + (if (offline.isNotEmpty()) 1 else 0)
+        var fit = ((room() - sections * 22 * d) / rowH).toInt()
+        if (fit < total) fit = ((room() - sections * 22 * d - 44 * d) / rowH).toInt() // leave room for "+N more"
+        fit = fit.coerceAtLeast(1)
+        var shown = 0
+        if (inv.isNotEmpty() && shown < fit) {
+            section(L.t("Invites"))
+            for (i in inv) { if (shown >= fit) break
+                row(L.t("${i.from} invites you"), if (i.dest.isNotBlank()) L.t("Convoy to ${i.dest}") else L.t("No destination yet"), i.from, L.t("Join") to "fp:join:${i.convoy}", null, t.route, onRoute); shown++ }
+        }
+        fun friendRow(f: FriendCore.Friend) {
+            val sent = C.code?.let { core.sentTo(f.fid, it) }
+            val btn = if (sent != null) L.t("Invited ✓") to "fp:none" else "+ " + L.t("Invite") to "fp:inv:${f.fid}"
+            row(core.shownName(f), Friends.activityText(f.fid), f.fid, btn, null)
+        }
+        if (online.isNotEmpty() && shown < fit) { section(L.t("Online")); for (f in online) { if (shown >= fit) break; friendRow(f); shown++ } }
+        if (offline.isNotEmpty() && shown < fit) { section(L.t("Not online")); for (f in offline) { if (shown >= fit) break; friendRow(f); shown++ } }
+        if (shown < total) {
+            val more = RectF(r.left + pad, y + 2 * d, r.right - pad, y + 42 * d)
+            button(more, L.t("+${total - shown} more"), "fp:more")
+        }
+        text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface
     }
 
     /** At the convoy start after pressing Ready: who we're still waiting for. */

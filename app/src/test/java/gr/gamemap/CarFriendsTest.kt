@@ -104,6 +104,28 @@ class CarFriendsTest {
         val edge = rr.carButtonAt(w - 14 * 1.6f - 24 * 1.6f, h - 14 * 1.6f - 24 * 1.6f)
         log.append("button at the right edge with a half-width area: $edge\n")
         assertTrue("zoom button at the edge", edge != null)
+        // the Friends panel drawn on the map (list, then the convoy page), in a dark and a light style
+        fun hits(rr2: MapRenderer): List<String> {
+            val f = MapRenderer::class.java.getDeclaredField("hitsShown").apply { isAccessible = true }
+            @Suppress("UNCHECKED_CAST") return (f.get(rr2) as List<Pair<Any, String>>).map { it.second }
+        }
+        for ((th, dark) in listOf(Theme.VIOLET_RAIN to true, Theme.VIOLET_RAIN to false, Theme.RALLY to true)) {
+            MapState.setTheme(th); MapState.setLightMode(if (dark) MapState.LightMode.DARK else MapState.LightMode.LIGHT)
+            for (page in listOf("list", "convoy")) {
+                if (page == "convoy") { Convoy.leave(quiet = true); Convoy.debugStart(Place("Nafplio", "", LatLng(37.567, 22.805)))
+                    Convoy.debugMember("Nikos", LatLng(37.98, 23.73), 82, 0L, 400.0, 1000.0, "driving") } else Convoy.leave(quiet = true)
+                val p2 = MapRenderer(car = true).apply { carButtons = true; forceLite = false; carFriends = page }
+                val b2 = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                repeat(3) { p2.draw(android.graphics.Canvas(b2), w, h, android.graphics.Rect(0, 0, w, h), 1.6f, true); Thread.sleep(150) }
+                File(out, "car_friends_${page}_${th.name.lowercase()}_${if (dark) "dark" else "light"}.png").outputStream().use { b2.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                val hs = hits(p2).filter { it.startsWith("fp:") }
+                log.append("panel $page ${th.name} ${if (dark) "dark" else "light"}: $hs\n")
+                assertTrue("back on the panel", "fp:back" in hs)
+                if (page == "list") assertTrue("invite buttons", hs.any { it.startsWith("fp:inv:") || it == "fp:none" })
+                else assertTrue("leave on the convoy page", "fp:leave" in hs && "fp:drive" in hs && hs.any { it.startsWith("fp:member:") })
+            }
+        }
+        Convoy.leave(quiet = true)
         assertTrue("the car Friends screen threw on $failed setups (see car_friends.txt)", failed == 0)
     }
 }

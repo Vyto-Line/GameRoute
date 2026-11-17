@@ -205,6 +205,12 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
         else gr.gamemap.CrashLog.note("car: screen gone during a frame")
     }
 
+    /** Friends on the map: open at a page ("list", "convoy") or close (null). */
+    fun openFriends(page: String?) { renderer.carFriends = page; redraw() }
+    val friendsOpen get() = renderer.carFriends != null
+    /** ‹ / the car's BACK: the convoy page goes back to the list, the list closes. */
+    fun friendsBack() { renderer.carFriends = if (renderer.carFriends == "convoy") "list" else null; redraw() }
+
     /** The car screen went away for good: stop the drawing thread. */
     fun release() {
         surface = null
@@ -293,6 +299,11 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
 
 class MapScreen(carContext: CarContext) : Screen(carContext) {
     private val surface = CarMapSurface(carContext)
+    /** The car's BACK steps back through the Friends panel while it's open (otherwise as usual). */
+    private val backFriends = object : androidx.activity.OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() { surface.friendsBack(); isEnabled = surface.friendsOpen }
+    }
+    init { carContext.onBackPressedDispatcher.addCallback(this, backFriends) }
     private val nav = carContext.getCarService(NavigationManager::class.java)
     private var navigating = false
     private var lastInvalidate = 0L
@@ -329,6 +340,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
 
     /** A friend invites me to a convoy: a car alert with Join / Not now. */
     private val onFriends: () -> Unit = {
+        if (surface.friendsOpen) surface.redraw()
         val F = gr.gamemap.Friends
         val i = if (F.ready && F.core.started && F.core.allowInvites) F.core.invites.firstOrNull { it.convoy != gr.gamemap.Convoy.code } else null
         val k = i?.let { it.convoy + it.count }.orEmpty()
@@ -565,6 +577,44 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         }
     }
 
+    /** A button on the Friends panel drawn on the map. */
+    private fun onFriendsPanel(what: String) {
+        val C = gr.gamemap.Convoy; val F = gr.gamemap.Friends; val L = gr.gamemap.L
+        when {
+            what == "back" -> surface.friendsBack()
+            what == "convoy" -> surface.openFriends("convoy")
+            what == "more" -> screenManager.push(FriendsCarScreen(carContext))
+            what == "msg" -> screenManager.push(QuickMessageCarScreen(carContext))
+            what == "leave" -> screenManager.push(LeaveConvoyCarScreen(carContext))
+            what == "drive" -> C.destination?.let { surface.openFriends(null); NavEngine.start(carContext, it); MapState.car.recenter() }
+            what == "start" -> {
+                if (C.myName.isBlank()) C.myName = "Driver"
+                val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
+                C.create(dest)
+                CarToast.makeText(carContext, L.t("Convoy started: invite friends below"), CarToast.LENGTH_SHORT).show()
+            }
+            what.startsWith("inv:") -> {
+                val f = if (F.ready && F.core.started) F.core.friends.firstOrNull { it.fid == what.removePrefix("inv:") } else null
+                if (f != null) {
+                    if (!C.active) {
+                        if (C.myName.isBlank()) C.myName = "Driver"
+                        val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
+                        C.create(dest)
+                    }
+                    F.invite(f)
+                    CarToast.makeText(carContext, L.t("Invite sent to ${f.name}"), CarToast.LENGTH_SHORT).show()
+                }
+            }
+            what.startsWith("join:") -> { surface.openFriends(null); carJoinConvoy(carContext, what.removePrefix("join:")) }
+            what.startsWith("member:") -> {
+                val m = C.members[what.removePrefix("member:")]
+                val at = m?.shown ?: m?.pos
+                surface.openFriends(null)
+                if (at != null) MapState.car.pan(at, 0f)
+            }
+        }
+    }
+
     /** A GameMap button drawn on the car map was tapped. */
     private fun onCarButton(id: String) {
         if (id.startsWith("route:")) { NavEngine.select(id.removePrefix("route:").toIntOrNull() ?: return); surface.redraw(); return }
@@ -591,6 +641,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             return
         }
         if (id == "convoy:decline") { gr.gamemap.Convoy.decline(); return }
+        if (id.startsWith("fp:")) { onFriendsPanel(id.removePrefix("fp:")); backFriends.isEnabled = surface.friendsOpen; surface.redraw(); return }
         if (id.startsWith("friend:")) {
             // a friend in the convoy box: the map goes to them (me: back to my car)
             val fid = id.removePrefix("friend:")
@@ -607,7 +658,8 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             }
             "mute", "unmute" -> Voice.muted = !Voice.muted
             "report" -> screenManager.push(ReportScreen(carContext))
-            "friends" -> screenManager.push(FriendsCarScreen(carContext))
+            // Friends drawn on the map in the style (the convoy first when in one)
+            "friends" -> { surface.openFriends(if (gr.gamemap.Convoy.active) "convoy" else "list"); backFriends.isEnabled = true }
             "zoomin" -> MapState.car.zoomBy(1.0)
             "zoomout" -> MapState.car.zoomBy(-1.0)
             "recenter" -> MapState.car.recenter()
