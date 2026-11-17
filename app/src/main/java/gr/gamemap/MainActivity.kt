@@ -2931,9 +2931,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Play a level celebration", "Levels 5 to 50, in this style") {
                     val lv = (5..50 step 5).toList()
                     GameBuilder(this@MainActivity).setTitle("Play a level celebration")
-                        .setItems(lv.map { "Level $it" }.toTypedArray()) { _, i -> closeSheet(); playCelebration(lv[i]) }.showT()
+                        // played over the Developer page: when it's done you're back here, not on the map
+                        .setItems(lv.map { "Level $it" }.toTypedArray()) { _, i -> playCelebration(lv[i]) }.showT()
                 },
-                settingRow("Show the level card", "Level ${Explorer.level}") { closeSheet(); showLevelUpCard((Explorer.level - 1).coerceAtLeast(1)) },
+                settingRow("Show the level card", "Level ${Explorer.level}") { showLevelUpCard((Explorer.level - 1).coerceAtLeast(1)) },
                 settingRow("What the app noted lately", "Reroute times, GPS, car screen") {
                     val notes = CrashLog.recentNotes().ifBlank { "Nothing yet." }
                     GameBuilder(this@MainActivity).setTitle("Lately").setMessage(notes)
