@@ -410,14 +410,14 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
 
     /** 8-Bit: coins pop out of a ? block, a pixel score counts up. */
     private fun drawCoins(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
-        val by = h * 0.6f; val bs = 60 * d
+        val by = h * 0.74f; val bs = 60 * d
         // stepped motion, like an old console
         val step = (t / 80f).toInt() * 80f
         for (i in 0 until 5) {
             val ph = ((step - i * 150f) % 1000f) / 1000f
             if (step < i * 150f) continue
             val up = if (ph < 0.5f) ph * 2 else 2 - ph * 2
-            val x = cx + (i - 2) * 26 * d; val y = by - 20 * d - up * 130 * d
+            val x = cx + (i - 2) * 26 * d; val y = by - 20 * d - up * 100 * d
             fill.color = Color.rgb(250, 204, 21); c.drawOval(RectF(x - 11 * d, y - 15 * d, x + 11 * d, y + 15 * d), fill)
             stroke.color = Color.rgb(161, 98, 7); stroke.strokeWidth = 3 * d; c.drawOval(RectF(x - 11 * d, y - 15 * d, x + 11 * d, y + 15 * d), stroke)
         }
