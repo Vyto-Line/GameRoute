@@ -2620,6 +2620,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         minimumHeight = (52 * d).toInt()
         val p = (14 * d).toInt(); setPadding(p, 0, p, 0)
         setOnClickListener { onClick() }
+        // a long value goes under the title (side by side it squeezed the title to a letter a line)
+        if (value != null && value.length > 24) {
+            val p2 = (10 * d).toInt(); setPadding(p, p2, p, p2)
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(title, 15f).apply { setTextColor(ink) })
+                addView(label(value, 13f).apply { setTextColor(dim()) })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(label("›", 14f).apply { setTextColor(dim()) })
+            return@apply
+        }
         addView(label(title, 15f).apply { setTextColor(ink) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         if (value != null) addView(label("$value  ›", 14f).apply { setTextColor(dim()) })
     }
@@ -2801,7 +2812,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         SettingsGroup("advanced", "Advanced", "Units, map links, star ratings and reviews, welcome screens", R.drawable.ic_set_adv, Color.rgb(100, 100, 110)),
     ) + (if (BuildConfig.TEST_BUILD) listOf(
         // test builds only (never in a public release): tools for trying things out
-        SettingsGroup("dev", "Developer (test build)", "Play celebrations, see the log, reset what's been seen, test a crash", R.drawable.ic_set_adv, Color.rgb(219, 39, 119)),
+        SettingsGroup("dev", "Developer", "Test builds only: simulate drives, test friends, XP, celebrations, log", R.drawable.ic_set_adv, Color.rgb(219, 39, 119)),
     ) else emptyList())
 
     private fun renderSettings() {
