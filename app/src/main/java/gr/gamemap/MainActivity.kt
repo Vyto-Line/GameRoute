@@ -4774,7 +4774,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }, LinearLayout.LayoutParams(WRAP_CONTENT, (42 * d).toInt()))
         }
         // the 10 s running down
-        val bar = View(this).apply { setBackgroundColor(accent); pivotX = 0f }
+        val barColor = accent
+        val bar = object : View(this) {
+            private val pt = android.graphics.Paint().apply { color = barColor }
+            override fun onDraw(c: Canvas) {
+                val left = InvitePop.left()
+                c.drawRect(0f, 0f, width * left, height.toFloat(), pt)
+                if (left > 0f && inviteCard != null) postInvalidateDelayed(100)
+            }
+        }
         val holder = FrameLayout(this).apply {
             addView(card, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             addView(bar, FrameLayout.LayoutParams(MATCH_PARENT, (3 * d).toInt(), Gravity.BOTTOM).apply {
@@ -4794,9 +4802,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             holder.translationY = -holder.height.toFloat()
             holder.animate().translationY(0f).setDuration(260).start()
         }
-        val left = InvitePop.left()
-        bar.scaleX = left
-        bar.animate().scaleX(0f).setDuration((InvitePop.SHOW_MS * left).toLong()).setInterpolator(android.view.animation.LinearInterpolator()).start()
     }
 
     private fun hideInvitePop() {

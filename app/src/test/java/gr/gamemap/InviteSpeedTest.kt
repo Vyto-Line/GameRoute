@@ -66,7 +66,6 @@ class InviteSpeedTest {
         me.addTestInvite("test-nikos", "Nikos", "conv12345678", "Sounio")
         InvitePop.resetForTest()
         log.append("invites: ${me.invites.map { it.from + "/" + it.convoy }}, convoy active ${Convoy.active}, nav ${NavEngine.active}\n")
-        InvitePop.changed += { if (InvitePop.current == null) log.append("closed at uptime ${android.os.SystemClock.uptimeMillis()}\n") else log.append("shown at uptime ${android.os.SystemClock.uptimeMillis()}\n") }
         InvitePop.offer(me.invites.single())
         log.append("current after offer: ${InvitePop.current?.from}, card now ${activity.invitePopForTest() != null}\n")
         try { MainActivity::class.java.getDeclaredMethod("syncInvitePop").apply { isAccessible = true }.invoke(activity) } catch (e: Exception) { log.append("sync: ${e.cause ?: e}\n${(e.cause ?: e).stackTrace.take(6).joinToString("\n")}\n") }
