@@ -28,6 +28,13 @@ import kotlin.math.sin
  *  - Violet Rain: rain and lightning, the number drops in like a raindrop and ripples.
  *  - Rally Roadbook: a chequered band sweeps across, the title is stamped on.
  *  - Nautical Chart and Realm Map: a compass spins and settles, the title is inked in.
+ *  - Free Roam: a pin drops on the map and rings ripple out.
+ *  - Midnight Run: speed lines, the rev counter swings to the redline.
+ *  - Blockworld: blocks fall and build the number.
+ *  - Fire Tower: the lookout's beacon sweeps across and lights the number.
+ *  - 8-Bit: coins pop out of a ? block, a pixel score counts up.
+ *  - Arctic: an aurora, falling snow, the number frosts over.
+ *  - Catch 'Em Trail: binoculars find the number on a hilltop (5, 15…) or campfire sparks gather into it (10, 20…).
  *  - The others: the number pops out of a burst of the style's colours.
  */
 class Milestone(ctx: Context, private val level: Int, private val title: String, private val theme: Theme, private val onDone: () -> Unit) : View(ctx) {
@@ -48,9 +55,20 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
         theme == Theme.VIOLET_RAIN -> "rain"
         theme == Theme.RALLY -> "rally"
         theme == Theme.NAUTICAL || theme == Theme.PARCHMENT_QUEST -> "compass"
-        theme == Theme.NEON_NOIR || theme == Theme.NEON_RACER || theme == Theme.BLUEPRINT || theme == Theme.HIGH_CONTRAST -> "neon"
+        theme == Theme.NEON_NOIR || theme == Theme.BLUEPRINT || theme == Theme.HIGH_CONTRAST -> "neon"
+        theme == Theme.OPEN_WORLD -> "pin"
+        theme == Theme.NEON_RACER -> "tacho"
+        theme == Theme.BLOCKY -> "blocks"
+        theme == Theme.LOOKOUT -> "beacon"
+        theme == Theme.RETRO -> "coins"
+        theme == Theme.ARCTIC -> "aurora"
+        // Catch 'Em Trail: binoculars and the campfire take turns (5, 15, 25…: binoculars)
+        theme == Theme.TRAILBLAZER -> if ((level / 5) % 2 == 1) "binoc" else "camp"
         else -> "burst"
     }
+
+    /** How long it plays before the level card. */
+    private val endMs = if (kind == "binoc" || kind == "camp") 4600f else 3200f
 
     init {
         isClickable = true
@@ -74,8 +92,19 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
         val w = width.toFloat(); val h = height.toFloat()
         val look = theme.look
         val dark = MapState.dark
-        val bg = if (kind == "rally") Color.rgb(246, 235, 211) else if (kind == "compass") Color.rgb(239, 230, 210)
-            else if (dark || kind != "burst") Color.rgb(10, 9, 20) else Color.rgb(246, 248, 252)
+        val bg = when (kind) {
+            "rally" -> Color.rgb(246, 235, 211)
+            "compass" -> Color.rgb(239, 230, 210)
+            "pin" -> Color.rgb(14, 20, 32)
+            "tacho" -> Color.rgb(5, 6, 12)
+            "blocks" -> Color.rgb(11, 13, 18)
+            "beacon" -> Color.rgb(10, 11, 16)
+            "coins" -> Color.rgb(13, 10, 26)
+            "aurora" -> Color.rgb(6, 16, 28)
+            "binoc" -> Color.rgb(11, 18, 32)
+            "camp" -> Color.rgb(10, 16, 48)
+            else -> if (dark || kind != "burst") Color.rgb(10, 9, 20) else Color.rgb(246, 248, 252)
+        }
         val ink = if (kind == "rally") Color.rgb(42, 30, 20) else if (kind == "compass") Color.rgb(22, 50, 79)
             else if (Color.luminance(bg) > 0.5f) Color.rgb(28, 30, 36) else Color.WHITE
         val accent = when (kind) {
@@ -211,6 +240,14 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
                 text.textSize = 15 * d; text.color = accent; c.drawText(L.t("MAX LEVEL"), cx, cy - 170 * d, text)
                 if (t > 1200) fadeTitle(c, cx, cy + 70 * d, Color.WHITE, ((t - 1200) / 500f).coerceIn(0f, 1f))
             }
+            "pin" -> drawPin(c, w, h, cx, cy, t, num)
+            "tacho" -> drawTacho(c, w, h, cx, cy, t, num)
+            "blocks" -> drawBlocks(c, w, h, cx, cy, t)
+            "beacon" -> drawBeacon(c, w, h, cx, cy, t, num)
+            "coins" -> drawCoins(c, w, h, cx, cy, t, num)
+            "aurora" -> drawAurora(c, w, h, cx, cy, t, num)
+            "binoc" -> drawBinoculars(c, w, h, cx, cy, t, num)
+            "camp" -> drawCampfire(c, w, h, cx, cy, t)
             else -> {
                 // a burst in the style's colours, the number pops
                 val k = (t / 600f).coerceIn(0f, 1f)
@@ -232,7 +269,7 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
         text.textSize = 13 * d; text.alpha = 140
         c.drawText(L.t("Tap to continue"), cx, h * 0.93f, text); text.alpha = 255
         if (fixedMs == null) {
-            if (t > 3200) finish() else postInvalidateOnAnimation()
+            if (t > endMs) finish() else postInvalidateOnAnimation()
         }
     }
 
@@ -248,5 +285,277 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
     private fun fadeTitle(c: Canvas, x: Float, y: Float, col: Int, k: Float) {
         text.textSize = 30 * d; text.color = col; text.alpha = (k * 255).toInt()
         c.drawText(L.t(title).uppercase(), x, y + (1 - k) * 16 * d, text); text.alpha = 255
+    }
+
+    // ------------------------------------------------------------------ the styles' own celebrations
+
+    /** 3 x 5 pixel digits (blocks, embers): "X" = a block. */
+    private val digits = mapOf(
+        '0' to listOf("XXX", "X.X", "X.X", "X.X", "XXX"), '1' to listOf(".X.", "XX.", ".X.", ".X.", "XXX"),
+        '2' to listOf("XXX", "..X", "XXX", "X..", "XXX"), '3' to listOf("XXX", "..X", "XXX", "..X", "XXX"),
+        '4' to listOf("X.X", "X.X", "XXX", "..X", "..X"), '5' to listOf("XXX", "X..", "XXX", "..X", "XXX"),
+        '6' to listOf("XXX", "X..", "XXX", "X.X", "XXX"), '7' to listOf("XXX", "..X", "..X", "..X", "..X"),
+        '8' to listOf("XXX", "X.X", "XXX", "X.X", "XXX"), '9' to listOf("XXX", "X.X", "XXX", "..X", "XXX"),
+    )
+
+    /** The cells of the level number in pixel digits, centred on (cx, top), [size] apart. */
+    private fun cells(cx: Float, top: Float, size: Float): List<Pair<Float, Float>> {
+        val s = "$level"
+        val wCells = s.length * 3 + (s.length - 1)
+        val left = cx - wCells * size / 2
+        val out = ArrayList<Pair<Float, Float>>()
+        s.forEachIndexed { i, ch ->
+            val g = digits[ch] ?: return@forEachIndexed
+            for (r in 0 until 5) for (col in 0 until 3) if (g[r][col] == 'X') out += (left + (i * 4 + col) * size) to (top + r * size)
+        }
+        return out
+    }
+
+    private fun bigNumber(c: Canvas, num: String, cx: Float, cy: Float, col: Int, glow: Int? = null, size: Float = 130f) {
+        text.textSize = size * d; text.color = col
+        if (glow != null) text.setShadowLayer(24 * d, 0f, 0f, glow)
+        c.drawText(num, cx, cy, text); text.clearShadowLayer()
+    }
+
+    private fun ease(k: Float) = 1 - (1 - k) * (1 - k)
+
+    /** Free Roam: a pin drops on the map, rings ripple out from it. */
+    private fun drawPin(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
+        stroke.color = Color.argb(40, 120, 150, 210); stroke.strokeWidth = 3 * d
+        var x = -h; while (x < w) { c.drawLine(x, h, x + h * 0.7f, 0f, stroke); x += 30 * d }
+        val py = h * 0.58f
+        val purple = Color.rgb(168, 85, 247)
+        for (i in 0 until 3) {
+            val rk = (((t - 700 - i * 500) % 1500f) / 1500f).let { if (t < 700 + i * 500) -1f else it }
+            if (rk < 0) continue
+            stroke.color = Color.argb(((1 - rk) * 230).toInt(), 168, 85, 247); stroke.strokeWidth = 3 * d
+            c.drawCircle(cx, py, 10 * d + rk * 160 * d, stroke)
+        }
+        val k = (t / 900f).coerceIn(0f, 1f)
+        val bounce = if (k < 0.7f) -(1 - k / 0.7f) * h * 0.6f else -sin((k - 0.7f) / 0.3f * PI.toFloat()) * 18 * d
+        c.save(); c.translate(cx, py - 4 * d + bounce)
+        val pin = Path().apply { moveTo(0f, 0f); cubicTo(-30 * d, -38 * d, -30 * d, -78 * d, 0f, -78 * d); cubicTo(30 * d, -78 * d, 30 * d, -38 * d, 0f, 0f); close() }
+        fill.color = purple; c.drawPath(pin, fill)
+        fill.color = Color.WHITE; c.drawCircle(0f, -52 * d, 10 * d, fill)
+        c.restore()
+        if (t > 500) bigNumber(c, num, cx, cy, purple)
+        if (t > 1000) fadeTitle(c, cx, h * 0.72f, Color.WHITE, ((t - 1000) / 500f).coerceIn(0f, 1f))
+    }
+
+    /** Midnight Run: speed lines rush past, the rev counter swings to the redline. */
+    private fun drawTacho(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
+        val cyan = Color.rgb(34, 211, 238)
+        stroke.strokeWidth = 2 * d
+        for (i in 0 until 26) {
+            val x = drops[i * 3] * w; val ln = (60 + drops[i * 3 + 1] * 90) * d
+            val y = ((drops[i * 3 + 2] * h + t * 1.6f) % (h + ln)) - ln
+            stroke.color = Color.argb(120, 34, 211, 238); c.drawLine(x, y, x, y + ln, stroke)
+        }
+        val gy = h * 0.62f; val r = 110 * d
+        val box = RectF(cx - r, gy - r, cx + r, gy + r)
+        stroke.strokeWidth = 14 * d; stroke.strokeCap = Paint.Cap.BUTT
+        stroke.color = Color.rgb(31, 41, 55); c.drawArc(box, 180f, 180f, false, stroke)
+        val k = ease((t / 1200f).coerceIn(0f, 1f))
+        stroke.color = cyan; c.drawArc(box, 180f, 180f * k, false, stroke)
+        stroke.color = Color.rgb(239, 68, 68); c.drawArc(box, 330f, 30f, false, stroke)
+        stroke.strokeCap = Paint.Cap.ROUND
+        val a = Math.toRadians((180.0 + 170.0 * k))
+        stroke.color = Color.WHITE; stroke.strokeWidth = 4 * d
+        c.drawLine(cx, gy, cx + (cos(a) * (r - 18 * d)).toFloat(), gy + (sin(a) * (r - 18 * d)).toFloat(), stroke)
+        fill.color = Color.WHITE; c.drawCircle(cx, gy, 7 * d, fill)
+        if (t > 400) bigNumber(c, num, cx, cy, Color.WHITE, cyan)
+        if (t > 1200) { text.setShadowLayer(12 * d, 0f, 0f, cyan); fadeTitle(c, cx, h * 0.76f, cyan, ((t - 1200) / 500f).coerceIn(0f, 1f)); text.clearShadowLayer() }
+    }
+
+    /** Blockworld: blocks fall one by one and build the number. */
+    private fun drawBlocks(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float) {
+        fill.color = Color.rgb(53, 107, 49); c.drawRect(0f, h * 0.86f, w, h, fill)
+        fill.color = Color.rgb(95, 161, 79); c.drawRect(0f, h * 0.86f, w, h * 0.86f + 12 * d, fill)
+        val size = 26 * d
+        val list = cells(cx, h * 0.2f, size)
+        list.forEachIndexed { i, (x, y) ->
+            val k = ((t - i * 40f) / 500f).coerceIn(0f, 1f)
+            if (k <= 0f) return@forEachIndexed
+            val yy = y - (1 - k * k) * h
+            fill.color = Color.rgb(239, 68, 68); c.drawRect(x, yy, x + size - 2 * d, yy + size - 2 * d, fill)
+            fill.color = Color.rgb(185, 28, 28); c.drawRect(x + size - 7 * d, yy, x + size - 2 * d, yy + size - 2 * d, fill)
+            c.drawRect(x, yy + size - 7 * d, x + size - 2 * d, yy + size - 2 * d, fill)
+            fill.color = Color.rgb(248, 113, 113); c.drawRect(x, yy, x + size - 7 * d, yy + 5 * d, fill)
+        }
+        val done = list.size * 40f + 500f
+        if (t > done) fadeTitle(c, cx, h * 0.2f + 5 * size + 60 * d, Color.WHITE, ((t - done) / 500f).coerceIn(0f, 1f))
+    }
+
+    /** Fire Tower: the lookout's beacon sweeps across and lights the number. */
+    private fun drawBeacon(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
+        val lx = cx; val ly = h * 0.68f
+        val ang = Math.toRadians(-160.0 + 140.0 * (0.5 - 0.5 * cos(t / 1400.0 * PI)))
+        val len = h
+        val beam = Path().apply {
+            moveTo(lx, ly)
+            lineTo(lx + (cos(ang - 0.12) * len).toFloat(), ly + (sin(ang - 0.12) * len).toFloat())
+            lineTo(lx + (cos(ang + 0.12) * len).toFloat(), ly + (sin(ang + 0.12) * len).toFloat()); close()
+        }
+        fill.shader = LinearGradient(lx, ly, lx + (cos(ang) * len).toFloat(), ly + (sin(ang) * len).toFloat(), Color.argb(150, 255, 214, 120), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        c.drawPath(beam, fill); fill.shader = null
+        val tower = Path().apply { moveTo(lx - 10 * d, ly); lineTo(lx + 10 * d, ly); lineTo(lx + 24 * d, h * 0.92f); lineTo(lx - 24 * d, h * 0.92f); close() }
+        fill.color = Color.rgb(59, 47, 34); c.drawPath(tower, fill)
+        fill.color = Color.rgb(255, 214, 120)
+        fill.setShadowLayer(18 * d, 0f, 0f, Color.rgb(255, 176, 32)); c.drawRoundRect(RectF(lx - 14 * d, ly - 14 * d, lx + 14 * d, ly + 2 * d), 4 * d, 4 * d, fill); fill.clearShadowLayer()
+        // the number lights up as the beam passes over it
+        val lit = ((t - 600) / 500f).coerceIn(0f, 1f)
+        if (lit > 0) bigNumber(c, num, cx, cy, Color.argb((lit * 255).toInt(), 255, 245, 214), Color.rgb(255, 176, 32))
+        if (t > 1100) fadeTitle(c, cx, cy + 70 * d, Color.rgb(255, 214, 120), ((t - 1100) / 500f).coerceIn(0f, 1f))
+    }
+
+    /** 8-Bit: coins pop out of a ? block, a pixel score counts up. */
+    private fun drawCoins(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
+        val by = h * 0.6f; val bs = 60 * d
+        // stepped motion, like an old console
+        val step = (t / 80f).toInt() * 80f
+        for (i in 0 until 5) {
+            val ph = ((step - i * 150f) % 1000f) / 1000f
+            if (step < i * 150f) continue
+            val up = if (ph < 0.5f) ph * 2 else 2 - ph * 2
+            val x = cx + (i - 2) * 26 * d; val y = by - 20 * d - up * 130 * d
+            fill.color = Color.rgb(250, 204, 21); c.drawOval(RectF(x - 11 * d, y - 15 * d, x + 11 * d, y + 15 * d), fill)
+            stroke.color = Color.rgb(161, 98, 7); stroke.strokeWidth = 3 * d; c.drawOval(RectF(x - 11 * d, y - 15 * d, x + 11 * d, y + 15 * d), stroke)
+        }
+        val bump = if (step % 1000f < 160f) -8 * d else 0f
+        fill.color = Color.rgb(217, 119, 6); c.drawRect(cx - bs / 2, by + bump, cx + bs / 2, by + bs + bump, fill)
+        fill.color = Color.rgb(146, 64, 14); c.drawRect(cx + bs / 2 - 7 * d, by + bump, cx + bs / 2, by + bs + bump, fill); c.drawRect(cx - bs / 2, by + bs - 7 * d + bump, cx + bs / 2, by + bs + bump, fill)
+        text.textSize = 36 * d; text.color = Color.WHITE; c.drawText("?", cx, by + bs * 0.68f + bump, text)
+        val lime = Color.rgb(163, 230, 53)
+        text.textSize = 130 * d; text.typeface = Typeface.MONOSPACE; text.isFakeBoldText = true
+        text.color = Color.rgb(54, 83, 20); c.drawText(num, cx + 6 * d, cy + 6 * d, text)
+        text.color = lime; c.drawText(num, cx, cy, text); text.isFakeBoldText = false
+        val score = (min(1f, t / 1500f) * level * 420).toInt()
+        text.textSize = 18 * d; text.color = Color.rgb(250, 204, 21); c.drawText("SCORE " + "%06d".format(score), cx, cy + 110 * d, text)
+        text.typeface = theme.typeface ?: Typeface.DEFAULT_BOLD
+        if (t > 600) fadeTitle(c, cx, cy + 70 * d, Color.WHITE, ((t - 600) / 400f).coerceIn(0f, 1f))
+    }
+
+    /** Arctic: an aurora ripples, snow falls, the number frosts over. */
+    private fun drawAurora(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
+        val sh = sin(t / 900f) * 50 * d
+        fun blob(x: Float, y: Float, r: Float, col: Int) {
+            fill.shader = android.graphics.RadialGradient(x, y, r, col, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            c.drawCircle(x, y, r, fill); fill.shader = null
+        }
+        blob(w * 0.3f + sh, h * 0.14f, 220 * d, Color.argb(140, 52, 211, 153))
+        blob(w * 0.72f - sh, h * 0.1f, 200 * d, Color.argb(130, 129, 140, 248))
+        fill.color = Color.argb(220, 224, 242, 254)
+        for (i in 0 until 40) {
+            val x = drops[i * 3] * w + sin(t / 700f + i) * 10 * d
+            val y = ((drops[i * 3 + 1] * h + t * (0.05f + drops[i * 3 + 2] * 0.08f)) % h)
+            c.drawCircle(x, y, (1.5f + drops[i * 3 + 2] * 2.5f) * d, fill)
+        }
+        val k = ((t - 300) / 900f).coerceIn(0f, 1f)
+        if (k > 0) {
+            text.textSize = 130 * d
+            stroke.color = Color.rgb(125, 211, 252); stroke.strokeWidth = 3 * d
+            val sp = text.style; text.style = Paint.Style.STROKE; text.strokeWidth = 4 * d; text.color = Color.rgb(125, 211, 252)
+            c.drawText(num, cx, cy, text); text.style = sp
+            // frost fills it from the bottom up
+            c.save(); c.clipRect(0f, cy - 100 * d * k, w, cy + 30 * d)
+            bigNumber(c, num, cx, cy, Color.rgb(224, 242, 254), Color.rgb(125, 211, 252)); c.restore()
+        }
+        if (t > 1200) fadeTitle(c, cx, cy + 70 * d, Color.rgb(125, 211, 252), ((t - 1200) / 500f).coerceIn(0f, 1f))
+    }
+
+    /** Catch 'Em Trail (5, 15, 25…): binoculars sweep a landscape and stop on the number on a hilltop. */
+    private fun drawBinoculars(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
+        val lr = minOf(w * 0.31f, 118 * d); val lcY = h * 0.48f
+        val lens = Path().apply { addCircle(cx - lr * 0.6f, lcY, lr, Path.Direction.CW); addCircle(cx + lr * 0.6f, lcY, lr, Path.Direction.CW) }
+        val landW = w * 3f; val target = landW * 0.73f
+        val pan = ease(((t) / 2600f).coerceIn(0f, 1f)) * (target - cx)
+        val zoom = 1f + 0.6f * ease(((t - 3000) / 700f).coerceIn(0f, 1f))
+        c.save(); c.clipPath(lens)
+        c.scale(zoom, zoom, cx, lcY); c.translate(-pan, 0f)
+        val top = lcY - lr * 1.2f; val bottom = lcY + lr * 1.3f
+        fill.shader = LinearGradient(0f, top, 0f, lcY + 30 * d, Color.rgb(125, 211, 252), Color.rgb(224, 242, 254), Shader.TileMode.CLAMP)
+        c.drawRect(-w, top, landW + w, bottom, fill); fill.shader = null
+        val hill = Path().apply {
+            moveTo(-w, lcY + 70 * d)
+            var x = -w; while (x < landW + w) { quadTo(x + 90 * d, lcY + 10 * d + ((x / d).toInt() % 3) * 14 * d, x + 180 * d, lcY + 60 * d); x += 180 * d }
+            lineTo(landW + w, bottom); lineTo(-w, bottom); close()
+        }
+        fill.color = Color.rgb(134, 194, 122); c.drawPath(hill, fill)
+        fill.color = Color.rgb(77, 154, 74); c.drawRect(-w, lcY + 80 * d, landW + w, bottom, fill)
+        for (i in 0 until 12) {
+            val tx = i * landW / 12f + 30 * d; if (kotlin.math.abs(tx - target) < 70 * d) continue
+            fill.color = Color.rgb(91, 58, 30); c.drawRect(tx - 3 * d, lcY + 50 * d, tx + 3 * d, lcY + 66 * d, fill)
+            fill.color = Color.rgb(47, 125, 50); c.drawCircle(tx, lcY + 44 * d, 14 * d, fill)
+        }
+        // the find, on its own hill, right in the middle of the view when the sweep stops
+        fill.color = Color.rgb(134, 194, 122); c.drawCircle(target, lcY + 120 * d, 100 * d, fill)
+        fill.shader = android.graphics.RadialGradient(target, lcY, 70 * d, Color.rgb(253, 230, 138), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        c.drawCircle(target, lcY, 70 * d, fill); fill.shader = null
+        text.textSize = 56 * d; text.color = Color.rgb(67, 56, 202); c.drawText(num, target, lcY + 20 * d, text)
+        c.restore()
+        stroke.color = Color.rgb(51, 65, 85); stroke.strokeWidth = 6 * d
+        // the outer rim only (no lines across the middle)
+        c.save(); c.clipOutPathCompat(lens); c.drawPath(lens, stroke); c.restore()
+        text.textSize = 22 * d; text.color = Color.rgb(199, 210, 254)
+        c.drawText(L.t("Something on the hill…"), cx, lcY - lr - 30 * d, text)
+        if (t > 3500) {
+            val k = ((t - 3500) / 400f).coerceIn(0f, 1f)
+            c.save(); c.scale(k, k, cx, lcY + lr + 60 * d)
+            text.textSize = 26 * d; text.color = Color.WHITE; c.drawText(L.t("Rare find · Level $level").uppercase(), cx, lcY + lr + 50 * d, text)
+            text.textSize = 22 * d; text.color = Color.rgb(129, 140, 248); c.drawText(L.t(title).uppercase(), cx, lcY + lr + 84 * d, text)
+            c.restore()
+        }
+    }
+
+    private fun Canvas.clipOutPathCompat(p: Path) {
+        if (android.os.Build.VERSION.SDK_INT >= 26) clipOutPath(p) else @Suppress("DEPRECATION") clipPath(p, android.graphics.Region.Op.DIFFERENCE)
+    }
+
+    /** Catch 'Em Trail (10, 20, 30…): a night by the campfire, sparks rise and gather into the number. */
+    private fun drawCampfire(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float) {
+        fill.shader = LinearGradient(0f, 0f, 0f, h, Color.rgb(10, 16, 48), Color.rgb(16, 26, 58), Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w, h, fill); fill.shader = null
+        for (i in 0 until 40) {
+            val tw = 0.6f + 0.6f * (0.5f + 0.5f * sin(t / 500f + i * 1.7f))
+            fill.color = Color.WHITE; c.drawCircle(drops[i * 3] * w, drops[i * 3 + 1] * h * 0.55f, 1.3f * d * tw, fill)
+        }
+        fill.color = Color.rgb(20, 48, 31); c.drawRect(0f, h * 0.82f, w, h, fill)
+        val tent = Path().apply { moveTo(w * 0.1f, h * 0.84f); lineTo(w * 0.28f, h * 0.71f); lineTo(w * 0.46f, h * 0.84f); close() }
+        fill.color = Color.rgb(59, 91, 219); c.drawPath(tent, fill)
+        val door = Path().apply { moveTo(w * 0.24f, h * 0.84f); lineTo(w * 0.28f, h * 0.76f); lineTo(w * 0.32f, h * 0.84f); close() }
+        fill.color = Color.rgb(30, 42, 90); c.drawPath(door, fill)
+        val fx = w * 0.62f; val fy = h * 0.83f
+        fill.color = Color.rgb(107, 68, 35)
+        c.save(); c.rotate(12f, fx, fy); c.drawRoundRect(RectF(fx - 30 * d, fy - 4 * d, fx + 30 * d, fy + 6 * d), 5 * d, 5 * d, fill); c.restore()
+        c.save(); c.rotate(-12f, fx, fy); c.drawRoundRect(RectF(fx - 30 * d, fy - 4 * d, fx + 30 * d, fy + 6 * d), 5 * d, 5 * d, fill); c.restore()
+        val fl = 1f + 0.15f * sin(t / 60f)
+        fill.shader = android.graphics.RadialGradient(fx, fy - 20 * d, 40 * d, Color.argb(90, 251, 146, 60), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        c.drawCircle(fx, fy - 20 * d, 80 * d, fill); fill.shader = null
+        val flame = Path().apply { moveTo(fx - 18 * d, fy); quadTo(fx - 20 * d, fy - 30 * d * fl, fx, fy - 56 * d * fl); quadTo(fx + 20 * d, fy - 30 * d * fl, fx + 18 * d, fy); close() }
+        fill.color = Color.rgb(249, 115, 22); c.drawPath(flame, fill)
+        val inner = Path().apply { moveTo(fx - 9 * d, fy); quadTo(fx - 10 * d, fy - 18 * d * fl, fx, fy - 32 * d * fl); quadTo(fx + 10 * d, fy - 18 * d * fl, fx + 9 * d, fy); close() }
+        fill.color = Color.rgb(253, 224, 71); c.drawPath(inner, fill)
+        // sparks: up from the fire, a little wander, then into place as the number
+        val size = 24 * d
+        val spots = cells(cx, h * 0.2f, size)
+        spots.forEachIndexed { i, (sx, sy) ->
+            val k = ((t - i * 45f) / 1800f).coerceIn(0f, 1f)
+            if (k <= 0f) return@forEachIndexed
+            val e = ease(k)
+            val wob = sin(k * PI.toFloat()) * (if (i % 2 == 0) 40 else -40) * d
+            val x = fx + (sx + size / 2 - fx) * e + wob
+            val y = fy - 40 * d + (sy + size / 2 - (fy - 40 * d)) * e
+            val r = (4 + 5 * e) * d
+            fill.shader = android.graphics.RadialGradient(x, y, r * 1.6f, Color.rgb(255, 247, 204), Color.argb(0, 251, 146, 60), Shader.TileMode.CLAMP)
+            c.drawCircle(x, y, r * 1.6f, fill); fill.shader = null
+        }
+        val done = spots.size * 45f + 1800f
+        if (t > done) {
+            val k = ((t - done) / 500f).coerceIn(0f, 1f)
+            text.textSize = 26 * d; text.color = Color.WHITE; text.alpha = (k * 255).toInt()
+            c.drawText(L.t(title).uppercase() + " · " + L.t("Level $level").uppercase(), cx, h * 0.2f + 5 * size + 50 * d, text)
+            text.textSize = 15 * d; text.color = Color.rgb(254, 215, 170); text.alpha = (k * 255).toInt()
+            c.drawText(L.t("A night under the stars"), cx, h * 0.2f + 5 * size + 78 * d, text); text.alpha = 255
+        }
     }
 }
