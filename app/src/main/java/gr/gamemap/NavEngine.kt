@@ -268,6 +268,11 @@ object NavEngine {
     private val io = Executors.newSingleThreadExecutor()
     /** The slow background work (traffic re-timing, faster-route search): its own line. */
     private val bg = Executors.newSingleThreadExecutor(Bg.factory("nav-bg"))
+    /** The phone's router, ahead of time: warming up, and a new route at the first sign of leaving. */
+    private val spec = Executors.newSingleThreadExecutor(Bg.factory("nav-spec"))
+    @Volatile private var specBusy = false
+    /** A route worked out at the first sign of leaving: (from where, when, the route). */
+    @Volatile private var specRoute: Triple<LatLng, Long, RouteOption>? = null
     @Volatile private var routeSeq = 0
     private val timing = Bg.pool("timing", 3)
     private val main = Handler(Looper.getMainLooper())
@@ -458,6 +463,8 @@ object NavEngine {
         Convoy.startedDriving()
         estimating = false; lastRealFixAt = 0; tollAhead = null; tollSaid = null
         main.removeCallbacks(tunnel); main.postDelayed(tunnel, 1000)
+        // the phone's road file opened (and the roads around here read) now, not at the first reroute
+        if (OfflineRouter.present) spec.execute { try { val p = LocationTracker.position; if (p != null) OfflineRouter.route(p, place.goal) else OfflineRouter.ready() } catch (_: Throwable) {} }
         resumePlace = place
         saveResume()
         changed.fire()
@@ -689,7 +696,11 @@ object NavEngine {
             var phoneRoute = false
             val t0 = System.currentTimeMillis()
             if (reroute && !wantsAlternatives && OfflineRouter.present) {
-                val off = try { OfflineRouter.route(here, dest, h, via) } catch (e: Throwable) { null }
+                // worked out a moment ago at the first sign of leaving, from close by: use it as it is
+                val ready = specRoute?.takeIf { (at, t, _) -> System.currentTimeMillis() - t < 4_000 && Geo.distance(at, here) < 45 }?.third
+                specRoute = null
+                if (ready != null) CrashLog.note("reroute: ready from the first sign")
+                val off = ready ?: try { OfflineRouter.route(here, dest, h, via) } catch (e: Throwable) { null }
                 if (off != null && !pullsBack(off, h, current)) {
                     phoneRoute = true
                     try { Tolls.annotate(listOf(off)) } catch (_: Exception) {}
@@ -914,7 +925,7 @@ object NavEngine {
         val far = bestD > maxOf(30.0, accuracy * 1.2)
         val moving = l.hasBearing() && l.speed > 3.5f
         val segBearing = Geo.bearing(route[best], route[best + 1])
-        val turnedOff = moving && bestD > maxOf(12.0, accuracy * 0.8) &&
+        val turnedOff = moving && bestD > maxOf(if (accuracy <= 10) 8.0 else 12.0, accuracy * 0.8) &&
             kotlin.math.abs(Geo.angleDiff(l.bearing, segBearing)) > 50 && !nearRouteTurn(best, l.bearing)
         val wrongWay = moving && bestD < 30 && kotlin.math.abs(Geo.angleDiff(l.bearing, segBearing)) > 120
         // clearly off (100 m, or 50 m with a sharp fix): straight away, without waiting for a second fix
@@ -923,6 +934,15 @@ object NavEngine {
         // on that first fix (about a second after the turn) instead of waiting for a second one
         val sure = clearly || (turnedOff && accuracy <= 20) || (wrongWay && accuracy <= 20)
         offRouteCount = if (far || turnedOff || wrongWay) offRouteCount + (if (sure) 2 else 1) else 0
+        // the first sign of leaving: the phone starts on a new route already, so it's ready (or
+        // nearly) if the next fix confirms it; thrown away if the car comes back
+        if (offRouteCount == 1 && !specBusy && OfflineRouter.present) {
+            val dest = destination; val from = LatLng(l.latitude, l.longitude); val brg = l.bearing; val via = stops.map { it.pos }
+            if (dest != null) { specBusy = true; spec.execute {
+                try { OfflineRouter.route(from, dest, brg, via)?.let { specRoute = Triple(from, System.currentTimeMillis(), it) } } catch (_: Throwable) {}
+                specBusy = false
+            } }
+        }
         if (offRouteCount >= 2 && !loading && System.currentTimeMillis() - lastRouteAt > 3_000) {
             CrashLog.note("off route: ${bestD.toInt()} m, ${if (turnedOff) "other street" else if (wrongWay) "wrong way" else "far"}")
             offer?.let { declined += it.option to System.currentTimeMillis() } // not offered again right after
