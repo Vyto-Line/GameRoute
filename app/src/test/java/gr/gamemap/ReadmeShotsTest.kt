@@ -57,6 +57,9 @@ class ReadmeShotsTest {
                 .put(JSONObject().put("fid", "f4kostas").put("n", "Kostas").put("s", "c2VjcmV0NA").put("since", t0)).toString())
             .putString("requests", JSONArray().put(JSONObject().put("fid", "r1eleni").put("n", "Eleni").put("s", "c2VjcmV0NQ").put("at", t0).put("nonce", "n1")).toString())
             .apply()
+        // no update check (it finds the real newest build) and no level celebration over the pictures
+        RuntimeEnvironment.getApplication().getSharedPreferences("gamemap", Context.MODE_PRIVATE).edit()
+            .putLong("lastUpdateCheck", System.currentTimeMillis()).putInt("levelCelebrated", 50).apply()
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         val root = activity.window.decorView
         val looper = shadowOf(Looper.getMainLooper())
