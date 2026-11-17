@@ -588,7 +588,7 @@ object L {
         "Convoy code" to "Κωδικός κομβόι", "Copy" to "Αντιγραφή", "Code copied" to "Ο κωδικός αντιγράφηκε", "🔗 Invite" to "🔗 Πρόσκληση",
         "Invite to the convoy" to "Πρόσκληση στο κομβόι", "Leave" to "Αποχώρηση", "Leave convoy" to "Αποχώρηση από το κομβόι",
         "Leave the convoy? The others will stop seeing you." to "Αποχώρηση από το κομβόι; Οι άλλοι δεν θα σας βλέπουν πια.",
-        "Stay" to "Παραμονή", "Invited ✓" to "Προσκλήθηκε ✓", "Add friends on your phone: You › Friends" to "Προσθέστε φίλους από το κινητό: Εσείς › Φίλοι",
+        "Stay" to "Παραμονή", "Since build 100" to "Μετά την έκδοση 100", "Build 100" to "Έκδοση 100", "Earlier builds" to "Παλαιότερες εκδόσεις", "Invited ✓" to "Προσκλήθηκε ✓", "Add friends on your phone: You › Friends" to "Προσθέστε φίλους από το κινητό: Εσείς › Φίλοι",
         "Nobody else yet: invite friends from Friends" to "Κανείς άλλος ακόμα: προσκαλέστε από τους Φίλους", "New route…" to "Νέα διαδρομή…", "The road you're on (under the arrow)" to "Ο δρόμος που βρίσκεστε (κάτω από το βέλος)", "The others will stop seeing you." to "Οι άλλοι δεν θα σας βλέπουν πια.", "Driving now" to "Οδηγεί τώρα", "In a convoy" to "Σε κομβόι", "Driving in a convoy" to "Οδηγεί σε κομβόι",
         "Last seen just now" to "Τελευταία φορά μόλις τώρα", "Leave the convoy" to "Αποχώρηση από το κομβόι", "Leave the convoy?" to "Αποχώρηση από το κομβόι;",
         "The others carry on without you" to "Οι άλλοι συνεχίζουν χωρίς εσάς", "The convoy's destination" to "Ο προορισμός του κομβόι",

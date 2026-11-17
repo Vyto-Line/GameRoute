@@ -51,6 +51,16 @@ class DialogsTest {
         log.append("after back: open=${activity.popupsForTest().size}\n")
         assertTrue(activity.popupsForTest().isEmpty())
         assertTrue("no Android dialog was used", ShadowDialog.getShownDialogs().isEmpty())
+        // What's new: build 100 and every earlier build
+        MainActivity::class.java.getDeclaredField("settingsPage").apply { isAccessible = true }.set(activity, "whatsnew")
+        MainActivity::class.java.getDeclaredMethod("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "settings")
+        MainActivity::class.java.getDeclaredField("settingsPage").apply { isAccessible = true }.set(activity, "whatsnew")
+        activity.refreshForTest(); shot("whatsnew_top")
+        fun texts(v: android.view.View): List<String> = if (v is android.widget.TextView) listOf(v.text.toString()) else (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { texts(g.getChildAt(it)) } } ?: emptyList()
+        val host = MainActivity::class.java.getDeclaredField("sheetHost").apply { isAccessible = true }.get(activity) as android.view.View
+        val all = texts(host)
+        log.append("what's new: ${all.size} texts, has build 3: ${all.any { it.startsWith("First version") }}, has 99: ${"99" in all}\n")
+        assertTrue("older builds listed", all.any { it.startsWith("First version") } && "99" in all)
         File(out, "popups.txt").writeText(log.toString())
     }
 }

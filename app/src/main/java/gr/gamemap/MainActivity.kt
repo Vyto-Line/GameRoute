@@ -1577,6 +1577,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         /** A coloured dot before each choice (Your status: green, red, grey). */
         var dots: IntArray? = null
         private var shade: FrameLayout? = null
+        private var softBefore: Int? = null
         val isShowing get() = shade != null
 
         /** The red button: for things that can't be undone. */
@@ -1631,7 +1632,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             addView(label(head, 16.5f, bold = on || more.isNotEmpty()).apply { setTextColor(ink) })
                             if (more.isNotEmpty()) addView(label(more, 14f).apply { setTextColor(dim()); setLineSpacing(0f, 1.1f); setPadding(0, (2 * d).toInt(), 0, 0) })
                         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                        if (on) addView(label("✓", 17f, bold = true).apply { setTextColor(readable(accent)) })
+                        // the chosen one: a ✓ in an accent badge (drawn, so no font or icon swap can hide it)
+                        if (on) addView(object : View(context) {
+                            val pf = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                            override fun onDraw(cv: android.graphics.Canvas) {
+                                pf.style = android.graphics.Paint.Style.FILL; pf.color = accent
+                                cv.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 7 * d, 7 * d, pf)
+                                pf.style = android.graphics.Paint.Style.STROKE; pf.strokeWidth = 2.6f * d; pf.color = onAccent(accent)
+                                pf.strokeCap = android.graphics.Paint.Cap.ROUND; pf.strokeJoin = android.graphics.Paint.Join.ROUND
+                                val w = width.toFloat(); val h = height.toFloat()
+                                cv.drawPath(android.graphics.Path().apply { moveTo(w * 0.26f, h * 0.53f); lineTo(w * 0.44f, h * 0.70f); lineTo(w * 0.75f, h * 0.33f) }, pf)
+                            }
+                        }, LinearLayout.LayoutParams((26 * d).toInt(), (26 * d).toInt()).apply { marginStart = (10 * d).toInt() })
                         setOnClickListener { _ ->
                             if (single) checked = i
                             itemsListener?.onClick(this@GameDialog, i)
@@ -1663,14 +1675,23 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
             })
             val sh = FrameLayout(this@MainActivity).apply {
-                setBackgroundColor(Color.argb(120, 0, 0, 0))
+                setBackgroundColor(Color.argb(165, 0, 0, 0))
                 elevation = 60 * d
                 setOnClickListener { if (cancelable) cancel() }
                 addView(panelV, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
             }
             L.translateTree(panelV); Icons.applyTree(panelV)
             panelV.viewTreeObserver.addOnPreDrawListener { L.translateTree(panelV); Icons.applyTree(panelV); true }
+            // typing in it: the sheet rides up above the keyboard instead of hiding under it
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(sh) { _, ins ->
+                val ime = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
+                val lift = (ime - insets.bottom).coerceAtLeast(0)
+                (panelV.layoutParams as? FrameLayout.LayoutParams)?.let { lp -> if (lp.bottomMargin != lift) { lp.bottomMargin = lift; panelV.layoutParams = lp } }
+                ins
+            }
+            if (view != null) { softBefore = window.attributes.softInputMode; window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE) }
             root.addView(sh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            androidx.core.view.ViewCompat.requestApplyInsets(sh)
             shade = sh; popups += this
             sh.alpha = 0f; sh.animate().alpha(1f).setDuration(animMs(150)).start()
             panelV.translationY = 80 * d
@@ -1682,6 +1703,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         override fun dismiss() {
             val sh = shade ?: return
             shade = null; popups -= this
+            softBefore?.let { window.setSoftInputMode(it); softBefore = null }
             (sh.parent as? ViewGroup)?.removeView(sh)
             dismissListener?.onDismiss(this)
         }
@@ -2832,6 +2854,19 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (page == "whatsnew") {
             // What's new: a list, back to Advanced (no pop-up after updates; the NEW tag is enough)
             sheetHost.addView(sheetHeader("What's new", "Advanced" to { settingsPage = "advanced"; refreshChrome() }))
+            fun heading(t: String) = body.addView(label(L.t(t).uppercase(), 12.5f, bold = true).apply {
+                setTextColor(dim(150)); letterSpacing = 0.08f; setPadding((12 * d).toInt(), (16 * d).toInt(), 0, (6 * d).toInt())
+            })
+            fun line(b: String, en: String, el: String) = body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                val q = (12 * d).toInt(); setPadding(q, q / 3, q, q / 3)
+                addView(label(b, 14f, bold = true).apply { setTextColor(readable(accent)) }, LinearLayout.LayoutParams((44 * d).toInt(), WRAP_CONTENT))
+                addView(label(if (L.greek) el else en, 14f).apply { setTextColor(ink) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            // after 100: one line each, then 100 in full, then every earlier build in one line (no icons)
+            val newer = History.builds.filter { (it.first.substringBefore('.').toIntOrNull() ?: 0) > 100 }
+            if (newer.isNotEmpty()) { heading("Since build 100"); newer.forEach { line(it.first, it.second, it.third) } }
+            heading("Build 100")
             for ((ic, t, sub) in WHATS_NEW) body.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                 val q = (12 * d).toInt(); setPadding(q, q * 3 / 4, q, q * 3 / 4)
@@ -2842,6 +2877,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     addView(label(L.t(sub), 13.5f).apply { setTextColor(dim()) })
                 }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            heading("Earlier builds")
+            History.builds.filter { (it.first.substringBefore('.').toIntOrNull() ?: 0) < 100 }.forEach { line(it.first, it.second, it.third) }
             prefs().edit().putBoolean("seenWhatsNew100", true).apply()
             sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             body.post { (body.parent as? View)?.let { sv -> if (body.height > maxH) { sv.layoutParams.height = maxH; sv.requestLayout() } } }
