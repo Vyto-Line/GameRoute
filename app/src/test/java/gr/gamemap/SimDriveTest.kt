@@ -45,6 +45,17 @@ class SimDriveTest {
                 }
                 prev = p; if (s == 19) lastAlong = NavEngine.along
             }
+            // fast forward: 4× the road's speed
+            Dev.fastForward = 4
+            val a0 = NavEngine.along
+            Dev.stopSim(); NavEngine.debugDrive(Place("Museum", "", r.points.last()), r, 0)
+            LocationTracker.onLocationChanged(Location("gps").apply { latitude = start.lat; longitude = start.lon; accuracy = 5f; speed = 0f; time = System.currentTimeMillis() })
+            Dev.simulate(activity, null, startNav = false)
+            repeat(15) { looper.idleFor(Duration.ofMillis(1000)) }
+            val fast = (LocationTracker.speedMps * 3.6).toInt()
+            log.append("fast forward 4x: ${fast} km/h after 15 s, along=${NavEngine.along.toInt()} (was $a0)\n")
+            Dev.fastForward = 1
+            assertTrue("fast forward goes past the road's speed", fast > 80)
             log.append("tunnel-mode seconds=$est, along at 19 s=${lastAlong.toInt()}, biggest jump after leaving=${maxBack.toInt()} m\n")
             assertTrue("simulated fixes count as GPS (no tunnel mode)", est == 0)
             assertTrue("it drives along the route", lastAlong > 100)

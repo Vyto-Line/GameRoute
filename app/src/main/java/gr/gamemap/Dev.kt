@@ -26,6 +26,8 @@ object Dev {
     @Volatile var simTrip = false
     private var pos: LatLng? = null
     private var bearing = 0f
+    /** Fast forward: 1 = the road's speed; 2, 4, 8 = that many times faster, past any limit. */
+    @Volatile var fastForward = 1
     /** The simulated car's speed now (m/s): eases towards the road's speed. */
     private var v = 0.0
     private var leaveUntil = 0L
@@ -93,7 +95,8 @@ object Dev {
             var want = roadSpeed(p)
             val turn = NavEngine.currentStep?.direction.orEmpty()
             if (NavEngine.distanceToNext in 0.0..70.0 && (turn.contains("left") || turn.contains("right") || turn == "uturn")) want = minOf(want, 8.0)
-            v += (want - v).coerceIn(-3.0, 2.5)
+            want *= fastForward
+            v += (want - v).coerceIn(-3.0 * fastForward, 2.5 * fastForward)
             val route = NavEngine.route
             val off = route.size < 2 || nearestDistance(p, route) > 25
             val next = if (now < leaveUntil || off) {
@@ -199,17 +202,28 @@ object Dev {
         private set
     private var convoyT = 0
 
-    fun startTestConvoy() {
+    /** Did the test convoy start the simulated drive (so stopping it stops that too)? */
+    private var convoyDrives = false
+
+    /** The convoy and a simulated drive with it: you move too (to where you're already going, else Nafplio). */
+    fun startTestConvoy(ctx: Context) {
         val here = LocationTracker.position ?: LatLng(37.9838, 23.7275)
         if (Convoy.active) Convoy.leave(quiet = true)
-        Convoy.debugStart(Place("Nafplio (test)", "", LatLng(37.5673, 22.8016)), code = "test" + (100000..999999).random())
+        val dest = NavEngine.destination?.takeIf { NavEngine.active && !NavEngine.arrived }?.let { Place(NavEngine.destinationName, "", it) }
+            ?: Place("Nafplio (test)", "", LatLng(37.5673, 22.8016))
+        Convoy.debugStart(dest, code = "test" + (100000..999999).random())
+        convoyDrives = false
+        if (!simActive) { simulate(ctx, dest, startNav = !(NavEngine.active && !NavEngine.arrived)); convoyDrives = true }
         convoyOn = true; convoyT = 0; trail.clear()
         gaps[0] = 180.0; gaps[1] = 380.0; gaps[2] = -140.0; lastMe = null
         main.removeCallbacks(convoyTick); main.post(convoyTick)
         CrashLog.note("dev: test convoy around ${here.lat.toFloat()},${here.lon.toFloat()}")
     }
 
-    fun stopTestConvoy() { convoyOn = false; main.removeCallbacks(convoyTick); if (Convoy.active) Convoy.leave(quiet = true) }
+    fun stopTestConvoy() {
+        convoyOn = false; main.removeCallbacks(convoyTick); if (Convoy.active) Convoy.leave(quiet = true)
+        if (convoyDrives) { convoyDrives = false; stopSim() }
+    }
 
     /** Where each made-up driver is: metres ahead of you along the road (minus: behind). */
     private val gaps = doubleArrayOf(180.0, 380.0, -140.0)

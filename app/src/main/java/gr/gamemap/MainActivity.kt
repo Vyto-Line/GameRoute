@@ -2983,6 +2983,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     Dev.simulate(this, Places.saved("home")); closeSheet()
                 },
                 settingRow("While simulating…", "Leave the route, weak GPS, tunnel, no internet, offer, arrive") { devDriveTools() },
+                settingRow("Fast forward", if (Dev.fastForward == 1) "Off · the road's speed" else "${Dev.fastForward}× faster · past the limits") { chooseFastForward() },
                 // ---- friends and convoy, no friends needed
                 settingRow("Add 4 test friends", "Driving, in a convoy, busy, offline · this phone only") {
                     Dev.addTestFriends(); Toast.makeText(this, "Test friends added", Toast.LENGTH_SHORT).show()
@@ -2990,8 +2991,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Send me a test invite", "A convoy invite from Nikos (test)") {
                     Dev.testInvite(); Toast.makeText(this, "Invite on its way", Toast.LENGTH_SHORT).show()
                 },
-                settingRow("Start a test convoy", if (Dev.convoyOn) "On · tap to stop" else "3 made-up drivers around you, with quick messages") {
-                    if (Dev.convoyOn) Dev.stopTestConvoy() else Dev.startTestConvoy(); showSettings()
+                settingRow("Start a test convoy", if (Dev.convoyOn) "On · tap to stop" else "You and 3 made-up drivers drive together, with quick messages") {
+                    if (Dev.convoyOn) Dev.stopTestConvoy() else { Dev.startTestConvoy(this); closeSheet(); return@settingRow }; showSettings()
                 },
                 settingRow("Remove test friends", "And their invites") {
                     Dev.removeTestFriends(); Toast.makeText(this, "Removed", Toast.LENGTH_SHORT).show()
@@ -3174,14 +3175,25 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Test builds: the drive simulator's tricks. */
     private fun devDriveTools() {
         if (!Dev.simActive) { Toast.makeText(this, "Start a simulated drive first", Toast.LENGTH_SHORT).show(); return }
-        val opts = arrayOf("Leave the route here", "Weak GPS (30 s)", "Tunnel: no GPS (30 s)", "No internet (30 s)", "Show a faster-route offer", "Arrive now", "Stop the simulation")
+        val opts = arrayOf("Leave the route here", "Weak GPS (30 s)", "Tunnel: no GPS (30 s)", "No internet (30 s)", "Show a faster-route offer", "Arrive now", "Stop the simulation", "Fast forward…")
         GameBuilder(this@MainActivity).setTitle("While simulating").setItems(opts) { _, i ->
             when (i) {
                 0 -> Dev.leaveRoute(); 1 -> Dev.weakGps(); 2 -> Dev.tunnel(); 3 -> Dev.noSignal()
                 4 -> Dev.showOffer(); 5 -> Dev.arriveNow(); 6 -> Dev.stopSim()
+                7 -> { chooseFastForward(); return@setItems }
             }
             closeSheet()
         }.showT()
+    }
+
+    /** Test builds: how much faster than the road the simulated drive goes. */
+    private fun chooseFastForward() {
+        val opts = listOf(1, 2, 4, 8)
+        GameBuilder(this@MainActivity).setTitle("Fast forward").setMessage("The simulated drive (and the test convoy) go this many times faster than the road allows. The voice may skip some turns at 8×.")
+            .setItems(opts.map { if (it == 1) "Off · the road's speed" else "$it× faster" }.toTypedArray()) { _, i ->
+                Dev.fastForward = opts[i]
+                if (sheetKind.isNotEmpty()) showSettings()
+            }.showT()
     }
 
     /** An XP tool, then its celebration straight away (over the Developer page, which stays open). */
