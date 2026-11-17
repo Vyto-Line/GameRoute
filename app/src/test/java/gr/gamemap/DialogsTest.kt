@@ -67,7 +67,7 @@ class DialogsTest {
         MainActivity::class.java.getDeclaredMethod("closeSheet").apply { isAccessible = true }.invoke(activity)
         Perf.animations = Perf.FULL
         Explorer.addXp(1000 - Explorer.xp + 10)
-        activity.getSharedPreferences("gamemap", android.content.Context.MODE_PRIVATE).edit().putInt("celebratedLevel", 4).commit()
+        activity.getSharedPreferences("gamemap", android.content.Context.MODE_PRIVATE).edit().putInt("levelCelebrated", 4).commit()
         activity.refreshForTest(); looper.idle()
         fun find(v: android.view.View): Milestone? = if (v is Milestone) v else (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
         val ms = find(root)
@@ -77,6 +77,9 @@ class DialogsTest {
         repeat(60) { looper.idleFor(java.time.Duration.ofMillis(100)); root.draw(Canvas(Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888))) }
         log.append("after 6 s: celebration still there=${find(root) != null}\n")
         assertTrue("the celebration ends", find(root) == null)
+        val seen = activity.getSharedPreferences("gamemap", android.content.Context.MODE_PRIVATE).getInt("levelCelebrated", 0)
+        log.append("counted as celebrated: $seen\n")
+        assertTrue("counted only after it played", seen == 5)
         File(out, "popups.txt").writeText(log.toString())
     }
 }

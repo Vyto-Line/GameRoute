@@ -5111,27 +5111,36 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** The highest level already celebrated (remembered, so a level-up is never missed nor shown twice). */
     private fun celebratedLevel(): Int {
         val p = prefs()
-        if (!p.contains("celebratedLevel")) p.edit().putInt("celebratedLevel", (Explorer.level - 1).coerceAtLeast(1)).apply()
-        return p.getInt("celebratedLevel", Explorer.level)
+        // (a new name: a test build marked a celebration as seen before it had played to the end)
+        if (!p.contains("levelCelebrated")) p.edit().putInt("levelCelebrated", (Explorer.level - 1).coerceAtLeast(1)).apply()
+        return p.getInt("levelCelebrated", Explorer.level)
     }
 
     private fun showLevelUp(from: Int) {
         val to = Explorer.level
         if (to <= from || isFinishing) return
-        if (to <= celebratedLevel()) return
-        prefs().edit().putInt("celebratedLevel", to).apply()
+        if (to <= celebratedLevel() || celebrating) return
+        celebrating = true
         val milestone = (from + 1..to).lastOrNull { it % 5 == 0 }
         if (milestone != null && Perf.anim == Perf.FULL) {
             val host = window.decorView as ViewGroup
             lateinit var view: Milestone
             view = Milestone(this, milestone, Xp.title(theme, milestone), theme) {
-                host.post { (view.parent as? ViewGroup)?.removeView(view); showLevelUpCard(from) }
+                host.post { (view.parent as? ViewGroup)?.removeView(view); levelSeen(milestone.coerceAtLeast(to)); showLevelUpCard(from) }
             }
             view.elevation = 60 * d
             host.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             return
         }
+        levelSeen(to)
         showLevelUpCard(from)
+    }
+
+    /** Only now counted as celebrated: once it has really been shown (not when it starts). */
+    private var celebrating = false
+    private fun levelSeen(level: Int) {
+        celebrating = false
+        prefs().edit().putInt("levelCelebrated", maxOf(level, prefs().getInt("levelCelebrated", 0))).apply()
     }
 
     /** For tests: the celebration for [level], drawn at [ms]. */
