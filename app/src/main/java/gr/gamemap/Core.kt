@@ -437,6 +437,8 @@ object MapState {
     }
 
     private fun prefs() = appContext.getSharedPreferences("gamemap", Context.MODE_PRIVATE)
+    /** The settings store, once the app has started (null in a bare test). */
+    fun prefsOrNull() = if (::appContext.isInitialized) prefs() else null
     internal fun saveZoom(key: String, z: Double) {
         if (::appContext.isInitialized) prefs().edit().putFloat(key, z.toFloat()).apply()
     }

@@ -2878,6 +2878,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 switchRow("Car: dark map when headlights are on", MapState.followHeadlights) { MapState.followHeadlights = it },
                 switchRow("Places on the map (fuel, parking, food…)", MapState.showPlaces) { MapState.showPlaces = it },
                 switchRow("Show traffic (phone and car)", Traffic.showLayer) { Traffic.showLayer = it; MapState.changed.fire() },
+                switchRow("The road you're on (under the arrow)", NavEngine.showRoadName) { NavEngine.showRoadName = it },
                 settingRow("Offline maps", Offline.areas().let { a -> if (a.isEmpty()) "Regions, Wi-Fi only, updates" else "${a.size} · ${Offline.size(a.sumOf { it.bytes })}" }) { openSheet("offline") },
             )
             "nav" -> listOf(

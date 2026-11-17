@@ -450,7 +450,7 @@ object NavEngine {
         destinationName = place.name
         arrived = false
         error = null
-        offer = null; declined.clear()
+        offer = null; declined.clear(); lastOfferAt = 0L
         trafficRatio = 1.0; trafficDelaySeconds = 0; trafficAt = 0
         current = null; nextStep = -1
         MapState.recenter()
@@ -494,8 +494,14 @@ object NavEngine {
         }
         val p = LocationTracker.position ?: return ""
         if (LocationTracker.speedMps < 2f && !active) return ""
-        return RoadMatch.roadName(p, LocationTracker.heading).orEmpty()
+        // the map's own name for the street (in Greek letters there): in Latin letters in English
+        return Names.shown(RoadMatch.roadName(p, LocationTracker.heading).orEmpty())
     }
+
+    /** Settings › Map › "The road you're on": the name under the arrow, on or off. */
+    var showRoadName: Boolean
+        get() = MapState.prefsOrNull()?.getBoolean("roadName", true) ?: true
+        set(v) { MapState.prefsOrNull()?.edit()?.putBoolean("roadName", v)?.apply(); MapState.changed.fire() }
 
     /** The point at [dist] metres along this route. */
     fun routePointAt(dist: Double): LatLng? {
@@ -648,8 +654,13 @@ object NavEngine {
         return false
     }
 
+    /** The route being worked out is a new one after leaving the old (the banner says "New route…"). */
+    @Volatile var rerouting = false
+        private set
+
     private fun fetchRoute(reroute: Boolean = false) {
         CrashLog.note(if (reroute) "reroute" else "fetch route")
+        rerouting = reroute
         val dest = destination ?: return
         val from = LocationTracker.position
         if (from == null) {
@@ -887,8 +898,13 @@ object NavEngine {
         val wrongWay = moving && bestD < 30 && kotlin.math.abs(Geo.angleDiff(l.bearing, segBearing)) > 120
         // clearly off (100 m, or 50 m with a sharp fix): straight away, without waiting for a second fix
         val clearly = bestD > 100 || (bestD > 50 && accuracy < 20)
-        offRouteCount = if (far || turnedOff || wrongWay) offRouteCount + (if (clearly) 2 else 1) else 0
-        if (offRouteCount >= 2 && !loading && System.currentTimeMillis() - lastRouteAt > 4_000) {
+        // a sharp fix heading down another street is enough on its own: the new route is asked for
+        // on that first fix (about a second after the turn) instead of waiting for a second one
+        val sure = clearly || (turnedOff && accuracy <= 20) || (wrongWay && accuracy <= 20)
+        offRouteCount = if (far || turnedOff || wrongWay) offRouteCount + (if (sure) 2 else 1) else 0
+        if (offRouteCount >= 2 && !loading && System.currentTimeMillis() - lastRouteAt > 3_000) {
+            CrashLog.note("off route: ${bestD.toInt()} m, ${if (turnedOff) "other street" else if (wrongWay) "wrong way" else "far"}")
+            offer?.let { declined += it.option to System.currentTimeMillis() } // not offered again right after
             offRouteCount = 0
             offer = null
             fetchRoute(reroute = true)
@@ -941,7 +957,16 @@ object NavEngine {
         }
     }
 
+    /** One faster-route message at a time, and at most one every 5 minutes. */
+    private var lastOfferAt = 0L
+
     private fun showOffer(o: Offer) {
+        val now = System.currentTimeMillis()
+        if (now - lastOfferAt < 5 * 60_000) return
+        // already offered (and taken or let go) in the last 15 minutes: not again
+        if (declined.any { now - it.second < 15 * 60_000 && it.first.similarTo(o.option) }) return
+        lastOfferAt = now
+        declined += o.option to now
         offer = o
         Voice.say(Phrases.faster(o.savingSeconds, Voice.lang))
         changed.fire()
@@ -956,6 +981,8 @@ object NavEngine {
         tripSaved += o.savingSeconds
         tripBonus += 10
         Voice.say(Phrases.switched(Voice.lang))
+        // the road we left isn't offered back as "faster" a minute later
+        current?.let { declined += it to System.currentTimeMillis() }
         apply(o.option, announce = false)
     }
 

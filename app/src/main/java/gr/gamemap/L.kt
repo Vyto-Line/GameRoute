@@ -587,7 +587,7 @@ object L {
         "Convoy code" to "Κωδικός κομβόι", "Copy" to "Αντιγραφή", "Code copied" to "Ο κωδικός αντιγράφηκε", "🔗 Invite" to "🔗 Πρόσκληση",
         "Invite to the convoy" to "Πρόσκληση στο κομβόι", "Leave" to "Αποχώρηση", "Leave convoy" to "Αποχώρηση από το κομβόι",
         "Leave the convoy? The others will stop seeing you." to "Αποχώρηση από το κομβόι; Οι άλλοι δεν θα σας βλέπουν πια.",
-        "Stay" to "Παραμονή", "The others will stop seeing you." to "Οι άλλοι δεν θα σας βλέπουν πια.", "Driving now" to "Οδηγεί τώρα", "In a convoy" to "Σε κομβόι", "Driving in a convoy" to "Οδηγεί σε κομβόι",
+        "Stay" to "Παραμονή", "New route…" to "Νέα διαδρομή…", "The road you're on (under the arrow)" to "Ο δρόμος που βρίσκεστε (κάτω από το βέλος)", "The others will stop seeing you." to "Οι άλλοι δεν θα σας βλέπουν πια.", "Driving now" to "Οδηγεί τώρα", "In a convoy" to "Σε κομβόι", "Driving in a convoy" to "Οδηγεί σε κομβόι",
         "Last seen just now" to "Τελευταία φορά μόλις τώρα", "Leave the convoy" to "Αποχώρηση από το κομβόι", "Leave the convoy?" to "Αποχώρηση από το κομβόι;",
         "The others carry on without you" to "Οι άλλοι συνεχίζουν χωρίς εσάς", "The convoy's destination" to "Ο προορισμός του κομβόι",
         "tap to see on the map" to "πατήστε για να τον δείτε στον χάρτη", "You left the convoy" to "Αποχωρήσατε από το κομβόι",

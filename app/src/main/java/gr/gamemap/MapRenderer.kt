@@ -270,7 +270,7 @@ class MapRenderer(private val car: Boolean = false) {
 
         drawSpeed(c, area, d, theme)
         if (car && hud) drawCarEta(c, area, d, theme)
-        if (hud && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planningOn(car) && !NavEngine.arrived) drawCurrentRoad(c, area, d, theme)
+        if (hud && NavEngine.showRoadName && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planningOn(car) && !NavEngine.arrived) drawCurrentRoad(c, area, d, theme)
         carHits.clear()
         // the car's trip card steps aside after 30 s, or as soon as a place is tapped
         val trip = NavEngine.lastTrip
@@ -2102,6 +2102,7 @@ class MapRenderer(private val car: Boolean = false) {
         val (title, sub) = when {
             NavEngine.arrived -> Explorer.completeTitle(t).uppercase() to NavEngine.destinationName
             NavEngine.error != null -> (NavEngine.error ?: "") to NavEngine.destinationName
+            NavEngine.loading && NavEngine.rerouting -> gr.gamemap.L.t("New route…") to NavEngine.destinationName
             NavEngine.loading || step == null -> gr.gamemap.L.t("Plotting route…") to NavEngine.destinationName
             else -> {
                 val st = step!!
