@@ -2179,6 +2179,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     // Share always stays; it shrinks to its icon in a convoy (room for 👥), with big text
                     // or in Greek (longer words), so the arrival time keeps its room
                     convoyBtn.visibility = if (Convoy.active) View.VISIBLE else View.GONE
+                    // only when something changed: new drawables every refresh (once a second in a
+                    // convoy) made the Share and convoy buttons flicker
+                    val btnKey = "${Convoy.active}|${Convoy.members.size}|${LiveShare.active}|${L.greek}|${theme.name}|${MapState.dark}|${resources.configuration.fontScale}"
+                    if (btnKey != shareBtnKey) { shareBtnKey = btnKey
                     if (Convoy.active || resources.configuration.fontScale > 1.1f || L.greek) {
                         shareBtn.text = if (LiveShare.active) "●" else ""
                         shareBtn.contentDescription = "Share your trip"
@@ -2195,12 +2199,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         convoyBtn.contentDescription = "Convoy: ${Convoy.members.size + 1} drivers"
                         convoyBtn.setTextColor(readable(accent)); convoyBtn.background = bg(Color.TRANSPARENT, accent, 1.5f, 22f)
                     }
+                    }
                 }
             }
         }
         updateMapInsets()
     }
 
+    private var shareBtnKey = ""
     private val quietTick = Runnable { refreshChrome() }
     private var laterShowing = false
 
@@ -3000,8 +3006,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     GameBuilder(this@MainActivity).setTitle("Set level")
                         .setItems(lv.map { "Level $it" }.toTypedArray()) { _, i -> devXp { Dev.setLevel(this, lv[i]) } }.showT()
                 },
-                settingRow("Try prestige", "Sets level 50 and opens your progress") {
-                    Dev.setLevel(this, 50); prefs().edit().putInt("levelCelebrated", 50).apply(); openSheet("you")
+                settingRow("Try prestige", "Level 50, then prestige: back to level 1 with the next rank's ◆") {
+                    GameBuilder(this@MainActivity).setTitle("Try prestige?").setMessage(devBackupNote() + "\n\nYou go to level 50 and prestige straight away: level 1, the next rank, its rewards.")
+                        .setNegativeButton("Cancel", null).setPositiveButton("Prestige") { _, _ ->
+                            Dev.setLevel(this, 50); Xp.doPrestige()
+                            prefs().edit().putInt("levelCelebrated", Explorer.level).apply()
+                            progressKey = ""; showSettings(); showPrestigeReveal()
+                        }.showT()
                 },
                 settingRow("Restore my real progress", if (Dev.hasBackup(this)) "Backed up before testing · the app restarts" else "Nothing to restore: no XP tools used yet") {
                     if (!Dev.hasBackup(this)) return@settingRow

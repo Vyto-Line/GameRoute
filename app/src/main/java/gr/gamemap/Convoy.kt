@@ -697,8 +697,8 @@ object Convoy {
     internal fun debugHost(on: Boolean) { host = on }
     internal fun debugStart(dest: Place, code: String = "k7p2qx") { this.code = code; destination = dest; members.clear(); routeTotal = -1.0 }
 
-    internal fun debugMember(name: String, pos: LatLng, kmh: Int, eta: Long, left: Double, total: Double, state: String) {
-        val m = Member("t-$name", name, pos, 0f, kmh, eta, left, total, state, 0, System.currentTimeMillis())
+    internal fun debugMember(name: String, pos: LatLng, kmh: Int, eta: Long, left: Double, total: Double, state: String, heading: Float = 0f) {
+        val m = Member("t-$name", name, pos, heading, kmh, eta, left, total, state, 0, System.currentTimeMillis())
         m.fixAt = System.currentTimeMillis()
         members[m.id] = m
         changed.fire()

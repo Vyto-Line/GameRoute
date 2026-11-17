@@ -180,16 +180,18 @@ object Dev {
         if (Convoy.active) Convoy.leave(quiet = true)
         Convoy.debugStart(Place("Nafplio (test)", "", LatLng(37.5673, 22.8016)), code = "test" + (100000..999999).random())
         convoyOn = true; convoyT = 0; trail.clear()
-        gaps[0] = 180.0; gaps[1] = 380.0; gaps[2] = -140.0
+        gaps[0] = 180.0; gaps[1] = 380.0; gaps[2] = -140.0; lastMe = null
         main.removeCallbacks(convoyTick); main.post(convoyTick)
         CrashLog.note("dev: test convoy around ${here.lat.toFloat()},${here.lon.toFloat()}")
     }
 
     fun stopTestConvoy() { convoyOn = false; main.removeCallbacks(convoyTick); if (Convoy.active) Convoy.leave(quiet = true) }
 
-    /** Where each made-up driver is: metres ahead of you along the route (minus: behind). */
+    /** Where each made-up driver is: metres ahead of you along the road (minus: behind). */
     private val gaps = doubleArrayOf(180.0, 380.0, -140.0)
-    private val drift = doubleArrayOf(0.4, -0.3, 0.25)
+    /** How fast each one drives (m/s): they really move, even while you're parked. */
+    private val speeds = doubleArrayOf(12.5, 10.0, 14.0)
+    private var lastMe: LatLng? = null
     private val trail = ArrayList<LatLng>() // where I've been, for the driver behind me without a route
 
     private val convoyTick = object : Runnable {
@@ -197,18 +199,23 @@ object Dev {
             if (!convoyOn || !Convoy.active) { convoyOn = false; return }
             val me = LocationTracker.position ?: LatLng(37.9838, 23.7275)
             if (trail.isEmpty() || Geo.distance(trail.last(), me) > 3) { trail += me; if (trail.size > 200) trail.removeAt(0) }
+            val moved = lastMe?.let { Geo.distance(it, me).coerceAtMost(60.0) } ?: 0.0
+            lastMe = me
             convoyT++
             val names = listOf("Nikos (test)", "Eleni (test)", "Maria (test)")
-            val kmh = (LocationTracker.speedMps * 3.6f).toInt()
             for (i in 0..2) {
-                // slowly closing in and falling back (never past you, never on top of you)
-                gaps[i] += drift[i]
-                if (gaps[i] > 0 && (gaps[i] !in 90.0..450.0)) drift[i] = -drift[i]
-                if (gaps[i] < 0 && (gaps[i] !in -260.0..-80.0)) drift[i] = -drift[i]
+                // each drives at its own speed (a little faster and slower in turn); I move too
+                val v = speeds[i] + kotlin.math.sin((convoyT + i * 7) / 9.0) * 2.5
+                gaps[i] += v - moved
+                // far ahead: comes round again from behind (so there's always someone to watch)
+                if (gaps[i] > 600) gaps[i] = -300.0
+                if (gaps[i] < -400) gaps[i] = 500.0
                 val p = onRoad(me, gaps[i]) ?: continue
+                val ahead = onRoad(me, gaps[i] + 15) ?: p
+                val heading = if (Geo.distance(p, ahead) > 1) Geo.bearing(p, ahead) else LocationTracker.heading
                 val r = NavEngine.current
                 val left = if (r != null) (r.length - NavEngine.along - gaps[i]).coerceAtLeast(0.0) else 30_000.0
-                Convoy.debugMember(names[i], p, (kmh + (drift[i] * 10).toInt()).coerceAtLeast(0), System.currentTimeMillis() + (left / 11 * 1000).toLong(), left, r?.length ?: 120_000.0, "driving")
+                Convoy.debugMember(names[i], p, (v * 3.6).toInt(), System.currentTimeMillis() + (left / 11 * 1000).toLong(), left, r?.length ?: 120_000.0, "driving", heading)
             }
             if (convoyT % 25 == 5) Convoy.debugMessage(names[convoyT / 25 % 3], listOf("fuel", "stop", "ahead", "wait")[convoyT / 25 % 4])
             Convoy.changed.fire()
