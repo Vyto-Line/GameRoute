@@ -200,7 +200,7 @@ object Router {
         return listOf(r)
     }
 
-    private fun online() = try { Offline.online() } catch (e: Exception) { true }
+    private fun online() = !Dev.noInternet && try { Offline.online() } catch (e: Exception) { true }
 
     fun quick(from: LatLng, to: LatLng, heading: Float?, via: List<LatLng>, headStart: Long = 1200): List<RouteOption> {
         // no internet: straight to the phone's own router (no waiting for timeouts)
@@ -237,6 +237,7 @@ object Router {
     }
 
     private fun onlineRoutes(from: LatLng, to: LatLng, alternatives: Boolean, heading: Float?, reroute: Boolean, via: List<LatLng>): List<RouteOption> {
+        if (Dev.noInternet) throw java.io.IOException("No internet (test)")
         // planning a trip: TomTom's alternatives too, at the same time (OSRM often finds just one)
         val extra = if (alternatives && !reroute && via.isEmpty() && Traffic.active)
             racers.submit(java.util.concurrent.Callable { try { TomTomRoute.routes(from, to, true, heading, via) } catch (e: Exception) { null } }) else null

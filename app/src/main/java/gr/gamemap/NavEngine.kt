@@ -233,13 +233,15 @@ object NavEngine {
         val racers = Convoy.members.values.filter { !it.along && !it.sharing && it.state != "left" }
         val racing = inConvoy && !Convoy.meAlong && racers.isNotEmpty()
         val place = if (racing) 1 + racers.count { it.state == "arrived" } else null
-        val parts = if (tooShort) emptyList() else Xp.finish(tripMeters, tripBonus, Explorer.tripFound, inConvoy, place, racers.size + 1)
-        val xp = if (tooShort) Explorer.tripFound * 25 else parts.sumOf { it.xp }
+        // a simulated drive (test builds): no XP, no trip in the history
+        val sim = Dev.simTrip; Dev.simTrip = false
+        val parts = if (tooShort || sim) emptyList() else Xp.finish(tripMeters, tripBonus, Explorer.tripFound, inConvoy, place, racers.size + 1)
+        val xp = if (sim) 0 else if (tooShort) Explorer.tripFound * 25 else parts.sumOf { it.xp }
         lastTrip = Explorer.Trip(
             destinationName, System.currentTimeMillis(), secs, tripMeters, tripSaved,
             xp, Explorer.tripFound, levelBefore, parts,
         )
-        lastTrip?.let { Explorer.record(it) }
+        if (!sim) lastTrip?.let { Explorer.record(it) }
     }
 
     // ------------------------------------------------------------- faster route offers

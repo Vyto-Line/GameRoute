@@ -285,6 +285,8 @@ object LocationTracker : LocationListener {
     }
 
     override fun onLocationChanged(location: Location) {
+        // test builds: while the simulator drives, the phone's real GPS is ignored
+        if (Dev.simActive && location.provider != Dev.SIM && location.provider != ESTIMATE) return
         val prev = last
         val real = location.provider != ESTIMATE
         val now = System.currentTimeMillis()

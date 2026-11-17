@@ -2957,6 +2957,49 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     GameBuilder(this@MainActivity).setTitle("Test a crash?").setMessage("The app closes and offers the report next time.")
                         .setNegativeButton("Cancel", null).setPositiveButton("Crash") { _, _ -> throw RuntimeException("Test crash from the Developer page") }.showT()
                 },
+                // ---- driving, no car needed
+                settingRow("Simulate a drive", if (Dev.simActive) "Driving now · tap to stop" else "Fake GPS to Home (or 2.5 km away) · earns nothing") {
+                    if (Dev.simActive) { Dev.stopSim(); showSettings(); return@settingRow }
+                    Dev.simulate(this, Places.saved("home")); closeSheet()
+                },
+                settingRow("While simulating…", "Leave the route, weak GPS, tunnel, no internet, offer, arrive") { devDriveTools() },
+                // ---- friends and convoy, no friends needed
+                settingRow("Add 4 test friends", "Driving, in a convoy, busy, offline · this phone only") {
+                    Dev.addTestFriends(); Toast.makeText(this, "Test friends added", Toast.LENGTH_SHORT).show()
+                },
+                settingRow("Send me a test invite", "A convoy invite from Nikos (test)") {
+                    Dev.testInvite(); Toast.makeText(this, "Invite on its way", Toast.LENGTH_SHORT).show()
+                },
+                settingRow("Start a test convoy", if (Dev.convoyOn) "On · tap to stop" else "3 made-up drivers around you, with quick messages") {
+                    if (Dev.convoyOn) Dev.stopTestConvoy() else Dev.startTestConvoy(); showSettings()
+                },
+                settingRow("Remove test friends", "And their invites") {
+                    Dev.removeTestFriends(); Toast.makeText(this, "Removed", Toast.LENGTH_SHORT).show()
+                },
+                // ---- XP and levels (your real progress is backed up first)
+                settingRow("Add XP", "Level ${Explorer.level} · ${Explorer.xp} XP") {
+                    GameBuilder(this@MainActivity).setTitle("Add XP").setMessage(devBackupNote())
+                        .setItems(arrayOf("+100 XP", "+1,000 XP")) { _, i -> Dev.addXp(this, if (i == 0) 100 else 1000); showSettings() }.showT()
+                },
+                settingRow("Set level", "1 to 50") {
+                    val lv = (1..50).toList()
+                    GameBuilder(this@MainActivity).setTitle("Set level")
+                        .setItems(lv.map { "Level $it" }.toTypedArray()) { _, i -> Dev.setLevel(this, lv[i]); showSettings() }.showT()
+                },
+                settingRow("Try prestige", "Sets level 50 and opens your progress") {
+                    Dev.setLevel(this, 50); openSheet("you")
+                },
+                settingRow("Restore my real progress", if (Dev.hasBackup(this)) "Backed up before testing · the app restarts" else "Nothing to restore: no XP tools used yet") {
+                    if (!Dev.hasBackup(this)) return@settingRow
+                    GameBuilder(this@MainActivity).setTitle("Restore your real progress?").setMessage("XP and levels go back to how they were before testing. The app restarts.")
+                        .setNegativeButton("Cancel", null).setPositiveButton("Restore") { _, _ ->
+                            if (Dev.restoreBackup(this)) {
+                                val again = packageManager.getLaunchIntentForPackage(packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                                if (again != null) startActivity(again)
+                                finishAffinity(); Runtime.getRuntime().exit(0)
+                            }
+                        }.showT()
+                },
                 settingRow("This build", "build ${shownBuild()} · test") { },
             )
             "nav" -> listOf(
@@ -3102,6 +3145,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     private val TALK = arrayOf("Normal", "Fewer", "Turns only")
+
+    /** Test builds: the drive simulator's tricks. */
+    private fun devDriveTools() {
+        if (!Dev.simActive) { Toast.makeText(this, "Start a simulated drive first", Toast.LENGTH_SHORT).show(); return }
+        val opts = arrayOf("Leave the route here", "Weak GPS (30 s)", "Tunnel: no GPS (30 s)", "No internet (30 s)", "Show a faster-route offer", "Arrive now", "Stop the simulation")
+        GameBuilder(this@MainActivity).setTitle("While simulating").setItems(opts) { _, i ->
+            when (i) {
+                0 -> Dev.leaveRoute(); 1 -> Dev.weakGps(); 2 -> Dev.tunnel(); 3 -> Dev.noSignal()
+                4 -> Dev.showOffer(); 5 -> Dev.arriveNow(); 6 -> Dev.stopSim()
+            }
+            closeSheet()
+        }.showT()
+    }
+
+    private fun devBackupNote() = if (Dev.hasBackup(this)) "Your real progress is already backed up." else "Your real progress is backed up first. Restore it any time from this page."
 
     /** Backup & restore: save everything to a file you keep, or bring it back from one. */
     private fun chooseBackup() {

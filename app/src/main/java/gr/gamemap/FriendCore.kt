@@ -226,6 +226,7 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     }
 
     private fun send(toSecret: String, o: JSONObject) {
+        if (toSecret == TEST_SECRET) return // a made-up test friend: nothing ever leaves the phone
         o.put("fid", fid).put("n", name()).put("at", clock())
         wire.post(inboxTopic(toSecret), Seal.seal(inboxKey(toSecret), o.toString()))
     }
@@ -378,10 +379,30 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     }
 
     private fun bytes(n: Int) = ByteArray(n).also { rnd.nextBytes(it) }
+
+    // ------------------------------------------------------------------ test builds only (Dev)
+
+
+    /** A made-up friend on this phone only ("test-…"): nothing about them is ever sent. */
+    internal fun addTestFriend(fid: String, name: String) {
+        if (isFriend(fid)) return
+        edit("friends") { it.put(JSONObject().put("fid", fid).put("n", name).put("s", TEST_SECRET).put("since", clock()).put("c", "TEST")) }
+    }
+    internal fun addTestInvite(fid: String, from: String, convoy: String, dest: String) {
+        edit("invites") { it.put(JSONObject().put("iid", "test-" + clock()).put("fid", fid).put("n", from).put("cv", convoy).put("d", dest).put("at", clock()).put("k", 1)) }
+    }
+    /** Every made-up friend and their invites, gone. */
+    fun removeTestFriends() {
+        removeWhere("friends") { it.optString("fid").startsWith("test-") }
+        removeWhere("invites") { it.optString("fid").startsWith("test-") }
+        removeWhere("sent") { it.optString("fid").startsWith("test-") }
+    }
     private fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
     private fun hash(s: String) = hex(MessageDigest.getInstance("SHA-256").digest(s.toByteArray()))
 
     companion object {
+        /** Made-up test friends (test builds) have this "secret": nothing is ever sent to them. */
+        const val TEST_SECRET = "test-local-only"
         const val INVITE_TTL = 2 * 3600_000L
         const val ONLINE_FOR = 5 * 60_000L
         const val ONLINE = "online"; const val DND = "dnd"; const val INVISIBLE = "invisible"

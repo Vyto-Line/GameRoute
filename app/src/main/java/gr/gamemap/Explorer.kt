@@ -88,6 +88,9 @@ object Explorer {
         return (xp - need(l)) to (need(l + 1) - need(l))
     }
 
+    /** Test builds only (Dev): set the XP outright (the real progress was backed up first). */
+    internal fun setXpForDev(n: Int) { if (::appContext.isInitialized) { prefs().edit().putInt("xp", n.coerceAtLeast(0)).apply(); changed.fire() } }
+
     fun addXp(n: Int) {
         if (!::appContext.isInitialized || n <= 0) return
         prefs().edit().putInt("xp", xp + n).apply()
@@ -177,7 +180,7 @@ object Explorer {
 
     /** Called with every GPS fix: landmarks you pass close to count as discovered. */
     fun onLocation(pos: LatLng, speed: Float) {
-        if (!::appContext.isInitialized) return
+        if (!::appContext.isInitialized || Dev.simActive) return // a simulated drive finds nothing
         val reach = if (speed > 5f) 120.0 else 70.0
         for (l in near(pos, 700.0)) {
             if (l.id !in found && Geo.distance(pos, l.pos) < reach) discover(l)

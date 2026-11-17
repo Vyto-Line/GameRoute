@@ -448,6 +448,7 @@ object Convoy {
 
     private fun publish(o: JSONObject, topic: String? = code) {
         val t = topic ?: return
+        if (t.length > 6 && t.startsWith("test")) return // a made-up test convoy (test builds): stays on this phone
         val now = System.currentTimeMillis()
         sentAt = now
         // ntfy (backup, and the web page's fallback) allows 250 messages a day: one a minute,
@@ -694,7 +695,7 @@ object Convoy {
     // ------------------------------------------------------------- tests
 
     internal fun debugHost(on: Boolean) { host = on }
-    internal fun debugStart(dest: Place) { code = "k7p2qx"; destination = dest; members.clear(); routeTotal = -1.0 }
+    internal fun debugStart(dest: Place, code: String = "k7p2qx") { this.code = code; destination = dest; members.clear(); routeTotal = -1.0 }
 
     internal fun debugMember(name: String, pos: LatLng, kmh: Int, eta: Long, left: Double, total: Double, state: String) {
         val m = Member("t-$name", name, pos, 0f, kmh, eta, left, total, state, 0, System.currentTimeMillis())

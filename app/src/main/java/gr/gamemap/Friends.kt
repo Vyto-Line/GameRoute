@@ -524,7 +524,7 @@ object Friends {
 
         private fun watch(force: Boolean) {
             val c = client ?: return
-            val want = core.friends.associateBy { core.presenceTopic(it.secret) }
+            val want = core.friends.filter { it.secret != FriendCore.TEST_SECRET }.associateBy { core.presenceTopic(it.secret) }
             if (!force && want.keys == watching.keys) return
             val old = watching.keys
             try {
