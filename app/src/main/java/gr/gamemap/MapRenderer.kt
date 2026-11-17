@@ -1869,8 +1869,9 @@ class MapRenderer(private val car: Boolean = false) {
             return
         }
         val sections = (if (inv.isNotEmpty()) 1 else 0) + (if (online.isNotEmpty()) 1 else 0) + (if (offline.isNotEmpty()) 1 else 0)
-        var fit = ((room() - sections * 22 * d) / rowH).toInt()
-        if (fit < total) fit = ((room() - sections * 22 * d - 44 * d) / rowH).toInt() // leave room for "+N more"
+        // (the last row may use the panel's bottom padding: one more friend instead of empty space)
+        var fit = ((room() - sections * 22 * d) / rowH + 0.2f).toInt()
+        if (fit < total) fit = ((room() - sections * 22 * d - 44 * d) / rowH + 0.2f).toInt() // leave room for "+N more"
         fit = fit.coerceAtLeast(1)
         var shown = 0
         if (inv.isNotEmpty() && shown < fit) {
