@@ -19,7 +19,7 @@ on:
         type: string
         default: ""
       number:
-        description: "Build number (versionCode) instead of the run number, e.g. 106 to match the release name"
+        description: "Leave empty: a test gets the next fix number (111.2, 111.3…), a release the next whole number (112), always above every earlier build"
         type: string
         default: ""
 permissions:
@@ -30,6 +30,24 @@ jobs:
     steps:
       - name: Get code
         run: git clone --depth 1 --branch "${{ github.ref_name }}" "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" src
+      - name: Pick the build number (above every earlier build, so a release always installs over a test)
+        id: num
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MAX=$(gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" -q '.[].body' | grep -o 'versionCode: [0-9]*' | awk '{print $2}' | sort -n | tail -1)
+          MAX=${MAX:-0}
+          TEST="${{ inputs.test == true || inputs.test == 'true' }}"
+          N="${{ inputs.number }}"
+          if [ -z "$N" ]; then
+            if [ "$TEST" = "true" ]; then N=$((MAX + 1)); [ $((N % 10)) -eq 0 ] && N=$((N + 1))
+            else N=$(( (MAX / 10 + 1) * 10 )); fi
+          elif [ "$TEST" != "true" ] && [ "$N" -le "$MAX" ]; then
+            echo "::error::Release number $N is not above the highest earlier build ($MAX): phones with that build couldn't install it. Leave the number empty."; exit 1
+          fi
+          if [ $((N % 10)) -eq 0 ]; then NAME=$((N / 10)); else NAME="$((N / 10)).$((N % 10))"; fi
+          echo "n=$N" >> "$GITHUB_OUTPUT"; echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Highest earlier build: $MAX. This build: $N ($NAME)"
       - name: Java 17 (the runners' default moved to 25, which Gradle 8.14 can't run)
         uses: actions/setup-java@v4
         with:
@@ -57,7 +75,7 @@ jobs:
         run: |
           export JAVA_HOME="${JAVA_HOME_17_X64:-$JAVA_HOME}"
           # a release build (not debuggable): Android compiles and runs it faster
-          gradle assembleGithubRelease --no-daemon -PbuildNumber=${{ inputs.number || github.run_number }} -PtestBuild=${{ inputs.test == true || inputs.test == 'true' }}
+          gradle assembleGithubRelease --no-daemon -PbuildNumber=${{ steps.num.outputs.n }} -PtestBuild=${{ inputs.test == true || inputs.test == 'true' }}
           mkdir -p ../out && cp app/build/outputs/apk/github/release/*.apk ../out/GameRoute.apk
       - name: Build Play Store bundle
         working-directory: src
@@ -72,7 +90,7 @@ jobs:
             echo "$PLAY_KEYSTORE" | base64 -d > "$RUNNER_TEMP/upload.jks"
             export PLAY_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks"
           fi
-          gradle bundlePlayRelease --no-daemon -PbuildNumber=${{ inputs.number || github.run_number }}
+          gradle bundlePlayRelease --no-daemon -PbuildNumber=${{ steps.num.outputs.n }}
           rm -f "$RUNNER_TEMP/upload.jks"
           # only a signed bundle can go to Play; without the key this step just checks the Play version builds
           if [ -n "$PLAY_KEYSTORE" ]; then cp app/build/outputs/bundle/playRelease/*.aab ../out/GameRoute-play.aab
@@ -84,7 +102,7 @@ jobs:
         run: |
           TAG="${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}"
           PRE=""
-          if [ "${{ inputs.test }}" = "true" ]; then TAG="${{ inputs.tag || format('test-{0}', github.run_number) }}"; PRE="--prerelease"
-          elif [ -n "${{ inputs.tag }}" ]; then TAG="${{ inputs.tag }}"; fi
+          if [ "${{ inputs.test }}" = "true" ]; then TAG="${{ inputs.tag }}"; TAG="${TAG:-test-${{ steps.num.outputs.name }}}"; PRE="--prerelease"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TAG="${{ inputs.tag }}"; TAG="${TAG:-build-${{ steps.num.outputs.name }}}"; fi
           gh release create "$TAG" out/GameRoute.apk $(ls out/GameRoute-play.aab 2>/dev/null) -R "${{ github.repository }}" $PRE \
-            --target "${{ github.sha }}" --title "GameRoute $TAG" --notes "Automatic build. versionCode: ${{ inputs.number || github.run_number }}"
+            --target "${{ github.sha }}" --title "GameRoute $TAG" --notes "Automatic build. versionCode: ${{ steps.num.outputs.n }}"
