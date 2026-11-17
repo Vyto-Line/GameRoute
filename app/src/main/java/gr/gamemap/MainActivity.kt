@@ -5125,7 +5125,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             val host = window.decorView as ViewGroup
             lateinit var view: Milestone
             view = Milestone(this, milestone, Xp.title(theme, milestone), theme) {
-                host.removeView(view); showLevelUpCard(from)
+                host.post { (view.parent as? ViewGroup)?.removeView(view); showLevelUpCard(from) }
             }
             view.elevation = 60 * d
             host.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))

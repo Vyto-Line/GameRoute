@@ -65,7 +65,8 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
     private fun finish() {
         if (done) return
         done = true
-        onDone()
+        // never from inside a frame being drawn: removing this view mid-draw crashed the app
+        post { onDone() }
     }
 
     override fun onDraw(c: Canvas) {

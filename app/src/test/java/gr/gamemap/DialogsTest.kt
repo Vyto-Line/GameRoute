@@ -73,6 +73,10 @@ class DialogsTest {
         val ms = find(root)
         log.append("level ${Explorer.level}: celebration shown=${ms != null}\n")
         assertTrue("the level-5 celebration shows", ms != null)
+        // it plays out and goes away by itself (removed after the frame, not during it)
+        repeat(60) { looper.idleFor(java.time.Duration.ofMillis(100)); root.draw(Canvas(Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888))) }
+        log.append("after 6 s: celebration still there=${find(root) != null}\n")
+        assertTrue("the celebration ends", find(root) == null)
         File(out, "popups.txt").writeText(log.toString())
     }
 }
