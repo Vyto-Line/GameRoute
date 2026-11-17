@@ -202,13 +202,22 @@ object LocationTracker : LocationListener {
         val dt = (now - lastTick).coerceIn(0, 100)
         lastTick = now
         val c = compass
-        val target = if (speed < 1.0f && c != null && !NavEngine.active) c else headingTarget
+        // While the arrow glides to the next fix it points the way it's actually moving: in a turn
+        // the glide already heads into the new street while the road's heading lagged behind, and
+        // the arrow slid sideways ("moonwalking"). Small glides keep the road's heading.
+        val from = fromPos; val to = toPos
+        val gliding = from != null && to != null && now - fixAt < 1000 && glideMeters > 3.0 && speed > 2f
+        val target = when {
+            speed < 1.0f && c != null && !NavEngine.active -> c
+            gliding -> Geo.bearing(from!!, to!!).toFloat()
+            else -> headingTarget
+        }
         val diff = Geo.angleDiff(heading, target)
         val turning = abs(diff) > 0.3f
-        heading = if (turning) (heading + diff * (1 - exp(-dt / 260.0)).toFloat() + 360f) % 360f else target
+        heading = if (turning) (heading + diff * (1 - exp(-dt / (if (gliding) 160.0 else 260.0))).toFloat() + 360f) % 360f else target
         // standing still, a new fix a few cm away isn't worth 30 frames a second
-        val gliding = toPos != null && ((now - fixAt < 1000 && glideMeters > 0.8) || speed >= 2f)
-        return turning || gliding
+        val moving = toPos != null && ((now - fixAt < 1000 && glideMeters > 0.8) || speed >= 2f)
+        return turning || moving
     }
 
     /** Phone compass (used only when standing still). Pass null to stop using it. */

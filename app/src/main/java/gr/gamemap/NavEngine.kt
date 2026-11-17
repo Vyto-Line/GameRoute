@@ -683,6 +683,24 @@ object NavEngine {
             val here = LocationTracker.position ?: from
             val h = heading()
             val via = stops.map { it.pos }
+            // Rerouting with the roads of Greece downloaded: the phone works out a route itself first
+            // (well under a second, no internet) and the car follows it at once; the online route,
+            // with live traffic, quietly takes over when it arrives.
+            var phoneRoute = false
+            val t0 = System.currentTimeMillis()
+            if (reroute && !wantsAlternatives && OfflineRouter.present) {
+                val off = try { OfflineRouter.route(here, dest, h, via) } catch (e: Throwable) { null }
+                if (off != null && !pullsBack(off, h, current)) {
+                    phoneRoute = true
+                    try { Tolls.annotate(listOf(off)) } catch (_: Exception) {}
+                    val ms = System.currentTimeMillis() - t0
+                    main.post {
+                        if (destination != dest || seq != routeSeq) return@post
+                        CrashLog.note("reroute: phone route in $ms ms")
+                        apply(off, announce = false)
+                    }
+                }
+            }
             val r0 = try {
                 if (reroute && !wantsAlternatives) {
                     // one route, raced (OSRM / TomTom): ~3–6× quicker than asking for alternatives.
@@ -714,7 +732,10 @@ object NavEngine {
                     Voice.say(endNote!!)
                 }
                 main.removeCallbacks(routeWatchdog)
-                if (r == null && reroute && current != null) {
+                if (r == null && phoneRoute) {
+                    // no answer online, but the phone's own route is already being followed: fine
+                    loading = false; CrashLog.note("reroute: online failed, keeping the phone's route"); changed.fire()
+                } else if (r == null && reroute && current != null) {
                     // no signal (or the routers down): keep driving the route we have, say so,
                     // and try again every 15 s
                     loading = false
@@ -725,7 +746,7 @@ object NavEngine {
                     loading = false; error = gr.gamemap.L.t("No route found"); changed.fire()
                     CrashLog.note("route failed; trying again")
                     main.postDelayed({ if (active && !arrived && error != null && !loading) fetchRoute(reroute = true) }, 5_000)
-                } else { CrashLog.note("route from ${Router.lastSource}"); apply(r, announce = !reroute) }
+                } else { CrashLog.note("route from ${Router.lastSource} in ${System.currentTimeMillis() - t0} ms"); apply(r, announce = !reroute) }
             }
         }
     }
