@@ -65,7 +65,9 @@ class InviteSpeedTest {
         me.addTestFriend("test-nikos", "Nikos")
         me.addTestInvite("test-nikos", "Nikos", "conv12345678", "Sounio")
         InvitePop.resetForTest()
+        log.append("invites: ${me.invites.map { it.from + "/" + it.convoy }}, convoy active ${Convoy.active}, nav ${NavEngine.active}\n")
         InvitePop.offer(me.invites.single())
+        log.append("current after offer: ${InvitePop.current?.from}\n")
         repeat(10) { looper.idleFor(Duration.ofMillis(60)) }
         val card = activity.invitePopForTest()
         log.append("card on screen: ${card != null}\n")
