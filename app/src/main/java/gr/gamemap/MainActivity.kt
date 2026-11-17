@@ -2960,9 +2960,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             Toast.makeText(this, L.t("Copied"), Toast.LENGTH_SHORT).show()
                         }.setPositiveButton("OK", null).showT()
                 },
-                settingRow("Reset what's been seen", "Celebrations, What's new, welcome screens") {
-                    prefs().edit().remove("levelCelebrated").remove("seenWhatsNew100").remove("welcomeDone").apply()
+                settingRow("Reset what's been seen", "Welcome screens, What's new, this level's celebration · the app reopens") {
+                    // your current level celebrates again; the app reopens on the welcome screens
+                    prefs().edit().putInt("levelCelebrated", (Explorer.level - 1).coerceAtLeast(1))
+                        .remove("seenWhatsNew100").remove("welcomeDone").commit()
                     Toast.makeText(this, L.t("Reset"), Toast.LENGTH_SHORT).show()
+                    closeSheet(); recreate()
                 },
                 settingRow("Test a crash", "Saves a report, like a real crash") {
                     GameBuilder(this@MainActivity).setTitle("Test a crash?").setMessage("The app closes and offers the report next time.")
@@ -2990,15 +2993,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 // ---- XP and levels (your real progress is backed up first)
                 settingRow("Add XP", "Level ${Explorer.level} · ${Explorer.xp} XP") {
                     GameBuilder(this@MainActivity).setTitle("Add XP").setMessage(devBackupNote())
-                        .setItems(arrayOf("+100 XP", "+1,000 XP")) { _, i -> Dev.addXp(this, if (i == 0) 100 else 1000); showSettings() }.showT()
+                        .setItems(arrayOf("+100 XP", "+1,000 XP")) { _, i -> devXp { Dev.addXp(this, if (i == 0) 100 else 1000) } }.showT()
                 },
                 settingRow("Set level", "1 to 50") {
                     val lv = (1..50).toList()
                     GameBuilder(this@MainActivity).setTitle("Set level")
-                        .setItems(lv.map { "Level $it" }.toTypedArray()) { _, i -> Dev.setLevel(this, lv[i]); showSettings() }.showT()
+                        .setItems(lv.map { "Level $it" }.toTypedArray()) { _, i -> devXp { Dev.setLevel(this, lv[i]) } }.showT()
                 },
                 settingRow("Try prestige", "Sets level 50 and opens your progress") {
-                    Dev.setLevel(this, 50); openSheet("you")
+                    Dev.setLevel(this, 50); prefs().edit().putInt("levelCelebrated", 50).apply(); openSheet("you")
                 },
                 settingRow("Restore my real progress", if (Dev.hasBackup(this)) "Backed up before testing · the app restarts" else "Nothing to restore: no XP tools used yet") {
                     if (!Dev.hasBackup(this)) return@settingRow
@@ -3168,6 +3171,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
             closeSheet()
         }.showT()
+    }
+
+    /** An XP tool, then its celebration straight away (over the Developer page, which stays open). */
+    private fun devXp(change: () -> Unit) {
+        val before = Explorer.level
+        change()
+        val after = Explorer.level
+        // going down: the levels above count as new again
+        if (after < prefs().getInt("levelCelebrated", after)) prefs().edit().putInt("levelCelebrated", after).apply()
+        showSettings()
+        if (after > before) {
+            prefs().edit().putInt("levelCelebrated", before).apply()
+            celebrating = false
+            showLevelUp(before)
+        }
     }
 
     private fun devBackupNote() = if (Dev.hasBackup(this)) "Your real progress is already backed up." else "Your real progress is backed up first. Restore it any time from this page."

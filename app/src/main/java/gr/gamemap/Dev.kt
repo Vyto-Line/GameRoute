@@ -13,8 +13,9 @@ import android.os.SystemClock
  */
 object Dev {
     private val main = Handler(Looper.getMainLooper())
-    /** Fixes from the simulator (real GPS is ignored while it drives). */
-    const val SIM = "sim"
+    /** Marks fixes from the simulator (they look like GPS; real GPS is ignored while it drives). */
+    const val SIM = "dev_sim"
+    fun isSim(l: Location) = try { l.extras?.getBoolean(SIM) == true } catch (_: Exception) { false }
 
     // ================================================================== a simulated drive
 
@@ -108,7 +109,8 @@ object Dev {
     }
 
     private fun fix(p: LatLng, speed: Float, acc: Float) {
-        LocationTracker.onLocationChanged(Location(SIM).apply {
+        LocationTracker.onLocationChanged(Location(android.location.LocationManager.GPS_PROVIDER).apply {
+            extras = android.os.Bundle().apply { putBoolean(SIM, true) }
             latitude = p.lat; longitude = p.lon; time = System.currentTimeMillis()
             elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
             this.speed = speed; this.bearing = this@Dev.bearing; accuracy = acc
@@ -177,27 +179,58 @@ object Dev {
         val here = LocationTracker.position ?: LatLng(37.9838, 23.7275)
         if (Convoy.active) Convoy.leave(quiet = true)
         Convoy.debugStart(Place("Nafplio (test)", "", LatLng(37.5673, 22.8016)), code = "test" + (100000..999999).random())
-        convoyOn = true; convoyT = 0
+        convoyOn = true; convoyT = 0; trail.clear()
+        gaps[0] = 180.0; gaps[1] = 380.0; gaps[2] = -140.0
         main.removeCallbacks(convoyTick); main.post(convoyTick)
         CrashLog.note("dev: test convoy around ${here.lat.toFloat()},${here.lon.toFloat()}")
     }
 
     fun stopTestConvoy() { convoyOn = false; main.removeCallbacks(convoyTick); if (Convoy.active) Convoy.leave(quiet = true) }
 
+    /** Where each made-up driver is: metres ahead of you along the route (minus: behind). */
+    private val gaps = doubleArrayOf(180.0, 380.0, -140.0)
+    private val drift = doubleArrayOf(0.4, -0.3, 0.25)
+    private val trail = ArrayList<LatLng>() // where I've been, for the driver behind me without a route
+
     private val convoyTick = object : Runnable {
         override fun run() {
             if (!convoyOn || !Convoy.active) { convoyOn = false; return }
             val me = LocationTracker.position ?: LatLng(37.9838, 23.7275)
-            val b = LocationTracker.heading
+            if (trail.isEmpty() || Geo.distance(trail.last(), me) > 3) { trail += me; if (trail.size > 200) trail.removeAt(0) }
             convoyT++
-            listOf(Triple("Nikos (test)", 120.0, 78), Triple("Maria (test)", -90.0, 64), Triple("Eleni (test)", 260.0, 85)).forEach { (n, gap, kmh) ->
-                val wobble = kotlin.math.sin(convoyT / 6.0) * 30
-                Convoy.debugMember(n, Geo.offset(me, b, gap + wobble), kmh, System.currentTimeMillis() + 40 * 60_000, 30_000.0, 120_000.0, "driving")
+            val names = listOf("Nikos (test)", "Eleni (test)", "Maria (test)")
+            val kmh = (LocationTracker.speedMps * 3.6f).toInt()
+            for (i in 0..2) {
+                // slowly closing in and falling back (never past you, never on top of you)
+                gaps[i] += drift[i]
+                if (gaps[i] > 0 && (gaps[i] !in 90.0..450.0)) drift[i] = -drift[i]
+                if (gaps[i] < 0 && (gaps[i] !in -260.0..-80.0)) drift[i] = -drift[i]
+                val p = onRoad(me, gaps[i]) ?: continue
+                val r = NavEngine.current
+                val left = if (r != null) (r.length - NavEngine.along - gaps[i]).coerceAtLeast(0.0) else 30_000.0
+                Convoy.debugMember(names[i], p, (kmh + (drift[i] * 10).toInt()).coerceAtLeast(0), System.currentTimeMillis() + (left / 11 * 1000).toLong(), left, r?.length ?: 120_000.0, "driving")
             }
-            if (convoyT % 25 == 5) Convoy.debugMessage(listOf("Nikos (test)", "Maria (test)", "Eleni (test)")[convoyT / 25 % 3], listOf("fuel", "stop", "ahead", "wait")[convoyT / 25 % 4])
+            if (convoyT % 25 == 5) Convoy.debugMessage(names[convoyT / 25 % 3], listOf("fuel", "stop", "ahead", "wait")[convoyT / 25 % 4])
             Convoy.changed.fire()
             main.postDelayed(this, 1000)
         }
+    }
+
+    /** A point on the road [m] metres ahead of me (behind if negative). */
+    private fun onRoad(me: LatLng, m: Double): LatLng? {
+        if (NavEngine.active && NavEngine.route.size >= 2) {
+            val at = NavEngine.along + m
+            if (at >= 0) return NavEngine.routePointAt(at)
+        }
+        if (m < 0) { // behind: back along where I've driven
+            var left = -m; var p = me
+            for (i in trail.indices.reversed()) {
+                val d = Geo.distance(p, trail[i]); if (d >= left) return Geo.offset(p, Geo.bearing(p, trail[i]), left)
+                left -= d; p = trail[i]
+            }
+            return Geo.offset(me, (LocationTracker.heading + 180f) % 360f, -m)
+        }
+        return Geo.offset(me, LocationTracker.heading, m)
     }
 
     // ================================================================== XP and levels
