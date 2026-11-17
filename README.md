@@ -17,8 +17,8 @@ Android · Android Auto · English and Ελληνικά
 
 > [!TIP]
 > **New in build 111.2:** convoy invites in a small card that slides out under the search bar (or the turn box while driving, and centred at the top in Android Auto) with Join and Not now; your speed turns orange up to 5 km/h over the limit and red past that, with limits filled in from Roads of Greece and even without a route; and the road name now sits just under your arrow, clear of the speedometer.
-
-> **New in build 110:** a new route in a second or two when you take another street, an arrow that curves smoothly through turns, pop-ups in GameRoute's own look, 12 avatars your friends see, their own level celebrations for seven more styles, Friends drawn in the style on Android Auto (activity, invites, convoy actions), at most one faster-route message every 5 minutes, and a switch for the road name under the arrow.
+>
+> **Build 110:** a new route in a second or two when you take another street, an arrow that curves smoothly through turns, pop-ups in GameRoute's own look, 12 avatars your friends see, their own level celebrations for seven more styles, Friends drawn in the style on Android Auto (activity, invites, convoy actions), at most one faster-route message every 5 minutes, and a switch for the road name under the arrow.
 >
 > **Build 100** brought prestige ranks, a celebration every 5 levels, your monthly recap, the junction-sketch turn box, better GPS, your status (Online / Do not disturb / Invisible), friends and convoys in Android Auto, the Performance page, a home screen widget, and backup & restore.
 
