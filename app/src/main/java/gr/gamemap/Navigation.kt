@@ -348,6 +348,7 @@ object LocationTracker : LocationListener {
         if (firstFix) heading = headingTarget
 
         NavEngine.onLocation(location)
+        SpeedLimit.onFix(LatLng(location.latitude, location.longitude), if (location.hasBearing()) location.bearing else null, speed)
         Places.warmUp(p)
         Convoy.tick()
         Explorer.onLocation(LatLng(location.latitude, location.longitude), speed)

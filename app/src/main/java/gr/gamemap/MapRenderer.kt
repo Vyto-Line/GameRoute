@@ -255,22 +255,27 @@ class MapRenderer(private val car: Boolean = false) {
         prof("overlays", tp0); tp0 = System.nanoTime()
 
         // player: centred when following, otherwise wherever it is on the map
+        var playerAt: android.graphics.PointF? = null
+        val weakNow = hud && LocationTracker.weak
         if (me != null) {
             if (following) {
                 drawPlayer(c, cx, cy, 0f, d, theme)
-                if (hud && LocationTracker.weak) drawWeakGps(c, cx, cy, d, area)
+                if (weakNow) drawWeakGps(c, cx, cy, d, area)
+                playerAt = android.graphics.PointF(cx, cy)
             } else {
                 val (sx, sy) = toScreen(me, camera!!)
                 if (area.contains(sx.toInt(), sy.toInt())) {
                     drawPlayer(c, sx, sy, LocationTracker.heading - bearing, d, theme)
-                    if (hud && LocationTracker.weak) drawWeakGps(c, sx, sy, d, area)
+                    if (weakNow) drawWeakGps(c, sx, sy, d, area)
+                    playerAt = android.graphics.PointF(sx, sy)
                 }
             }
         }
 
         drawSpeed(c, area, d, theme)
         if (car && hud) drawCarEta(c, area, d, theme)
-        if (hud && NavEngine.showRoadName && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planningOn(car) && !NavEngine.arrived) drawCurrentRoad(c, area, d, theme)
+        if (hud && NavEngine.showRoadName && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planningOn(car) && !NavEngine.arrived)
+            playerAt?.let { drawCurrentRoad(c, area, d, theme, it.x, it.y, weakNow) } // (map moved away from you: no name)
         carHits.clear()
         // the car's trip card steps aside after 30 s, or as soon as a place is tapped
         val trip = NavEngine.lastTrip
@@ -312,6 +317,7 @@ class MapRenderer(private val car: Boolean = false) {
         else if (carLobby) drawCarLobby(c, area, d, theme)
         else if (hud && Convoy.active && Convoy.meReady && !NavEngine.active) drawLobbyChip(c, area, d, theme)
         if (car && hud && carButtons && carFriends != null && !NavEngine.planningOn(car) && !carTrip) drawCarFriends(c, area, d, theme)
+        if (car && hud && carButtons) InvitePop.current?.let { drawCarInvite(c, area, d, theme, it); animating = true }
         drawDiscovery(c, area, d, theme)
         if (hud && (view.userBearing != null || !following)) drawCompass(c, area, bearing, d, theme)
         drawAttribution(c, area, d, theme)
@@ -938,10 +944,10 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     /** A HUD panel in the theme's shape: rounded, cut-corner, or pixel-stepped. */
-    private fun panel(c: Canvas, r: RectF, d: Float, t: Theme, outline: Boolean) {
+    private fun panel(c: Canvas, r: RectF, d: Float, t: Theme, outline: Boolean, outlineColor: Int? = null) {
         // slightly see-through so the map shows behind, still solid enough to read
         fill.color = Ui.panel(t).let { Color.argb(218, Color.red(it), Color.green(it), Color.blue(it)) }
-        stroke.color = t.route; stroke.strokeWidth = 2 * d
+        stroke.color = outlineColor ?: t.route; stroke.strokeWidth = 2 * d
         when (t.hud) {
             HudShape.ROUND -> {
                 c.drawRoundRect(r, 12 * d, 12 * d, fill)
@@ -957,7 +963,7 @@ class MapRenderer(private val car: Boolean = false) {
                 c.drawPath(p, fill)
                 if (outline) {
                     c.drawPath(p, stroke)
-                    fill.color = t.route
+                    fill.color = outlineColor ?: t.route
                     c.drawRect(r.left + k + 4 * d, r.top - 2 * d, r.left + k + 44 * d, r.top + 2 * d, fill)
                 }
             }
@@ -1133,20 +1139,32 @@ class MapRenderer(private val car: Boolean = false) {
 
     // ---------------------------------------------------------------- HUD
 
+    /** The speed box and limit sign last drawn, and its colour when over the limit (0 = not over): for tests. */
+    internal val speedRect = RectF()
+    @Volatile internal var speedColor = 0
+    private val ORANGE_OVER = Color.rgb(255, 159, 28)
+    private val RED_OVER = Color.rgb(255, 77, 94)
+
     private fun drawSpeed(c: Canvas, a: Rect, d: Float, t: Theme) {
         if (LocationTracker.last == null) return
         val imp = MapState.imperial
         val kmh = Math.round(LocationTracker.speedMps * (if (imp) 2.23694f else 3.6f))
-        val limit = (if (NavEngine.active) NavEngine.speedLimit else null)?.let { if (imp) ((it * 0.621371 / 5).roundToInt() * 5) else it }
-        val over = limit != null && kmh > limit + 4
+        val limitKmh = SpeedLimit.now()
+        val limit = limitKmh?.let { if (imp) ((it * 0.621371 / 5).roundToInt() * 5) else it }
+        // over the limit: orange up to 5 km/h over, red past that (always judged in km/h)
+        val level = SpeedLimit.level(Math.round(LocationTracker.speedMps * 3.6f), limitKmh)
+        val over = level > 0
+        val overColor = if (level == 2) RED_OVER else ORANGE_OVER
         val pad = 14 * d
         text.textAlign = Paint.Align.CENTER
         text.textSize = 30 * d
         val big = kmh.toString()
         val bw = maxOf(text.measureText(big), text.measureText("88")) + 24 * d
         val box = RectF(a.left + pad, a.bottom - pad - 58 * d, a.left + pad + bw, a.bottom - pad)
-        panel(c, box, d, t, outline = over)
-        text.color = if (over) Color.rgb(255, 92, 92) else Ui.ink(t)
+        speedRect.set(box.left, box.top, box.right + (if (limit != null) 8 * d + 42 * d else 0f), box.bottom)
+        speedColor = if (over) overColor else 0
+        panel(c, box, d, t, outline = over, outlineColor = if (over) overColor else null)
+        text.color = if (over) overColor else Ui.ink(t)
         c.drawText(big, box.centerX(), box.top + 33 * d, text)
         text.textSize = 11 * d
         c.drawText(if (imp) "MPH" else gr.gamemap.L.t("KM/H"), box.centerX(), box.bottom - 9 * d, text)
@@ -1669,6 +1687,48 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     /** Car: someone in the convoy chose a destination: Go (accept) or ✕ (decline). */
+    /** Car: a convoy invite, centred at the top for ~10 s: who, where, big Not now and Join. */
+    private fun drawCarInvite(c: Canvas, a: Rect, d: Float, t: Theme, i: FriendCore.Invite) {
+        val w = minOf(560 * d, a.width() * 0.5f)
+        // slides down from above the screen's edge, and back up at the end
+        val since = System.currentTimeMillis() - InvitePop.shownAt
+        val left = InvitePop.left()
+        val slide = minOf(1f, since / 260f, (left * InvitePop.SHOW_MS) / 220f).coerceIn(0f, 1f)
+        val h = 76 * d
+        val top = a.top + 12 * d - (1f - slide) * (h + 20 * d)
+        val r = RectF(a.centerX() - w / 2, top, a.centerX() + w / 2, top + h)
+        panel(c, r, d, t, outline = true)
+        // their avatar, or their initial
+        val cx = r.left + 14 * d + 24 * d; val cy = r.centerY()
+        val av = Avatars.ofFriend(i.fid)
+        if (av != null) Avatars.draw(c, av.first, av.second, cx, cy, 24 * d)
+        else {
+            fill.color = Color.rgb(77, 171, 247); c.drawCircle(cx, cy, 24 * d, fill)
+            text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 20 * d; text.color = Color.WHITE
+            c.drawText(i.from.trim().take(1).uppercase().ifBlank { "?" }, cx, cy + 7 * d, text)
+        }
+        val join = RectF(r.right - 112 * d, r.top + 12 * d, r.right - 12 * d, r.bottom - 12 * d)
+        val no = RectF(join.left - 118 * d, join.top, join.left - 10 * d, join.bottom)
+        text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD
+        val tx = cx + 36 * d; val tw = no.left - tx - 10 * d
+        text.textSize = 19 * d; text.color = Ui.ink(t)
+        c.drawText(ellipsize(gr.gamemap.L.t("${i.from} invites you"), tw), tx, r.top + 33 * d, text)
+        text.textSize = 15 * d; text.color = withAlpha(Ui.ink(t), 170); text.typeface = t.typeface
+        c.drawText(ellipsize("🏁 " + (if (i.dest.isNotBlank()) gr.gamemap.L.t("Convoy to ${i.dest}") else gr.gamemap.L.t("A convoy")), tw), tx, r.top + 57 * d, text)
+        // Not now / Join
+        fill.color = withAlpha(Ui.ink(t), 40); c.drawRoundRect(no, 12 * d, 12 * d, fill)
+        text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = Ui.ink(t)
+        c.drawText(gr.gamemap.L.t("Not now"), no.centerX(), no.centerY() + 6 * d, text)
+        fill.color = t.route; c.drawRoundRect(join, 12 * d, 12 * d, fill)
+        text.color = if (Ui.contrast(Color.WHITE, t.route) >= 3) Color.WHITE else Color.BLACK
+        c.drawText(gr.gamemap.L.t("Join"), join.centerX(), join.centerY() + 6 * d, text)
+        // the 10 s running down
+        fill.color = t.route
+        c.drawRect(r.left + 10 * d, r.bottom - 4 * d, r.left + 10 * d + (r.width() - 20 * d) * left, r.bottom - 1.5f * d, fill)
+        text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface
+        carHits += no to "inv:no"; carHits += join to "inv:join"
+    }
+
     private fun drawCarProposal(c: Canvas, a: Rect, d: Float, t: Theme, p: Convoy.Proposal) {
         val w = minOf(440 * d, a.width() - 40 * d)
         val x = a.centerX() - w / 2
@@ -1924,18 +1984,24 @@ class MapRenderer(private val car: Boolean = false) {
     private var roadAt = 0L
 
     /** The road you're on, small at the bottom of the map (hidden on unnamed roads). */
-    private fun drawCurrentRoad(c: Canvas, a: Rect, d: Float, t: Theme) {
+    /** Where the road name was drawn last (for tests: it must never cover the speed). */
+    internal val roadNameRect = RectF()
+
+    /** The road you're on, in a small label just under your arrow (under the Weak GPS note when that shows). */
+    private fun drawCurrentRoad(c: Canvas, a: Rect, d: Float, t: Theme, px: Float, py: Float, weak: Boolean) {
         val now = System.currentTimeMillis()
         if (now - roadAt > 1000) { roadAt = now; roadName = try { NavEngine.currentRoad() } catch (_: Exception) { "" } }
         val name = roadName
         if (name.isBlank()) return
         text.textAlign = Paint.Align.CENTER; text.textSize = (if (car) 17 else 15) * d
         val tf = text.typeface; text.typeface = t.typeface
-        val shown = ellipsize(name, minOf(420 * d, a.width() * 0.5f))
-        val w = text.measureText(shown) + 32 * d
-        val h = (if (car) 38 else 34) * d
-        val bottom = a.bottom - (if (car) 18 else 14) * d
-        val r = RectF(a.exactCenterX() - w / 2, bottom - h, a.exactCenterX() + w / 2, bottom)
+        val shown = ellipsize(name, minOf(420 * d, a.width() * 0.6f))
+        val w = text.measureText(shown) + 28 * d
+        val h = (if (car) 34 else 30) * d
+        val top = (py + (if (weak) 72 else 32) * d).coerceAtMost(a.bottom - h - 4 * d)
+        val left = (px - w / 2).coerceIn(a.left + 6 * d, a.right - 6 * d - w)
+        val r = RectF(left, top, left + w, top + h)
+        roadNameRect.set(r)
         panel(c, r, d, t, outline = false)
         text.color = Ui.ink(t)
         c.drawText(shown, r.centerX(), r.centerY() + text.textSize * 0.35f, text)
@@ -2238,6 +2304,7 @@ class MapRenderer(private val car: Boolean = false) {
 
     /** Bottom of the turn banner on screen (for placing things below it). */
     private var bannerBottom = 0f
+    val bannerBottomNow: Float get() = bannerBottom
 
     private fun drawBanner(c: Canvas, a: Rect, d: Float, t: Theme, pad: Float = 12 * d) {
         if (!NavEngine.active) return

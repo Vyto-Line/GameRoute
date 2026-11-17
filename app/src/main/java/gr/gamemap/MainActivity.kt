@@ -362,6 +362,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val root = FrameLayout(this).apply {
             addView(map, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             addView(homeSheet, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
+            // the convoy invite card: comes out from under Where to? (or the turn box) and goes back
+            inviteClip = FrameLayout(this@MainActivity).apply { clipChildren = true; clipToPadding = true; visibility = View.GONE; elevation = 5 * d }
+            addView(inviteClip, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
             addView(topArea, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
             addView(controls, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
             // recenter: bottom right, just above whatever card is at the bottom (a target icon)
@@ -4709,22 +4712,103 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** A friend invited me to a convoy: ask (not while driving: then the chip on the map shows it). */
     private fun maybeAskInvite() {
         if (!Friends.ready || !Friends.core.allowInvites || isFinishing) return
-        if (NavEngine.active || LocationTracker.speedMps > 3f || Convoy.proposal != null) return
+        if (Convoy.proposal != null) return
         val i = Friends.core.invites.firstOrNull { it.convoy != Convoy.code } ?: return
         val k = i.convoy + i.count
         if (k == inviteAsked) return
         inviteAsked = k
         Friends.cancelNotification(i.convoy)
-        GameBuilder(this@MainActivity)
-            .setTitle(L.t("${i.from} invites you to a convoy"))
-            .setMessage((if (i.dest.isNotBlank()) i.dest else L.t("No destination yet")) +
-                (if (i.count > 1) "\n" + L.t("${i.count} invites") else "") +
-                (if (Convoy.active) "\n\n" + L.t("You'll leave the convoy you're in.") else ""))
-            .setPositiveButton("Join the convoy") { _, _ -> joinConvoy(i.convoy) }
-            .setNegativeButton("Not now") { _, _ -> Friends.answer(i.convoy, "no") }
-            .showT()
+        // the small card (out from under Where to?, or the turn box while driving)
+        InvitePop.offer(i)
         Friends.markSeen(listOf(i))
     }
+
+    // ---------------------------------------------------------------- the invite card
+
+    private lateinit var inviteClip: FrameLayout
+    private var inviteCard: View? = null
+    private var inviteFor: FriendCore.Invite? = null
+
+    private val invitePopListener: () -> Unit = { runOnUiThread { syncInvitePop() } }
+
+    private fun syncInvitePop() {
+        val i = InvitePop.current
+        if (i == null) { hideInvitePop(); return }
+        if (i === inviteFor && inviteCard != null) return
+        showInvitePop(i)
+    }
+
+    /** Where the card comes out: under the turn box while driving, else under Where to?. */
+    private fun inviteTop(): Int =
+        if (NavEngine.active && !NavEngine.arrived) (map.bannerBottom + 6 * d).toInt()
+        else (topArea.top + searchCard.bottom + 6 * d).toInt().coerceAtLeast((40 * d).toInt())
+
+    private fun showInvitePop(i: FriendCore.Invite) {
+        inviteClip.removeAllViews()
+        inviteFor = i
+        val p = (10 * d).toInt()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(p, p, p, p + (3 * d).toInt())
+            background = bg(opaque(panel), accent, 1.5f, 14f)
+            isClickable = true
+            setOnClickListener { InvitePop.close(); openTogether() }
+            contentDescription = L.t("${i.from} invites you to a convoy")
+            addView(avatar(i.from, i.fid, true, 40))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL; setPadding((10 * d).toInt(), 0, (6 * d).toInt(), 0)
+                addView(label(L.t("${i.from} invites you"), 15.5f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                val sub = "🏁 " + (if (i.dest.isNotBlank()) L.t("Convoy to ${i.dest}") else L.t("A convoy")) +
+                    (if (i.count > 1) " · " + L.t("${i.count} invites") else "") + (if (Convoy.active) " · " + L.t("you'll leave yours") else "")
+                addView(label(sub, 13f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(TextView(context).apply {
+                text = "✕"; textSize = 16f; gravity = Gravity.CENTER; setTextColor(dim())
+                contentDescription = L.t("Not now")
+                background = bg(Color.TRANSPARENT, dim(110), 1.2f, 12f)
+                setOnClickListener { InvitePop.notNow() }
+            }, LinearLayout.LayoutParams((42 * d).toInt(), (42 * d).toInt()).apply { marginEnd = (8 * d).toInt() })
+            addView(pill(L.t("Join")) { InvitePop.take()?.let { joinConvoy(it.convoy) } }.apply {
+                setTextColor(onAccent(accent)); background = bg(accent, radius = 12f); textSize = 15f
+                minHeight = (42 * d).toInt(); setPadding((18 * d).toInt(), 0, (18 * d).toInt(), 0)
+            }, LinearLayout.LayoutParams(WRAP_CONTENT, (42 * d).toInt()))
+        }
+        // the 10 s running down
+        val bar = View(this).apply { setBackgroundColor(accent); pivotX = 0f }
+        val holder = FrameLayout(this).apply {
+            addView(card, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(bar, FrameLayout.LayoutParams(MATCH_PARENT, (3 * d).toInt(), Gravity.BOTTOM).apply {
+                leftMargin = (8 * d).toInt(); rightMargin = (8 * d).toInt(); bottomMargin = (3 * d).toInt()
+            })
+        }
+        inviteClip.addView(holder, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            leftMargin = (12 * d).toInt(); rightMargin = (12 * d).toInt()
+        })
+        (inviteClip.layoutParams as FrameLayout.LayoutParams).topMargin = inviteTop()
+        inviteClip.requestLayout()
+        inviteClip.visibility = View.VISIBLE
+        inviteCard = holder
+        // out from under the bar above it (the clip hides it until it slides down)
+        holder.translationY = -200 * d
+        holder.post {
+            holder.translationY = -holder.height.toFloat()
+            holder.animate().translationY(0f).setDuration(260).start()
+        }
+        val left = InvitePop.left()
+        bar.scaleX = left
+        bar.animate().scaleX(0f).setDuration((InvitePop.SHOW_MS * left).toLong()).setInterpolator(android.view.animation.LinearInterpolator()).start()
+    }
+
+    private fun hideInvitePop() {
+        val v = inviteCard ?: return
+        inviteCard = null; inviteFor = null
+        v.animate().translationY(-v.height.toFloat()).setDuration(220).withEndAction {
+            if (inviteCard == null) { inviteClip.removeAllViews(); inviteClip.visibility = View.GONE }
+        }.start()
+    }
+
+    /** For tests: the card on screen now. */
+    internal fun invitePopForTest(): View? = inviteCard
 
     /** Invite in the convoy: friends first, or the link for anyone else. */
     private fun showInviteMenu(anchor: View) {
@@ -5603,7 +5687,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         NavEngine.changed += compassCheck
         Friends.changed += friendsListener
         Friends.arrived += friendsArrived
+        InvitePop.changed += invitePopListener
         Friends.setVisible(true)
+        syncInvitePop()
         refreshChrome()
         main.postDelayed({ maybeAskInvite() }, 800)
     }
@@ -5621,6 +5707,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         NavEngine.changed -= compassCheck
         Friends.changed -= friendsListener
         Friends.arrived -= friendsArrived
+        InvitePop.changed -= invitePopListener
         Friends.setVisible(false)
         main.removeCallbacks(ticker)
         HomeWidget.refresh(this)
@@ -5693,6 +5780,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 /** The phone's map view: redraws on changes, animates smoothly, pinch to zoom, drag to look around. */
 class GameMapView(ctx: Context) : View(ctx) {
     private val renderer = MapRenderer()
+    /** The bottom of the turn box (or the top of the map), on the last frame. */
+    val bannerBottom: Float get() = renderer.bannerBottomNow
+    internal val rendererForTest: MapRenderer get() = renderer
     private val area = Rect()
     var insetTop = 0
     var insetBottom = 0

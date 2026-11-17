@@ -121,6 +121,13 @@ object OfflineRouter {
         }
     }
 
+    /** The speed limit (km/h) of the road right at [p] (within 25 m, facing [heading]), if the road file knows it. */
+    fun limitAt(p: LatLng, heading: Float?): Int? {
+        val g = graph ?: (if (present) open() else null) ?: return null
+        val s = try { snap(g, p, heading, 25.0) } catch (_: Exception) { null } ?: return null
+        return g.maxspeed(s.edge).takeIf { it in 5..150 }
+    }
+
     /** Ready to route (the file is on the phone and opens). */
     fun ready(): Boolean = present && (graph != null || open() != null)
 

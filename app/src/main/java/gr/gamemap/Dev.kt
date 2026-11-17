@@ -193,8 +193,10 @@ object Dev {
     fun testInvite() {
         if (!Friends.ready) return
         if (!Friends.core.isFriend("test-nikos")) addTestFriends()
-        Friends.core.addTestInvite("test-nikos", "Nikos (test)", "test" + (100000..999999).random(), "Sounio")
+        val cv = "test" + (100000..999999).random()
+        Friends.core.addTestInvite("test-nikos", "Nikos (test)", cv, "Sounio")
         Friends.changed.fire()
+        Friends.core.invites.firstOrNull { it.convoy == cv }?.let { InvitePop.offer(it) }
     }
 
     /** A convoy of 3 made-up drivers moving along with you, with a quick message now and then. */

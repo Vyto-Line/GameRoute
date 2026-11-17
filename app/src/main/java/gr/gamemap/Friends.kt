@@ -120,6 +120,8 @@ object Friends {
         main.post {
             changed.fire()
             if (news.requests.isNotEmpty() || news.invites.isNotEmpty() || news.accepted.isNotEmpty() || news.declined.isNotEmpty()) arrived.fire()
+            // on screen (phone or car): the small invite card
+            if (visible && core.allowInvites) for (i in news.invites) InvitePop.offer(i)
             Presence.refresh()
         }
         // notifications: always from the background job; in the app only while it's not on screen

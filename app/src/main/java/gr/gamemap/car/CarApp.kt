@@ -413,6 +413,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 MapState.changed += onMapState
                 NavEngine.changed += surface.redraw
                 gr.gamemap.Convoy.changed += surface.redraw
+                gr.gamemap.InvitePop.changed += surface.redraw
                 gr.gamemap.Convoy.proposed += onProposal
                 NavEngine.changed += onNav
                 Voice.changed += onNav
@@ -433,6 +434,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             override fun onDestroy(owner: LifecycleOwner) {
                 surface.release()
                 gr.gamemap.Convoy.changed -= surface.redraw
+                gr.gamemap.InvitePop.changed -= surface.redraw
                 gr.gamemap.Convoy.proposed -= onProposal
                 TileCache.loaded -= surface.redraw
                 LocationTracker.changed -= surface.redraw
@@ -629,6 +631,9 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             return
         }
         if (id == "convoy:accept") { gr.gamemap.Convoy.accept(); return }
+        // the invite card: Join (straight in, then Drive to on the convoy's page) or Not now
+        if (id == "inv:no") { gr.gamemap.InvitePop.notNow(); surface.redraw(); return }
+        if (id == "inv:join") { gr.gamemap.InvitePop.take()?.let { carJoinConvoy(carContext, it.convoy) }; surface.redraw(); return }
         if (id == "convoy:go") {
             // the lobby's big button: START (host, or nobody else at the start), READY UP, or take ready back
             val C = gr.gamemap.Convoy
