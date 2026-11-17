@@ -37,6 +37,8 @@ object LocationTracker : LocationListener {
     // display smoothing
     private var fromPos: LatLng? = null
     private var toPos: LatLng? = null
+    /** The glide bends: it leaves the way the arrow was pointing and curves into the new fix. */
+    private var ctrlPos: LatLng? = null
     private var fixAt = 0L
     private var speed = 0f
     private var moveBearing = 0f
@@ -188,10 +190,17 @@ object LocationTracker : LocationListener {
         val to = toPos ?: return null
         val from = fromPos ?: to
         val t = (SystemClock.uptimeMillis() - fixAt) / 1000.0
-        if (t < 1.0) return Geo.lerp(from, to, t)
+        if (t < 1.0) return glideAt(from, to, t)
         if (speed < 2f) return to
         // Between fixes, keep rolling forward at the current speed (up to 1.5 s).
         return Geo.offset(to, moveBearing, speed * (t - 1.0).coerceAtMost(1.5))
+    }
+
+    /** A point on the glide: a gentle curve from [from] (leaving along the arrow) into [to]. */
+    private fun glideAt(from: LatLng, to: LatLng, t: Double): LatLng {
+        val c = ctrlPos ?: return Geo.lerp(from, to, t)
+        val u = 1 - t
+        return LatLng(u * u * from.lat + 2 * u * t * c.lat + t * t * to.lat, u * u * from.lon + 2 * u * t * c.lon + t * t * to.lon)
     }
 
     /** Advances the heading animation. Returns true while anything is still moving. */
@@ -209,12 +218,16 @@ object LocationTracker : LocationListener {
         val gliding = from != null && to != null && now - fixAt < 1000 && glideMeters > 3.0 && speed > 2f
         val target = when {
             speed < 1.0f && c != null && !NavEngine.active -> c
-            gliding -> Geo.bearing(from!!, to!!).toFloat()
+            gliding -> {
+                // the curve's own direction right here: the arrow is always tangent to its path
+                val gt = ((now - fixAt) / 1000.0).coerceIn(0.0, 0.95)
+                Geo.bearing(glideAt(from!!, to!!, gt), glideAt(from, to, gt + 0.05))
+            }
             else -> headingTarget
         }
         val diff = Geo.angleDiff(heading, target)
         val turning = abs(diff) > 0.3f
-        heading = if (turning) (heading + diff * (1 - exp(-dt / (if (gliding) 160.0 else 260.0))).toFloat() + 360f) % 360f else target
+        heading = if (turning) (heading + diff * (1 - exp(-dt / (if (gliding) 70.0 else 260.0))).toFloat() + 360f) % 360f else target
         // standing still, a new fix a few cm away isn't worth 30 frames a second
         val moving = toPos != null && ((now - fixAt < 1000 && glideMeters > 0.8) || speed >= 2f)
         return turning || moving
@@ -326,6 +339,8 @@ object LocationTracker : LocationListener {
         // then (a fix is already a moment old): otherwise the arrow trails the car by 1-2 s.
         val target = if (!firstFix && held == null && speed > 2f) Geo.offset(p, moveBearing, (speed * LEAD_S).coerceAtMost(40.0)) else p
         glideMeters = fromPos?.let { Geo.distance(it, target) } ?: 0.0
+        // leave along the arrow's current heading for a third of the way, then curve into the fix
+        ctrlPos = fromPos?.takeIf { !firstFix && held == null && speed > 2f && glideMeters > 3.0 }?.let { Geo.offset(it, heading, glideMeters / 3) }
         toPos = target
         fixAt = SystemClock.uptimeMillis()
         if (firstFix) heading = headingTarget
