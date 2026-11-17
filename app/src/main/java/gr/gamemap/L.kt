@@ -581,7 +581,7 @@ object L {
         "Your friends stay. Old links and QR codes stop working." to "Οι φίλοι σου μένουν. Οι παλιοί σύνδεσμοι και κωδικοί QR σταματούν να λειτουργούν.",
         "Make a new code" to "Νέος κωδικός", "Add friends" to "Πρόσθεσε φίλους", "1 friend request" to "1 αίτημα φιλίας",
         "Tap to accept or decline" to "Πάτα για αποδοχή ή απόρριψη", "You can invite them to convoys now" to "Μπορείς πλέον να τον καλείς σε κομβόι",
-        "A convoy" to "Ένα κομβόι", "Send your friend link" to "Στείλε τον σύνδεσμο φίλου", "latest" to "τελευταία", "just now" to "μόλις τώρα", "convoy" to "κομβόι",
+        "A convoy" to "Ένα κομβόι", "you'll leave yours" to "θα φύγετε από το δικό σας", "Send your friend link" to "Στείλε τον σύνδεσμο φίλου", "latest" to "τελευταία", "just now" to "μόλις τώρα", "convoy" to "κομβόι",
         "INVITES" to "ΠΡΟΣΚΛΗΣΕΙΣ", "REQUESTS" to "ΑΙΤΗΜΑΤΑ", "OFFLINE" to "ΕΚΤΟΣ ΣΥΝΔΕΣΗΣ", "REQUESTS YOU SENT" to "ΑΙΤΗΜΑΤΑ ΠΟΥ ΕΣΤΕΙΛΕΣ",
         "YOUR NAME" to "ΤΟ ΟΝΟΜΑ ΣΑΣ", "Edit" to "Αλλαγή", "Your name" to "Το όνομά σας", "Join" to "Συμμετοχή",
         "Code or invite link" to "Κωδικός ή σύνδεσμος πρόσκλησης",

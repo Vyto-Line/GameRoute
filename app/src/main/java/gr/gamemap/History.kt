@@ -6,6 +6,8 @@ package gr.gamemap
  */
 object History {
     val builds: List<Triple<String, String, String>> = listOf(
+        Triple("111.2", "Convoy invites in a small card (phone and car); speed orange or red over the limit; the road name under your arrow", "Προσκλήσεις κομβόι σε μικρή κάρτα (κινητό και αυτοκίνητο)· η ταχύτητα πορτοκαλί ή κόκκινη πάνω από το όριο· το όνομα του δρόμου κάτω από το βέλος"),
+        Triple("111.1", "Same as 110 (so testers can update)", "Ίδιο με το 110 (για να ενημερωθούν οι δοκιμαστές)"),
         Triple("110", "Faster rerouting, GameRoute-style pop-ups, avatars, more level celebrations, Friends on the car map", "Ταχύτερος επανυπολογισμός, αναδυόμενα στο στυλ του GameRoute, άβαταρ, περισσότερες γιορτές επιπέδου, Φίλοι στον χάρτη του αυτοκινήτου"),
         Triple("109", "Friends' activity, turn-only voice, Latin street names in English, calmer menus", "Δραστηριότητα φίλων, φωνή μόνο με τις στροφές, ονόματα δρόμων με λατινικά στα Αγγλικά, μενού χωρίς τρεμόπαιγμα"),
         Triple("108", "The map zooms with the road without a route; all 3 route cards fit in the car", "Ο χάρτης κάνει ζουμ ανάλογα με τον δρόμο και χωρίς διαδρομή· και οι 3 διαδρομές χωρούν στο αυτοκίνητο"),
