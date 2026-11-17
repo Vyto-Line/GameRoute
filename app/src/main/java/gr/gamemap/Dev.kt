@@ -26,7 +26,8 @@ object Dev {
     @Volatile var simTrip = false
     private var pos: LatLng? = null
     private var bearing = 0f
-    private const val SPEED = 11.0 // m/s, about 40 km/h
+    /** The simulated car's speed now (m/s): eases towards the road's speed. */
+    private var v = 0.0
     private var leaveUntil = 0L
     private var weakUntil = 0L
     private var tunnelUntil = 0L
@@ -35,15 +36,18 @@ object Dev {
     val noInternet get() = SystemClock.uptimeMillis() < noNetUntil
 
     /** Drives to [dest] (or 2.5 km away), along the route, one fix a second. */
-    fun simulate(ctx: Context, dest: Place?) {
+    fun simulate(ctx: Context, dest: Place?, startNav: Boolean = true) {
         val start = LocationTracker.position ?: LatLng(37.9838, 23.7275)
         pos = start; bearing = LocationTracker.heading
         simActive = true; simTrip = true
         leaveUntil = 0; weakUntil = 0; tunnelUntil = 0; noNetUntil = 0
+        v = 0.0
         fix(start, 0f, 5f)
-        val to = dest ?: Place(L.t("Test destination"), "", Geo.offset(start, 45f, 2500.0))
-        NavEngine.start(ctx, to)
-        CrashLog.note("dev: simulated drive to ${to.name}")
+        if (startNav) {
+            val to = dest ?: Place(L.t("Test destination"), "", Geo.offset(start, 45f, 2500.0))
+            NavEngine.start(ctx, to)
+            CrashLog.note("dev: simulated drive to ${to.name}")
+        }
         main.removeCallbacks(tick); main.postDelayed(tick, 1000)
     }
 
@@ -54,7 +58,7 @@ object Dev {
     }
 
     /** Off the route: the next 7 s turn down a side street. */
-    fun leaveRoute() { leaveUntil = SystemClock.uptimeMillis() + 7000; CrashLog.note("dev: leaving the route") }
+    fun leaveRoute() { bearing = (bearing + 90f) % 360f; leaveUntil = SystemClock.uptimeMillis() + 7000; CrashLog.note("dev: leaving the route") }
     fun weakGps() { weakUntil = SystemClock.uptimeMillis() + 30_000 }
     fun tunnel() { tunnelUntil = SystemClock.uptimeMillis() + 30_000 }
     fun noSignal() { noNetUntil = SystemClock.uptimeMillis() + 30_000 }
@@ -69,25 +73,45 @@ object Dev {
     /** The faster-route offer, as if a quicker way had been found. */
     fun showOffer() { NavEngine.current?.let { NavEngine.debugOffer(it, 240) } }
 
+    /** How fast to drive here (m/s): the speed limit when known, else by the kind of road. */
+    private fun roadSpeed(p: LatLng): Double {
+        NavEngine.speedLimit?.takeIf { it in 20..130 }?.let { return it / 3.6 * 0.95 }
+        val kind = try { RoadMatch.match(p, bearing, v.toFloat().coerceAtLeast(5f), 5f); RoadMatch.kindNow() } catch (_: Exception) { null }
+        return when (kind) {
+            "motorway" -> 33.0; "trunk" -> 25.0; "primary" -> 19.0; "secondary" -> 15.5
+            "tertiary" -> 12.5; "service" -> 6.0; else -> 10.0
+        }
+    }
+
     private val tick = object : Runnable {
         override fun run() {
             if (!simActive) return
             val now = SystemClock.uptimeMillis()
             val p = pos ?: return
             if (NavEngine.arrived || !NavEngine.active) { simActive = false; return }
-            val next: LatLng
-            if (now < leaveUntil) {
-                // a side street: 90° to the right of where we were going
-                next = Geo.offset(p, (bearing + 90f) % 360f, SPEED)
-            } else {
-                next = along(p, NavEngine.route, SPEED) ?: Geo.offset(p, bearing, SPEED)
-            }
+            // speed up / slow down gently towards this road's speed (slower into turns)
+            var want = roadSpeed(p)
+            val turn = NavEngine.currentStep?.direction.orEmpty()
+            if (NavEngine.distanceToNext in 0.0..70.0 && (turn.contains("left") || turn.contains("right") || turn == "uturn")) want = minOf(want, 8.0)
+            v += (want - v).coerceIn(-3.0, 2.5)
+            val route = NavEngine.route
+            val off = route.size < 2 || nearestDistance(p, route) > 25
+            val next = if (now < leaveUntil || off) {
+                // a side street (to the right), or still off the route until the new one comes:
+                // keep going the way we're going, never back to where we left it
+                Geo.offset(p, bearing, v)
+            } else along(p, route, v) ?: Geo.offset(p, bearing, v)
             if (Geo.distance(p, next) > 0.5) bearing = Geo.bearing(p, next)
-            if (now >= leaveUntil) { /* back to following */ }
             pos = next
-            if (now >= tunnelUntil) fix(next, SPEED.toFloat(), if (now < weakUntil) 60f else 5f)
+            if (now >= tunnelUntil) fix(next, v.toFloat(), if (now < weakUntil) 60f else 5f)
             main.postDelayed(this, 1000)
         }
+    }
+
+    private fun nearestDistance(p: LatLng, route: List<LatLng>): Double {
+        var best = Double.MAX_VALUE
+        for (i in 0 until route.size - 1) best = minOf(best, Geo.project(p, route[i], route[i + 1]).second)
+        return best
     }
 
     /** [m] metres on along [route] from the point of it nearest to [p]. */
@@ -191,6 +215,7 @@ object Dev {
     private val gaps = doubleArrayOf(180.0, 380.0, -140.0)
     /** How fast each one drives (m/s): they really move, even while you're parked. */
     private val speeds = doubleArrayOf(12.5, 10.0, 14.0)
+    private val factors = doubleArrayOf(1.06, 0.96, 1.1)
     private var lastMe: LatLng? = null
     private val trail = ArrayList<LatLng>() // where I've been, for the driver behind me without a route
 
@@ -205,7 +230,9 @@ object Dev {
             val names = listOf("Nikos (test)", "Eleni (test)", "Maria (test)")
             for (i in 0..2) {
                 // each drives at its own speed (a little faster and slower in turn); I move too
-                val v = speeds[i] + kotlin.math.sin((convoyT + i * 7) / 9.0) * 2.5
+                // as fast as the road lets you (a little faster or slower each); parked: their own pace
+                val base = maxOf(LocationTracker.speedMps.toDouble(), speeds[i])
+                val v = base * (if (LocationTracker.speedMps > 3) factors[i] else 1.0) + kotlin.math.sin((convoyT + i * 7) / 9.0) * 1.5
                 gaps[i] += v - moved
                 // far ahead: comes round again from behind (so there's always someone to watch)
                 if (gaps[i] > 600) gaps[i] = -300.0
