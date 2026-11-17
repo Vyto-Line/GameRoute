@@ -20,6 +20,7 @@ import java.io.File
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+@org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 class CarFriendsTest {
     private val out = File(System.getProperty("previewOut") ?: "build/previews").apply { mkdirs() }
     private val log = StringBuilder()
