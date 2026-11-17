@@ -1808,10 +1808,14 @@ class MapRenderer(private val car: Boolean = false) {
             fill.color = withAlpha(ink, 22); c.drawRoundRect(rr, 10 * d, 10 * d, fill)
             if (rowId != null) carHits += rr to rowId
             val cx = rr.left + 30 * d; val cy = rr.centerY()
-            fill.color = Color.HSVToColor(floatArrayOf((seed.hashCode() and 0xffff) % 360f, 0.55f, 0.78f))
-            c.drawCircle(cx, cy, 19 * d, fill)
-            text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = Color.WHITE
-            c.drawText(name.take(1).uppercase(), cx, cy + 6 * d, text)
+            val av = Avatars.ofFriend(seed)
+            if (av != null) Avatars.draw(c, av.first, av.second, cx, cy, 19 * d)
+            else {
+                fill.color = Color.HSVToColor(floatArrayOf((seed.hashCode() and 0xffff) % 360f, 0.55f, 0.78f))
+                c.drawCircle(cx, cy, 19 * d, fill)
+                text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = Color.WHITE
+                c.drawText(name.take(1).uppercase(), cx, cy + 6 * d, text)
+            }
             var bw = 0f
             btn?.let { (label, id) ->
                 text.textSize = 16 * d

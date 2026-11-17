@@ -382,6 +382,19 @@ object Friends {
     val levels = java.util.concurrent.ConcurrentHashMap<String, String>()
     fun levelOf(fid: String): String = levels[fid].orEmpty()
 
+    /** Friends' avatars ("fox:ea580c"), as their phones last sent them (kept between runs). */
+    val avatars = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun saveAvatars() {
+        if (!::app.isInitialized) return
+        val o = JSONObject(); for ((k, v) in avatars) o.put(k, v)
+        app.getSharedPreferences("friends", Context.MODE_PRIVATE).edit().putString("avatars", o.toString()).apply()
+    }
+    private fun loadAvatars() {
+        if (!::app.isInitialized) return
+        val o = try { JSONObject(app.getSharedPreferences("friends", Context.MODE_PRIVATE).getString("avatars", null) ?: "{}") } catch (e: Exception) { JSONObject() }
+        for (k in o.keys()) avatars.putIfAbsent(k, o.optString(k))
+    }
+
     /**
      * What friends are up to, from their "I'm here": driving now, in a convoy (never where or to
      * where), and when they were last online. Invisible friends send nothing, so show nothing.
@@ -445,6 +458,7 @@ object Friends {
             val o = JSONObject().put("on", online).put("at", System.currentTimeMillis())
             if (online && core.status == FriendCore.DND) o.put("dnd", true)
             if (Xp.showToFriends) o.put("lv", Xp.badge()) // only if I chose to show it
+            Avatars.myCode().takeIf { it.isNotBlank() }?.let { o.put("av", it) } // a short code, never a picture
             // what I'm doing (never where): driving, in a convoy
             if (online && NavEngine.active && !NavEngine.arrived) o.put("dr", true)
             if (online && Convoy.active) o.put("cv", true)
@@ -467,7 +481,7 @@ object Friends {
         fun start() {
             if (!ready || !core.started || on) return
             on = true
-            if (!hooked) { hooked = true; NavEngine.changed += mine; Convoy.changed += mine; loadLastSeen() }
+            if (!hooked) { hooked = true; NavEngine.changed += mine; Convoy.changed += mine; loadLastSeen(); loadAvatars() }
             io.execute {
                 if (!on) return@execute
                 try {
@@ -481,6 +495,7 @@ object Friends {
                             val o = Seal.open(core.presenceKey(f.secret), String(m.payload))?.let { JSONObject(it) }
                             core.setOnline(f.fid, if (o != null && o.optBoolean("on")) o.optLong("at") else null, o?.optBoolean("dnd") == true)
                             levels[f.fid] = o?.optString("lv").orEmpty()
+                            o?.optString("av")?.takeIf { it.isNotBlank() }?.let { av -> if (avatars[f.fid] != av) { avatars[f.fid] = av; saveAvatars() } }
                             val on = o != null && o.optBoolean("on")
                             took(f.fid, on, o?.optBoolean("dr") == true, o?.optBoolean("cv") == true, o?.optLong("at") ?: 0L)
                             main.post { changed.fire() }
@@ -505,7 +520,7 @@ object Friends {
         }
 
         /** Watches the friends' topics (again, when the list changed). */
-        fun refresh() { if (on) io.execute { watch(force = false) } }
+        fun refresh() { if (on) io.execute { watch(force = false); publishMe() } }
 
         private fun watch(force: Boolean) {
             val c = client ?: return

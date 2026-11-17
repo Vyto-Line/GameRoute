@@ -3924,7 +3924,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             pt.style = android.graphics.Paint.Style.STROKE; pt.strokeWidth = (if (big) 5f else 3.5f) * d; pt.strokeCap = android.graphics.Paint.Cap.ROUND
             pt.color = dim(60); c.drawCircle(cx, cy, r, pt)
             pt.color = accent; c.drawArc(cx - r, cy - r, cx + r, cy + r, -90f, 360f * have / maxOf(of, 1), false, pt)
-            icon?.let { ic ->
+            // my avatar inside the ring (the plain person until one is chosen)
+            val mine = Avatars.byId(Avatars.mine)
+            if (mine != null) Avatars.draw(c, mine, if (Avatars.myColor != 0) Avatars.myColor else mine.color, cx, cy, r - (if (big) 4.5f else 3f) * d)
+            else icon?.let { ic ->
                 val s = (r * 1.0f).toInt()
                 ic.setTint(ink); ic.setBounds((cx - s / 2).toInt(), (cy - s / 2).toInt(), (cx + s / 2).toInt(), (cy + s / 2).toInt()); ic.draw(c)
             }
@@ -4003,7 +4006,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sheetHost.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, p / 2, 0, p / 2)
             sheetStack.lastOrNull()?.let { from -> addView(backPill(sheetTitle(from)) { sheetBack() }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = p / 2 }) }
-            addView(YouRing(context, big = true).apply { setOnClickListener { openSheet("progress") } }, LinearLayout.LayoutParams((64 * d).toInt(), (64 * d).toInt()).apply { marginEnd = p })
+            addView(YouRing(context, big = true).apply { setOnClickListener { chooseAvatar() }; contentDescription = L.t("Your avatar") }, LinearLayout.LayoutParams((64 * d).toInt(), (64 * d).toInt()).apply { marginEnd = p })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 // your name first (tap to change it), then your title in this style, then the level
@@ -4205,13 +4208,75 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val pal = intArrayOf(Color.rgb(255, 146, 43), Color.rgb(77, 171, 247), Color.rgb(247, 131, 172), Color.rgb(99, 230, 190),
             Color.rgb(177, 151, 252), Color.rgb(255, 212, 59), Color.rgb(47, 210, 122))
         val col = pal[Math.floorMod(fid.hashCode(), pal.size)]
-        addView(label(name.trim().take(1).uppercase().ifBlank { "?" }, size * 0.4f, bold = true).apply {
+        // their avatar if they've chosen one (and aren't Invisible), else their initial
+        val av = Avatars.ofFriend(fid)
+        if (av != null) addView(AvatarView(context, av.first, av.second), android.widget.FrameLayout.LayoutParams((size * d).toInt(), (size * d).toInt()))
+        else addView(label(name.trim().take(1).uppercase().ifBlank { "?" }, size * 0.4f, bold = true).apply {
             gravity = Gravity.CENTER; setTextColor(Color.rgb(17, 17, 17)); background = bg(col, radius = size / 2f)
         }, android.widget.FrameLayout.LayoutParams((size * d).toInt(), (size * d).toInt()))
         // green online, red Do not disturb (their invites wait)
         val busy = online && Friends.ready && Friends.core.isBusy(fid)
         if (online) addView(View(context).apply { background = bg(if (busy) Color.rgb(240, 82, 82) else Color.rgb(72, 199, 116), panel, 2f, 7f) },
             android.widget.FrameLayout.LayoutParams((13 * d).toInt(), (13 * d).toInt(), Gravity.END or Gravity.BOTTOM))
+    }
+
+    /** One avatar, drawn (a lock over it when [locked]). */
+    private inner class AvatarView(ctx: android.content.Context, val a: Avatars.Avatar, var color: Int, val locked: Boolean = false, val chosen: Boolean = false) : View(ctx) {
+        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        override fun onDraw(c: Canvas) {
+            val r = minOf(width, height) / 2f - (if (chosen) 4 * d else 0f)
+            Avatars.draw(c, a, color, width / 2f, height / 2f, r)
+            if (chosen) { pt.style = android.graphics.Paint.Style.STROKE; pt.strokeWidth = 3 * d; pt.color = accent; c.drawCircle(width / 2f, height / 2f, r + 2.5f * d, pt) }
+            if (locked) {
+                pt.style = android.graphics.Paint.Style.FILL; pt.color = Color.argb(150, 10, 6, 20); c.drawCircle(width / 2f, height / 2f, r, pt)
+                pt.color = Color.WHITE; pt.textSize = r * 0.7f; pt.textAlign = android.graphics.Paint.Align.CENTER
+                c.drawText("🔒", width / 2f, height / 2f + r * 0.25f, pt)
+            }
+        }
+    }
+
+    /** You › tap your circle: pick an avatar and its colour (locked ones say what unlocks them). */
+    private fun chooseAvatar() {
+        val p = (12 * d).toInt()
+        lateinit var dlg: GameDialog
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun build() {
+            box.removeAllViews()
+            val mine = Avatars.byId(Avatars.mine)
+            val col = if (Avatars.myColor != 0) Avatars.myColor else mine?.color ?: Avatars.colors[1]
+            box.addView(label(L.t("Friends see it in their list and in convoys"), 13.5f).apply { setTextColor(dim()); gravity = Gravity.CENTER; setPadding(0, 0, 0, p) })
+            var row: LinearLayout? = null
+            Avatars.all.forEachIndexed { i, a ->
+                if (i % 4 == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }; box.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p }) }
+                val open = Avatars.unlocked(a)
+                val v = AvatarView(this, a, if (a.id == mine?.id) col else a.color, locked = !open, chosen = a.id == mine?.id).apply {
+                    contentDescription = L.t(a.name) + if (open) "" else ", " + Avatars.lockText(a)
+                    setOnClickListener {
+                        if (!open) { Toast.makeText(this@MainActivity, L.t(a.name) + " · " + Avatars.lockText(a), Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+                        Avatars.mine = a.id; youKey = ""; youBtn.invalidate(); build()
+                    }
+                }
+                row!!.addView(v, LinearLayout.LayoutParams(0, (66 * d).toInt(), 1f))
+            }
+            box.addView(label(L.t("BACKGROUND COLOUR"), 12.5f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.1f; setPadding(p / 2, p / 2, 0, p / 2) })
+            box.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+                for (cc in Avatars.colors) addView(View(context).apply {
+                    background = if (cc == col) bg(cc, Color.WHITE, 3f, 18f) else bg(cc, radius = 18f)
+                    setOnClickListener { Avatars.myColor = cc; if (Avatars.mine.isBlank()) Avatars.mine = Avatars.all[5].id; youKey = ""; youBtn.invalidate(); build() }
+                }, LinearLayout.LayoutParams(0, (36 * d).toInt(), 1f).apply { marginStart = p / 3; marginEnd = p / 3 })
+            })
+            Avatars.all.firstOrNull { !Avatars.unlocked(it) }?.let { next ->
+                box.addView(label("🔒 " + L.t(next.name) + " · " + Avatars.lockText(next), 12.5f).apply { setTextColor(dim()); setPadding(p / 2, p, 0, 0) })
+            }
+            if (mine != null) box.addView(label(L.t("Use my initial instead"), 14f, bold = true).apply {
+                setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, p, 0, 0)
+                setOnClickListener { Avatars.mine = ""; youKey = ""; youBtn.invalidate(); build() }
+            })
+            L.translateTree(box)
+        }
+        build()
+        dlg = GameBuilder(this).setTitle("Your avatar").setView(box).setPositiveButton("Done") { _, _ -> refreshChrome() }.showT()
     }
 
     /**

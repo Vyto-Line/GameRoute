@@ -55,6 +55,7 @@ class GameMapApp : Application() {
         Startup.step("offline roads") { OfflineRouter.init(this) }
         Startup.step("convoy") { Convoy.init(this) }
         Startup.step("friends") { Friends.init(this) }
+        Avatars.init(this)
         Startup.step("fuel") { Fuel.init(this) }
         Startup.step("parked") { Parked.init(this) }
         Startup.step("tolls") { Tolls.init(this) }

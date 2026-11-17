@@ -86,6 +86,18 @@ class DialogsTest {
         val seen = activity.getSharedPreferences("gamemap", android.content.Context.MODE_PRIVATE).getInt("levelCelebrated", 0)
         log.append("counted as celebrated: $seen\n")
         assertTrue("counted only after it played", seen == 5)
+        // avatars: all 12 drawn, and the picker
+        run {
+            val b = Bitmap.createBitmap(4 * 180, 3 * 180, Bitmap.Config.ARGB_8888); val cv = Canvas(b); cv.drawColor(android.graphics.Color.rgb(20, 12, 34))
+            Avatars.all.forEachIndexed { i, a -> Avatars.draw(cv, a, a.color, 90f + (i % 4) * 180f, 90f + (i / 4) * 180f, 70f) }
+            File(out, "avatars_all.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        MapState.setTheme(Theme.VIOLET_RAIN); MapState.setLightMode(MapState.LightMode.DARK); activity.refreshForTest()
+        activity.popupsForTest().forEach { it.dismiss() }
+        Avatars.mine = "fox"
+        call("chooseAvatar"); shot("avatar_picker")
+        log.append("avatar picker open=${activity.popupsForTest().size}, my code=${Avatars.myCode()}\n")
+        assertTrue(Avatars.myCode().startsWith("fox:"))
         File(out, "popups.txt").writeText(log.toString())
     }
 }
