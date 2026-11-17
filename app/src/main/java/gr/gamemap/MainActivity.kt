@@ -2799,7 +2799,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         SettingsGroup("app", "App", "Your progress, Garage, trip history, privacy, about" + if (Updater.ENABLED) ", updates" else "", R.drawable.ic_set_app, Color.rgb(13, 110, 97)),
         SettingsGroup("perf", "Performance", "Smooth or battery, map effects, animations, map smoothness", R.drawable.ic_set_perf, Color.rgb(202, 138, 4)),
         SettingsGroup("advanced", "Advanced", "Units, map links, star ratings and reviews, welcome screens", R.drawable.ic_set_adv, Color.rgb(100, 100, 110)),
-    )
+    ) + (if (BuildConfig.TEST_BUILD) listOf(
+        // test builds only (never in a public release): tools for trying things out
+        SettingsGroup("dev", "Developer (test build)", "Play celebrations, see the log, reset what's been seen, test a crash", R.drawable.ic_set_adv, Color.rgb(219, 39, 119)),
+    ) else emptyList())
 
     private fun renderSettings() {
         // typing in the search box: don't rebuild under the keyboard
@@ -2923,6 +2926,31 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 switchRow("Show traffic (phone and car)", Traffic.showLayer) { Traffic.showLayer = it; MapState.changed.fire() },
                 switchRow("The road you're on (under the arrow)", NavEngine.showRoadName) { NavEngine.showRoadName = it },
                 settingRow("Offline maps", Offline.areas().let { a -> if (a.isEmpty()) "Regions, Wi-Fi only, updates" else "${a.size} · ${Offline.size(a.sumOf { it.bytes })}" }) { openSheet("offline") },
+            )
+            "dev" -> if (!BuildConfig.TEST_BUILD) emptyList() else listOf(
+                settingRow("Play a level celebration", "Levels 5 to 50, in this style") {
+                    val lv = (5..50 step 5).toList()
+                    GameBuilder(this@MainActivity).setTitle("Play a level celebration")
+                        .setItems(lv.map { "Level $it" }.toTypedArray()) { _, i -> closeSheet(); playCelebration(lv[i]) }.showT()
+                },
+                settingRow("Show the level card", "Level ${Explorer.level}") { closeSheet(); showLevelUpCard((Explorer.level - 1).coerceAtLeast(1)) },
+                settingRow("What the app noted lately", "Reroute times, GPS, car screen") {
+                    val notes = CrashLog.recentNotes().ifBlank { "Nothing yet." }
+                    GameBuilder(this@MainActivity).setTitle("Lately").setMessage(notes)
+                        .setNeutralButton("Copy") { _, _ ->
+                            getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("GameRoute log", notes))
+                            Toast.makeText(this, L.t("Copied"), Toast.LENGTH_SHORT).show()
+                        }.setPositiveButton("OK", null).showT()
+                },
+                settingRow("Reset what's been seen", "Celebrations, What's new, welcome screens") {
+                    prefs().edit().remove("levelCelebrated").remove("seenWhatsNew100").remove("welcomeDone").apply()
+                    Toast.makeText(this, L.t("Reset"), Toast.LENGTH_SHORT).show()
+                },
+                settingRow("Test a crash", "Saves a report, like a real crash") {
+                    GameBuilder(this@MainActivity).setTitle("Test a crash?").setMessage("The app closes and offers the report next time.")
+                        .setNegativeButton("Cancel", null).setPositiveButton("Crash") { _, _ -> throw RuntimeException("Test crash from the Developer page") }.showT()
+                },
+                settingRow("This build", "build ${shownBuild()} · test") { },
             )
             "nav" -> listOf(
                 settingRow("Spoken directions", voice) { chooseVoice() },
@@ -5141,6 +5169,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun levelSeen(level: Int) {
         celebrating = false
         prefs().edit().putInt("levelCelebrated", maxOf(level, prefs().getInt("levelCelebrated", 0))).apply()
+    }
+
+    /** Developer page: play the celebration for [level] now (nothing is counted). */
+    private fun playCelebration(level: Int) {
+        val host = window.decorView as ViewGroup
+        lateinit var view: Milestone
+        view = Milestone(this, level, Xp.title(theme, level), theme) { host.post { (view.parent as? ViewGroup)?.removeView(view) } }
+        view.elevation = 60 * d
+        host.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
     /** For tests: the celebration for [level], drawn at [ms]. */

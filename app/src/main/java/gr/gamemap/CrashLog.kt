@@ -77,6 +77,9 @@ object CrashLog {
     }
 
     /** The report from the last crash, if there is one waiting. */
+    /** What the app noted lately (for the Developer page of test builds). */
+    fun recentNotes(): String = synchronized(recent) { recent.joinToString("\n") }
+
     fun pending(): String? = file?.takeIf { it.exists() }?.let { try { it.readText() } catch (e: Exception) { null } }
 
     fun clear() { file?.delete() }

@@ -19,6 +19,8 @@ android {
         versionName = "build-" + if (build >= 1000) (build / 10).toString() + (if (build % 10 != 0) ".${build % 10}" else "") else "$build"
         // Built-in TomTom key, from the TOMTOM_KEY secret at build time (never stored in the code).
         buildConfigField("String", "REPORTS_URL", "\"${System.getenv("REPORTS_URL") ?: ""}\"")
+        // test builds (CI -PtestBuild=true) carry the Developer page; public builds never do
+        buildConfigField("boolean", "TEST_BUILD", if ((project.findProperty("testBuild") as String?) == "true") "true" else "false")
         buildConfigField("String", "TOMTOM_KEY", "\"${System.getenv("TOMTOM_KEY") ?: ""}\"")
     }
     signingConfigs {
