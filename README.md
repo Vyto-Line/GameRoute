@@ -16,7 +16,7 @@ Android · Android Auto · English and Ελληνικά
 </div>
 
 > [!TIP]
-> **New in build 109:** see what your friends are up to (driving, in a convoy, last seen), leave a convoy or drive to it from the car, all route choices on the car screen, the map zooming with the road even without a route, street names in Latin letters in English, and turn-only spoken directions. Also fixed: Friends crashing on Android Auto, the car screen freezing after switching apps, and flickering menus.
+> **New in build 110:** a new route in a second or two when you take another street, an arrow that curves smoothly through turns, pop-ups in GameRoute's own look, 12 avatars your friends see, their own level celebrations for seven more styles, Friends drawn in the style on Android Auto (activity, invites, convoy actions), at most one faster-route message every 5 minutes, and a switch for the road name under the arrow.
 >
 > **Build 100** brought prestige ranks, a celebration every 5 levels, your monthly recap, the junction-sketch turn box, better GPS, your status (Online / Do not disturb / Invisible), friends and convoys in Android Auto, the Performance page, a home screen widget, and backup & restore.
 

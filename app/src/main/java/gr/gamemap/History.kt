@@ -6,6 +6,7 @@ package gr.gamemap
  */
 object History {
     val builds: List<Triple<String, String, String>> = listOf(
+        Triple("110", "Faster rerouting, GameRoute-style pop-ups, avatars, more level celebrations, Friends on the car map", "Ταχύτερος επανυπολογισμός, αναδυόμενα στο στυλ του GameRoute, άβαταρ, περισσότερες γιορτές επιπέδου, Φίλοι στον χάρτη του αυτοκινήτου"),
         Triple("109", "Friends' activity, turn-only voice, Latin street names in English, calmer menus", "Δραστηριότητα φίλων, φωνή μόνο με τις στροφές, ονόματα δρόμων με λατινικά στα Αγγλικά, μενού χωρίς τρεμόπαιγμα"),
         Triple("108", "The map zooms with the road without a route; all 3 route cards fit in the car", "Ο χάρτης κάνει ζουμ ανάλογα με τον δρόμο και χωρίς διαδρομή· και οι 3 διαδρομές χωρούν στο αυτοκίνητο"),
         Triple("107", "Leave a convoy or drive to it from the car; lighter rain", "Αποχώρηση ή οδήγηση προς το κομβόι από το αυτοκίνητο· πιο ελαφριά βροχή"),
