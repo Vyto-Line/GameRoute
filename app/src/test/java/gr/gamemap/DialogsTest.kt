@@ -73,10 +73,16 @@ class DialogsTest {
         val ms = find(root)
         log.append("level ${Explorer.level}: celebration shown=${ms != null}\n")
         assertTrue("the level-5 celebration shows", ms != null)
-        // it plays out and goes away by itself (removed after the frame, not during it)
+        // it plays out and stays until a tap (time to read), then goes (removed after the frame, not during it)
         repeat(60) { looper.idleFor(java.time.Duration.ofMillis(100)); root.draw(Canvas(Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888))) }
         log.append("after 6 s: celebration still there=${find(root) != null}\n")
-        assertTrue("the celebration ends", find(root) == null)
+        assertTrue("the celebration waits for a tap", find(root) != null)
+        val m = find(root)!!
+        m.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 100f, 100f, 0))
+        m.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_UP, 100f, 100f, 0))
+        repeat(5) { looper.idleFor(java.time.Duration.ofMillis(100)); root.draw(Canvas(Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888))) }
+        log.append("after a tap: celebration still there=${find(root) != null}\n")
+        assertTrue("a tap ends it", find(root) == null)
         val seen = activity.getSharedPreferences("gamemap", android.content.Context.MODE_PRIVATE).getInt("levelCelebrated", 0)
         log.append("counted as celebrated: $seen\n")
         assertTrue("counted only after it played", seen == 5)

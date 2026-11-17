@@ -5175,7 +5175,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun playCelebration(level: Int) {
         val host = window.decorView as ViewGroup
         lateinit var view: Milestone
-        view = Milestone(this, level, Xp.title(theme, level), theme) { host.post { (view.parent as? ViewGroup)?.removeView(view) } }
+        view = Milestone(this, level, Xp.title(theme, level), theme) { host.post { (view.parent as? ViewGroup)?.removeView(view); showLevelUpCard((Explorer.level - 1).coerceAtLeast(1)) } }
         view.elevation = 60 * d
         host.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
@@ -5224,7 +5224,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         L.translateTree(box); Icons.applyTree(box)
         box.background = bg(panel, accent, 2f, 22f)
-        dlg = AlertDialog.Builder(this).setView(box).create()
+        dlg = AlertDialog.Builder(this).setView(box).create().apply { setCanceledOnTouchOutside(false) } // a stray tap after the celebration must not close it
         dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         dlg.show()
     }

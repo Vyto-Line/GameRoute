@@ -76,7 +76,7 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (e.action == MotionEvent.ACTION_UP) finish()
+        if (e.action == MotionEvent.ACTION_UP && SystemClock.uptimeMillis() - start > 700) finish()
         return true
     }
 
@@ -266,10 +266,13 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
         text.textSize = 15 * d; text.color = if (kind == "rally" || kind == "compass") Color.argb(200, 0, 0, 0) else Color.argb(200, 255, 255, 255)
         text.typeface = Typeface.DEFAULT_BOLD
         c.drawText(L.t(if (level >= 50) "Level 50: prestige is ready" else "LEVEL UP"), cx, h * 0.12f, text)
-        text.textSize = 13 * d; text.alpha = 140
+        text.textSize = (if (t > endMs) 15 else 13) * d
+        text.alpha = if (t > endMs) (150 + 100 * sin((t - endMs) / 300f)).toInt().coerceIn(60, 255) else 140
         c.drawText(L.t("Tap to continue"), cx, h * 0.93f, text); text.alpha = 255
         if (fixedMs == null) {
-            if (t > endMs) finish() else postInvalidateOnAnimation()
+            // played out: it stays (the rain keeps falling, the fire keeps burning) until a tap, so
+            // there's time to read the new title; then the level card with what was unlocked
+            postInvalidateOnAnimation()
         }
     }
 
