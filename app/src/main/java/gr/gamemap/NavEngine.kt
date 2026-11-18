@@ -224,13 +224,13 @@ object NavEngine {
     private var tripEndTime = 0L
     private var awaySince = 0L
 
-    /** The arrival card left open: it closes when you drive off (300 m away, or moving 20 s), or after 15 minutes. */
+    /** The arrival card left open: it closes when you drive off (300 m away, or moving 20 s), or after 30 seconds. */
     private fun autoDismissTrip(pos: LatLng, speed: Float) {
         if (lastTrip == null || active) return
         val now = System.currentTimeMillis()
         val end = tripEndAt ?: run { tripEndAt = pos; tripEndTime = now; return }
         if (speed > 4f) { if (awaySince == 0L) awaySince = now } else awaySince = 0L
-        if (Geo.distance(end, pos) > 300 || (awaySince > 0 && now - awaySince > 20_000) || now - tripEndTime > 15 * 60_000) {
+        if (Geo.distance(end, pos) > 300 || (awaySince > 0 && now - awaySince > 20_000) || now - tripEndTime > 30_000) {
             CrashLog.note("trip card closed by itself")
             dismissTrip()
         }
