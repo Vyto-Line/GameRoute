@@ -61,6 +61,7 @@ class SimDriveTest {
                 var dmin = Double.MAX_VALUE
                 for (i in 0 until r.points.size - 1) dmin = minOf(dmin, Geo.project(shown, r.points[i], r.points[i + 1]).second)
                 worst = maxOf(worst, dmin)
+                if (it % 15 == 0) log.append("  4x t=${it / 10.0}s: off ${dmin.toInt()} m, fix ${LocationTracker.position?.let { q -> Geo.distance(q, shown).toInt() }} m from the arrow, along ${NavEngine.along.toInt()}, v ${(LocationTracker.speedMps * 3.6).toInt()}\n")
             }
             log.append("4x: the drawn arrow was at most ${worst.toInt()} m off the road\n")
             assertTrue("the arrow stays on the road at speed (worst ${worst.toInt()} m)", worst < 15)
