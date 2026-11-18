@@ -42,6 +42,10 @@ object LocationTracker : LocationListener {
     private var fixAt = 0L
     private var speed = 0f
     private var moveBearing = 0f
+    private var hasMoved = false
+    private var movedAt = 0L
+    /** The way the car was last really going (within 15 min): a new trip from a parked car starts that way. */
+    val lastDriveHeading: Float? get() = if (hasMoved && System.currentTimeMillis() - movedAt < 15 * 60_000L) moveBearing else null
     private var headingTarget = 0f
     private var compass: Float? = null
     private var lastTick = 0L
@@ -256,8 +260,13 @@ object LocationTracker : LocationListener {
         })
     }
 
-    /** Fixes in a row thrown away as impossible jumps (after 3, the position is believed: a real move). */
+    /** Fixes in a row thrown away as impossible jumps (believed after 3 that agree with each other). */
     private var jumps = 0
+    private var lastSkipped: Location? = null
+    private var skippedInRow = 0
+    /** When a jump was last believed (the route waits a moment before calling it "off route"). */
+    @Volatile var jumpedAt = 0L
+        private set
 
     /** The last measured (not estimated) fix: what the Weak GPS note goes by. */
     @Volatile var lastReal: Location? = null
@@ -309,31 +318,43 @@ object LocationTracker : LocationListener {
         // A jump no car could make (signal bouncing off buildings): skip it, up to 3 in a row.
         val prevReal = lastReal
         if (real && prevReal != null && location.time - prevReal.time < 30_000 && impossibleJump(prevReal, location)) {
-            if (++jumps <= 3) { CrashLog.note("gps jump skipped"); return }
+            // a real move (a long gap, a ferry): the new fixes agree with each other; a teleport
+            // (signal off buildings) scatters: those keep being skipped (up to 10 in a row)
+            val ls = lastSkipped
+            val agrees = ls != null && !impossibleJump(ls, location)
+            lastSkipped = location
+            jumps = if (agrees) jumps + 1 else 1
+            if (jumps <= 3 && ++skippedInRow <= 10) { CrashLog.note("gps jump skipped"); return }
+            jumpedAt = now; CrashLog.note("gps jump believed")
         }
-        if (real) { jumps = 0; lastReal = location }
+        if (real) { jumps = 0; skippedInRow = 0; lastSkipped = null; lastReal = location }
 
         last = location
         speed = if (location.hasSpeed()) location.speed else 0f
         if (location.provider != ESTIMATE) { checkConvoyPace(location); checkResting(location) }
         var p = LatLng(location.latitude, location.longitude)
         val bearing = if (location.hasBearing() && speed > 3f) location.bearing else null
+        // slow: the way we were going (not none), so the road match keeps the right carriageway
+        val matchBearing = bearing ?: moveBearing.takeIf { speed > 1f && hasMoved }
         // stopped (a red light): the fixes wander a few metres; keep the arrow still
         val held = toPos?.takeIf { real && speed < 0.7f && prev != null && (!prev.hasSpeed() || prev.speed < 0.7f) &&
             Geo.distance(it, p) < maxOf(if (location.hasAccuracy()) location.accuracy * 0.8 else 10.0, 8.0) }
         val snapped = if (held != null || speed <= 1f) null
             else NavEngine.snap(p, bearing)
                 // no route (or off it): the map's own roads, by heading, speed and the road we were on
-                ?: if (speed > 2f) RoadMatch.match(p, bearing, speed, if (location.hasAccuracy()) location.accuracy else 20f) else null
+                ?: if (speed > 2f) RoadMatch.match(p, matchBearing, speed, if (location.hasAccuracy()) location.accuracy else 20f) else null
         if (held != null) {
             p = held
         } else if (snapped != null) {
             p = snapped.first
             headingTarget = snapped.second
-        } else if (location.hasBearing() && speed > 1.5f) {
+        } else if (location.hasBearing() && speed > 3f &&
+            (android.os.Build.VERSION.SDK_INT < 26 || !location.hasBearingAccuracy() || location.bearingAccuracyDegrees <= 30f)) {
+            // under ~11 km/h GPS's direction swings 20-40° from one second to the next: the map
+            // kept turning left and right; it keeps the last good direction until moving properly
             headingTarget = location.bearing
         }
-        if (speed > 1f) moveBearing = headingTarget
+        if (speed > 3f) { moveBearing = headingTarget; hasMoved = true; movedAt = System.currentTimeMillis() }
 
         val firstFix = toPos == null
         fromPos = if (firstFix) p else displayPosition()

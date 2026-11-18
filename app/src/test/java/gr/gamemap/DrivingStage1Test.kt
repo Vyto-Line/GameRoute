@@ -128,6 +128,15 @@ class DrivingStage1Test {
         // four in a row at the new place: it's real (e.g. a long gap), believe it
         for (k in 3..6) LocationTracker.onLocationChanged(fix(37.9850, 23.7300, t0 + k * 1000L))
         assertTrue("a lasting move is believed", LocationTracker.position!!.lat > 37.984)
+        // teleports that scatter (signal off buildings, each somewhere else): never believed
+        val ts = t0 + 20_000
+        LocationTracker.onLocationChanged(fix(37.9851, 23.7300, ts))
+        val base = LocationTracker.position!!
+        listOf(37.9890 to 23.7300, 37.9850 to 23.7360, 37.9810 to 23.7300, 37.9850 to 23.7240, 37.9895 to 23.7350)
+            .forEachIndexed { k, (la, lo) -> LocationTracker.onLocationChanged(fix(la, lo, ts + (k + 1) * 1000L)) }
+        val drift = Geo.distance(base, LocationTracker.position!!)
+        log.append("after 5 scattered teleports the position moved ${drift.toInt()} m\n")
+        assertTrue("scattered teleports are all ignored", drift < 30)
 
         // ---- the arrow keeps still at a red light
         val tr = t0 + 60_000
@@ -159,11 +168,14 @@ class DrivingStage1Test {
         fun y(r: Pair<LatLng, Float>?) = (r!!.first.lat - o.lat) * 110_540
         val r1 = y(RoadMatch.match(at(0.0, 2.0), 90f, 14f, 15f))
         val r2 = y(RoadMatch.match(at(15.0, 8.0), 90f, 14f, 15f))   // drifted closer to the other road
-        val r3 = y(RoadMatch.match(at(30.0, 13.0), 90f, 14f, 15f))  // really on the other one now
-        log.append("parallel roads: ${"%.0f".format(r1)} → ${"%.0f".format(r2)} → ${"%.0f".format(r3)}\n")
+        val r3 = y(RoadMatch.match(at(30.0, 13.0), 90f, 14f, 15f))  // on the other one now…
+        val r4 = y(RoadMatch.match(at(45.0, 13.5), 90f, 14f, 15f))
+        val r5 = y(RoadMatch.match(at(60.0, 14.0), 90f, 14f, 15f))  // …for three fixes: believed
+        log.append("parallel roads: ${"%.0f".format(r1)} → ${"%.0f".format(r2)} → ${"%.0f".format(r3)} → ${"%.0f".format(r4)} → ${"%.0f".format(r5)}\n")
         assertTrue("starts on the first", Math.abs(r1) < 1)
         assertTrue("a drift doesn't hop roads", Math.abs(r2) < 1)
-        assertTrue("a real change does", Math.abs(r3 - 14) < 1)
+        assertTrue("one fix over there isn't enough (the other carriageway)", Math.abs(r3) < 1)
+        assertTrue("three in a row are: a real change", Math.abs(r5 - 14) < 1)
         RoadMatch.useForTest(o.lat, o.lon, listOf(RoadMatch.Seg(-500.0, 0.0, 500.0, 0.0, "primary", 1, 1, false)))
         assertEquals("against a one-way street: no match", null, RoadMatch.match(at(0.0, 3.0), 270f, 10f, 15f))
         RoadMatch.reset()

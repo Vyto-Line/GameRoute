@@ -113,7 +113,7 @@ class ReadmeShotsTest {
         Explorer.addXp(3400)
 
         // home
-        style(Theme.OPEN_WORLD, false); MapState.zoomBy(16.5 - MapState.targetZoom); shot("home")
+        style(Theme.OPEN_WORLD, false); MapState.zoomBy(16.5 - MapState.targetZoom); MapState.phone.zoomedAway = false; shot("home")
         // a convoy invite while parked: the small card under Where to?
         style(Theme.VIOLET_RAIN, true)
         Friends.core.addTestInvite("f1nikos", "Nikos", "conv7777777", "Sounio")

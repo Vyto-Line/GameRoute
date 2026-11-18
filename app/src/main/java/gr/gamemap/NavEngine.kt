@@ -580,7 +580,10 @@ object NavEngine {
     // ============================================================= driving
 
     private fun heading(): Float? =
-        if (LocationTracker.speedMps > 1.5f) LocationTracker.heading else null
+        if (LocationTracker.speedMps > 3f) LocationTracker.heading
+        // parked (or crawling): the way the car was going when it stopped, so the route starts on
+        // the road you're on (outside Iatropolis on the side road, not the main road going the other way)
+        else LocationTracker.lastDriveHeading
 
     /**
      * After leaving the route, pick the option that carries on the way the driver went:
@@ -627,7 +630,12 @@ object NavEngine {
             }
             return s
         }
-        return list.minByOrNull { score(it) }?.takeIf { score(it) < score(best) - 30 || it === best } ?: best
+        val forward = list.minByOrNull { score(it) }?.takeIf { score(it) < score(best) - 30 || it === best } ?: best
+        // carrying on is nicer than turning back, but not at any price: a forward loop more than a
+        // quarter (and 90 s) longer than the quickest way loses to the quickest (it was taking
+        // drivers on long detours after a missed turn)
+        val quickest = list.minByOrNull { it.duration } ?: return forward
+        return if (forward.duration > quickest.duration * 1.25 && forward.duration - quickest.duration > 90) quickest else forward
     }
 
     /** If p is within 30 m of the route, the closest point on it and the road's direction there. */
@@ -699,7 +707,7 @@ object NavEngine {
             val t0 = System.currentTimeMillis()
             if (reroute && !wantsAlternatives && OfflineRouter.present) {
                 // worked out a moment ago at the first sign of leaving, from close by: use it as it is
-                val ready = specRoute?.takeIf { (at, t, _) -> System.currentTimeMillis() - t < 4_000 && Geo.distance(at, here) < 45 }?.third
+                val ready = specRoute?.takeIf { (at, t, _) -> System.currentTimeMillis() - t < 4_000 && Geo.distance(at, here) < 30 }?.third
                 specRoute = null
                 if (ready != null) CrashLog.note("reroute: ready from the first sign")
                 val off = ready ?: try { OfflineRouter.route(here, dest, h, via) } catch (e: Throwable) { null }
@@ -881,7 +889,8 @@ object NavEngine {
 
         val dest = destination!!
         // arrived: really there (a real fix, at the destination or at the route's end while on it)
-        if (real && (Geo.distance(pos, dest) < 30 || (remainingDistance < 20 && bestD < 35))) {
+        // (30 m from it on the other carriageway used to count: the route's end must be close too)
+        if (real && ((Geo.distance(pos, dest) < 30 && remainingDistance < 120 && bestD < 25) || (remainingDistance < 20 && bestD < 35))) {
             if (!arrived) {
                 arrived = true
                 clearResume()
@@ -931,7 +940,9 @@ object NavEngine {
             kotlin.math.abs(Geo.angleDiff(l.bearing, segBearing)) > 50 && !nearRouteTurn(best, l.bearing)
         val wrongWay = moving && bestD < 30 && kotlin.math.abs(Geo.angleDiff(l.bearing, segBearing)) > 120
         // clearly off (100 m, or 50 m with a sharp fix): straight away, without waiting for a second fix
-        val clearly = bestD > 100 || (bestD > 50 && accuracy < 20)
+        val clearly = (bestD > 100 && accuracy < 40) || (bestD > 50 && accuracy < 20)
+        // a fix that just jumped (signal off buildings): wait for the next ones before a new route
+        if (System.currentTimeMillis() - LocationTracker.jumpedAt < 4_000) { offRouteCount = 0; changed.fire(); return }
         // a sharp fix heading down another street is enough on its own: the new route is asked for
         // on that first fix (about a second after the turn) instead of waiting for a second one
         val sure = clearly || (turnedOff && accuracy <= 20) || (wrongWay && accuracy <= 20)

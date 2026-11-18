@@ -205,7 +205,11 @@ class MapView(private val zoomKey: String) {
     /** A zoom the person is doing or just did (not the automatic driving zoom). */
     val userZooming: Boolean get() = SystemClock.uptimeMillis() - userZoomAt < 700
 
+    /** Zoomed in or out by hand (without moving the map): Recenter shows, and brings the normal zoom back. */
+    @Volatile var zoomedAway = false
+
     fun zoomBy(delta: Double) {
+        zoomedAway = true
         userZoomAt = SystemClock.uptimeMillis()
         targetZoom = (targetZoom + delta).coerceIn(MapState.MIN_ZOOM, MapState.MAX_ZOOM)
         saveZoom()
@@ -215,6 +219,7 @@ class MapView(private val zoomKey: String) {
     /** Pinch zoom: follows the fingers directly. */
     fun zoomByFactor(factor: Float) {
         if (factor <= 0) return
+        zoomedAway = true
         userZoomAt = SystemClock.uptimeMillis()
         zoom = (zoom + log2(factor.toDouble())).coerceIn(MapState.MIN_ZOOM, MapState.MAX_ZOOM)
         targetZoom = (zoom - autoTarget).coerceIn(MapState.MIN_ZOOM, MapState.MAX_ZOOM)
@@ -339,6 +344,9 @@ class MapView(private val zoomKey: String) {
         // zoomed far out (looking around): back in to a driving / street view
         val near = if (NavEngine.active) 16.0 else 15.5
         if (targetZoom < near - 0.5) targetZoom = near
+        // zoomed by hand (in or out): back to the normal zoom
+        if (zoomedAway) { targetZoom = near; saveZoom() }
+        zoomedAway = false
         userZoomAt = SystemClock.uptimeMillis()
         MapState.changed.fire()
     }

@@ -124,8 +124,9 @@ object Friends {
             if (visible && core.allowInvites) for (i in news.invites) InvitePop.offer(i)
             Presence.refresh()
         }
-        // notifications: always from the background job; in the app only while it's not on screen
-        if (fromJob || !visible) {
+        // notifications only while GameRoute isn't on screen (phone or car): on screen the invite card
+        // shows instead (the background job used to post one too: the car showed both at once)
+        if (!visible) {
             for (r in news.requests) notifyRequest(r)
             for (i in news.invites) if (core.allowInvites) notifyInvite(i)
             for (f in news.accepted) notifyAccepted(f)

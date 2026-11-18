@@ -400,6 +400,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             val bars = wi.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = wi.getInsets(WindowInsetsCompat.Type.ime())
             insets.set(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            navBottom = bars.bottom
             val p = (10 * d).toInt()
             topArea.setPadding(bars.left + p, bars.top + p / 2, bars.right + p, 0)
             controls.setPadding(0, 0, bars.right + p, 0)
@@ -1606,7 +1607,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             val panelV = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL; isClickable = true
                 background = bg(panel, accent, 2f, 24f, topOnly = true)
-                setPadding(p, (10 * d).toInt(), p, p + insets.bottom)
+                setPadding(p, (10 * d).toInt(), p, p + navBottom)
                 elevation = 40 * d
                 // the grabber
                 addView(View(context).apply { background = bg(dim(70), radius = 2f, pill = true) },
@@ -1699,7 +1700,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             // typing in it: the sheet rides up above the keyboard instead of hiding under it
             androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(sh) { _, ins ->
                 val ime = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
-                val lift = (ime - insets.bottom).coerceAtLeast(0)
+                // above the keyboard (less the bar the panel already clears). It used `insets`, which
+                // the screen had just set to the keyboard's height itself: the lift came out 0 and the
+                // keyboard covered the box (renaming a friend, labelling a place…)
+                val nav = ins.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()).bottom
+                val lift = (ime - nav).coerceAtLeast(0)
                 (panelV.layoutParams as? FrameLayout.LayoutParams)?.let { lp -> if (lp.bottomMargin != lift) { lp.bottomMargin = lift; panelV.layoutParams = lp } }
                 ins
             }
@@ -1744,6 +1749,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** For tests: the pop-ups open now. */
     internal fun popupsForTest(): List<GameDialog> = popups.toList()
+    /** The bottom bar's height (not the keyboard's). */
+    private var navBottom = 0
 
     private fun sharePlace(pl: Place) {
         val url = "https://www.google.com/maps/search/?api=1&query=${pl.pos.lat},${pl.pos.lon}"
@@ -2077,7 +2084,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (chipsWas != chipsScroll.visibility || homeWas != homeSheet.visibility) lastHomeKey = ""
         if ((nav || planning) && suggestScroll.visibility == View.VISIBLE) closeSearch()
         val v = MapState.phone
-        recenterBtn.visibility = if ((v.following && v.userBearing == null && !v.overview) || planning) View.GONE else View.VISIBLE
+        recenterBtn.visibility = if ((v.following && v.userBearing == null && !v.overview && !v.zoomedAway) || planning) View.GONE else View.VISIBLE
         muteBtn.visibility = if (nav) View.VISIBLE else View.GONE
         muteBtn.text = if (Voice.muted) "🔇" else "🔊"
         // while driving only three: sound, report, ☰ (style, traffic and overview live in ☰)

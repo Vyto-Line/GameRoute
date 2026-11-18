@@ -113,6 +113,10 @@ object RoadMatch {
      * The point on the best-fitting road near [p] and that road's direction of travel, or null when
      * no road fits (the arrow then shows the fix as it is).
      */
+    /** A road alongside ours that looks better: how many fixes in a row (switch at 3). */
+    private var pending: Seg? = null
+    private var pendingCount = 0
+
     fun match(p: LatLng, bearing: Float?, speed: Float, accuracy: Float): Pair<LatLng, Float>? {
         if (tileKey != "test") load(p)
         if (segs.isEmpty()) return null
@@ -156,6 +160,12 @@ object RoadMatch {
         var t = bestT
         // stay on the same stretch unless another is clearly better (no hopping between neighbours)
         if (prev != null && b !== prev && prevScore < Double.MAX_VALUE && prevScore - bestScore < 4) { b = prev; t = prevT }
+        // a road that isn't joined to ours (the other carriageway, a side road alongside): only
+        // after it has been the better one for 3 fixes in a row (the arrow hopped across and back)
+        else if (prev != null && b !== prev && prevScore < Double.MAX_VALUE && b.feature != prev.feature && !joined(b, prev)) {
+            if (pending != null && (pending === b || pending!!.feature == b.feature)) pendingCount++ else { pending = b; pendingCount = 1 }
+            if (pendingCount < 3) { b = prev; t = prevT } else { pending = null; pendingCount = 0 }
+        } else { pending = null; pendingCount = 0 }
         last = b; lastAt = now
         val qx = b.ax + (b.bx - b.ax) * t; val qy = b.ay + (b.by - b.ay) * t
         var dir = compass(b.bx - b.ax, b.by - b.ay)
