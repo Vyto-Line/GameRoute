@@ -34,6 +34,10 @@ class IatropolisProbeTest {
         // the check: a place that isn't on the map near here is said to be missing, a real one isn't
         val fake = listOf(Place("Argyroupoli", "Leoforos Vouliagmenis, Elliniko-Argyroupoli", argy))
         org.junit.Assert.assertEquals("Iatropolis", Places.missingWord("Iatropolis Argyroupoli", fake))
+        for (w in listOf("Ιατρόπολις", "Αργυρούπολη")) log.append("forms of $w: ${Places.norm(w)} / ${Places.norm(Names.latin(Places.norm(w)))} / ${Places.norm(Places.greeklish(Places.norm(w)))}\n")
+        log.append("greek query on fake: ${Places.missingWord("Ιατρόπολις Αργυρούπολη", fake)}\n")
+        File(out, "iatropolis.txt").writeText(log.toString())
+        org.junit.Assert.assertEquals("Ιατρόπολις", Places.missingWord("Ιατρόπολις Αργυρούπολη", fake))
         org.junit.Assert.assertNull(Places.missingWord("Argyroupoli", fake))
         org.junit.Assert.assertNull(Places.missingWord("αργυρουπολη", fake))
     }
