@@ -317,6 +317,8 @@ class MapRenderer(private val car: Boolean = false) {
         else if (carLobby) drawCarLobby(c, area, d, theme)
         else if (hud && Convoy.active && Convoy.meReady && !NavEngine.active) drawLobbyChip(c, area, d, theme)
         if (car && hud && carButtons && carFriends != null && !NavEngine.planningOn(car) && !carTrip) drawCarFriends(c, area, d, theme)
+        if (car && hud && carButtons && carFriends == null) carPanel?.let { drawCarPanel(c, area, d, theme, it) }
+        if (car && hud) carFlash?.let { (msg, at) -> if (System.currentTimeMillis() - at < 2200) { drawCarFlash(c, area, d, theme, msg); animating = true } else carFlash = null }
         if (car && hud && carButtons) InvitePop.current?.let { drawCarInvite(c, area, d, theme, it); animating = true }
         drawDiscovery(c, area, d, theme)
         if (hud && (view.userBearing != null || !following)) drawCompass(c, area, bearing, d, theme)
@@ -1688,6 +1690,149 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     /** Car: someone in the convoy chose a destination: Go (accept) or ✕ (decline). */
+    /** Car: the open panel (menu, nearby, quick messages, report, leave…), or null. */
+    @Volatile var carPanel: CarPanel? = null
+    /** Which page of a long list is showing. */
+    @Volatile var carPanelPage = 0
+    /** A short note in the style ("Sent", "Reported"), for ~2 s. */
+    @Volatile var carFlash: Pair<String, Long>? = null
+
+    private fun drawCarFlash(c: Canvas, a: Rect, d: Float, t: Theme, msg: String) {
+        text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 19 * d
+        val w = text.measureText(msg) + 48 * d
+        val r = RectF(a.centerX() - w / 2, a.bottom - 140 * d, a.centerX() + w / 2, a.bottom - 88 * d)
+        panel(c, r, d, t, outline = true)
+        text.color = Ui.ink(t)
+        c.drawText(msg, r.centerX(), r.centerY() + 7 * d, text)
+        text.textAlign = Paint.Align.LEFT
+    }
+
+    private fun drawCarPanel(c: Canvas, a: Rect, d: Float, t: Theme, p: CarPanel) {
+        val ink = Ui.ink(t); val dimInk = withAlpha(ink, 170); val accentInk = Ui.onPanel(t, t.route, 3.0)
+        val onRoute = if (Ui.contrast(Color.WHITE, t.route) >= 3) Color.WHITE else Color.BLACK
+        fun button(rr: RectF, label: String, id: String, fillCol: Int? = null, inkCol: Int = ink, size: Float = 16f) {
+            glassButton(c, rr, d, t, fillCol)
+            text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = size * d; text.color = inkCol
+            c.drawText(ellipsize(label, rr.width() - 16 * d), rr.centerX(), rr.centerY() + size * 0.37f * d, text)
+            carHits += rr to id
+        }
+        if (p.dialog) {
+            // a question over the dimmed map
+            fill.color = Color.argb(150, 8, 4, 16); c.drawRect(a, fill)
+            val w = minOf(620 * d, a.width() - 40 * d); val h = 290 * d
+            val r = RectF(a.centerX() - w / 2, a.centerY() - h / 2, a.centerX() + w / 2, a.centerY() + h / 2)
+            panel(c, r, d, t, outline = true)
+            carHits += RectF(a) to "cp:none" // taps beside it do nothing (it asks first)
+            text.textAlign = Paint.Align.CENTER; text.typeface = t.typeface; text.textSize = 26 * d; text.color = ink
+            c.drawText(ellipsize(p.title, w - 40 * d), r.centerX(), r.top + 56 * d, text)
+            text.typeface = Typeface.DEFAULT; text.textSize = 17 * d; text.color = dimInk
+            var ly = r.top + 98 * d
+            for (line in wrap(p.message, w - 60 * d).take(3)) { c.drawText(line, r.centerX(), ly, text); ly += 24 * d }
+            val bw = (w - 3 * 20 * d) / 2; val by = r.bottom - 24 * d - 64 * d
+            p.rows.take(2).forEachIndexed { i, b ->
+                val rr = RectF(r.left + 20 * d + i * (bw + 20 * d), by, r.left + 20 * d + i * (bw + 20 * d) + bw, by + 64 * d)
+                if (b.red) button(rr, b.title, "cp:" + b.id, Color.rgb(208, 2, 27), Color.WHITE, 19f) else button(rr, b.title, "cp:" + b.id, null, ink, 19f)
+            }
+            text.textAlign = Paint.Align.LEFT
+            return
+        }
+        val w = minOf(if (p.tiles.isNotEmpty()) 600 * d else 560 * d, a.width() * 0.55f)
+        val top = maxOf(bannerBottom, a.top.toFloat()) + 10 * d
+        val r = RectF(a.left + 12 * d, top, a.left + 12 * d + w, a.bottom - 12 * d)
+        panel(c, r, d, t, outline = true)
+        val pad = 14 * d
+        val back = RectF(r.left + pad, r.top + pad, r.left + pad + 48 * d, r.top + pad + 48 * d)
+        glassButton(c, back, d, t)
+        text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 26 * d; text.color = ink
+        c.drawText("‹", back.centerX(), back.centerY() + 9 * d, text)
+        carHits += back to "cp:back"
+        var titleRight = r.right - pad
+        p.head?.let { h ->
+            text.textSize = 16 * d; text.typeface = Typeface.DEFAULT_BOLD
+            val hw = text.measureText(h.title) + 36 * d
+            val hb = RectF(r.right - pad - hw, back.top, r.right - pad, back.bottom)
+            button(hb, h.title, "cp:" + h.id, t.route, onRoute)
+            titleRight = hb.left - 10 * d
+        }
+        text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface; text.textSize = 22 * d; text.color = ink
+        c.drawText(ellipsize(p.title, titleRight - back.right - 14 * d), back.right + 12 * d, back.centerY() + 8 * d, text)
+        var y = back.bottom + 12 * d
+        val bottom = r.bottom - pad - (if (p.note != null) 24 * d else 0f)
+        if (p.loading || (p.rows.isEmpty() && p.tiles.isEmpty())) {
+            text.typeface = Typeface.DEFAULT; text.textSize = 17 * d; text.color = dimInk
+            c.drawText(if (p.loading) gr.gamemap.L.t("Looking…") else p.empty, r.left + pad + 4 * d, y + 30 * d, text)
+            if (p.loading) animating = true
+        } else if (p.tiles.isNotEmpty()) {
+            // big tiles: 2 across (4 or fewer) or 3 across
+            val cols = if (p.tiles.size <= 4) 2 else 3
+            val rowsN = (p.tiles.size + cols - 1) / cols
+            val gap = 10 * d
+            val tw = (r.width() - 2 * pad - (cols - 1) * gap) / cols
+            val th = ((bottom - y - (rowsN - 1) * gap) / rowsN).coerceAtMost(130 * d)
+            p.tiles.forEachIndexed { i, tile ->
+                val x0 = r.left + pad + (i % cols) * (tw + gap); val y0 = y + (i / cols) * (th + gap)
+                val rr = RectF(x0, y0, x0 + tw, y0 + th)
+                fill.color = withAlpha(ink, 22); c.drawRoundRect(rr, 10 * d, 10 * d, fill)
+                if (tile.highlight) { stroke.color = t.route; stroke.strokeWidth = 2 * d; c.drawRoundRect(rr, 10 * d, 10 * d, stroke) }
+                text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT; text.textSize = minOf(36 * d, th * 0.32f); text.color = ink
+                c.drawText(tile.icon, rr.centerX(), rr.centerY() - 2 * d, text)
+                text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d
+                c.drawText(ellipsize(tile.title, tw - 12 * d), rr.centerX(), rr.centerY() + 26 * d, text)
+                carHits += rr to "cp:" + tile.id
+            }
+        } else {
+            val rowH = 62 * d
+            val per = maxOf(1, ((bottom - y) / rowH).toInt())
+            val pages = (p.rows.size + per - 1) / per
+            val page = carPanelPage.coerceIn(0, maxOf(0, pages - 1))
+            // more than fit: the last row's place shows ▼ / ▲ to page through
+            val many = pages > 1
+            val shown = if (!many) p.rows else p.rows.drop(page * (per - 1)).take(per - 1)
+            for (row in shown) {
+                val rr = RectF(r.left + pad, y, r.right - pad, y + rowH - 8 * d)
+                fill.color = withAlpha(ink, 22); c.drawRoundRect(rr, 10 * d, 10 * d, fill)
+                if (row.highlight) { stroke.color = t.route; stroke.strokeWidth = 2 * d; c.drawRoundRect(rr, 10 * d, 10 * d, stroke) }
+                carHits += rr to "cp:" + row.id
+                text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT; text.textSize = 22 * d; text.color = ink
+                c.drawText(row.icon, rr.left + 26 * d, rr.centerY() + 8 * d, text)
+                text.textSize = 17 * d; text.typeface = Typeface.DEFAULT_BOLD
+                val rightText = row.right ?: "›"
+                text.textAlign = Paint.Align.RIGHT; text.color = if (row.right != null) accentInk else dimInk
+                text.textSize = if (row.right != null) 17 * d else 22 * d
+                c.drawText(rightText, rr.right - 14 * d, rr.centerY() + 7 * d, text)
+                val rw = text.measureText(rightText) + 24 * d
+                val tx = rr.left + 52 * d; val tw = rr.right - tx - rw
+                text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = if (row.red) Color.rgb(255, 99, 99) else ink
+                c.drawText(ellipsize(row.title, tw), tx, if (row.sub != null) rr.centerY() - 2 * d else rr.centerY() + 6 * d, text)
+                row.sub?.let { s -> text.typeface = Typeface.DEFAULT; text.textSize = 14 * d; text.color = dimInk; c.drawText(ellipsize(s, tw), tx, rr.centerY() + 17 * d, text) }
+                y += rowH
+            }
+            if (many) {
+                val half = (r.width() - 2 * pad - 10 * d) / 2
+                val up = RectF(r.left + pad, y, r.left + pad + half, y + rowH - 8 * d)
+                val down = RectF(up.right + 10 * d, y, r.right - pad, y + rowH - 8 * d)
+                button(up, "▲", "cp:page-", null, if (page > 0) ink else withAlpha(ink, 70), 20f)
+                button(down, "▼  ${page + 1}/$pages", "cp:page+", null, if (page < pages - 1) ink else withAlpha(ink, 70), 18f)
+            }
+        }
+        p.note?.let { n ->
+            text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT; text.textSize = 14 * d; text.color = dimInk
+            c.drawText(ellipsize(n, r.width() - 2 * pad), r.left + pad, r.bottom - pad - 4 * d, text)
+        }
+        text.textAlign = Paint.Align.LEFT
+    }
+
+    /** [s] in lines no wider than [w] (with the current text size). */
+    private fun wrap(s: String, w: Float): List<String> {
+        val out = ArrayList<String>(); var line = ""
+        for (word in s.split(' ')) {
+            val tryLine = if (line.isEmpty()) word else "$line $word"
+            if (text.measureText(tryLine) <= w) line = tryLine else { if (line.isNotEmpty()) out += line; line = word }
+        }
+        if (line.isNotEmpty()) out += line
+        return out
+    }
+
     /** Car: a convoy invite, centred at the top for ~10 s: who, where, big Not now and Join. */
     private fun drawCarInvite(c: Canvas, a: Rect, d: Float, t: Theme, i: FriendCore.Invite) {
         // between what's top left (the turn box, or Where to?) and the buttons on the right; if

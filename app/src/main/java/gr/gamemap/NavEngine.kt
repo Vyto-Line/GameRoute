@@ -273,6 +273,51 @@ object NavEngine {
     /** The phone's router, ahead of time: warming up, and a new route at the first sign of leaving. */
     private val spec = Executors.newSingleThreadExecutor(Bg.factory("nav-spec"))
     @Volatile private var specBusy = false
+
+    /**
+     * Ready before the turn: the most common miss is carrying straight on past it, so while a turn
+     * is coming up (under 300 m) the phone works out the way on from just past the junction. Miss
+     * the turn and that route is there at once, on the first fix that shows it.
+     */
+    private class Missed(val step: Int, val turn: LatLng, val past: LatLng, val bearing: Float, val route: RouteOption, val forRoute: RouteOption)
+    @Volatile private var missed: Missed? = null
+    @Volatile private var missedBusyFor = -1
+
+    private fun prepareMissedTurn(r: RouteOption) {
+        if (!OfflineRouter.present || specBusy) return
+        val s = r.steps.getOrNull(nextStep) ?: return
+        if (s.direction == "arrive" || s.direction == "straight" || s.type == "depart") return
+        if (distanceToNext !in 40.0..300.0) return
+        if (missed?.let { it.step == nextStep && it.forRoute === r } == true || missedBusyFor == nextStep) return
+        val i = s.routeIndex.coerceIn(1, r.points.size - 1)
+        val turn = r.points[i]
+        // the way the car comes in (over the last ~25 m before the turn)
+        var k = i - 1
+        while (k > 0 && Geo.distance(r.points[k], turn) < 25) k--
+        val inBearing = Geo.bearing(r.points[k], turn)
+        val past = Geo.offset(turn, inBearing, 45.0)
+        val dest = destination ?: return
+        val via = stops.map { it.pos }
+        val step = nextStep
+        missedBusyFor = step; specBusy = true
+        spec.execute {
+            try {
+                OfflineRouter.route(past, dest, inBearing, via)?.let { missed = Missed(step, turn, past, inBearing, it, r) }
+            } catch (_: Throwable) {
+            } finally { specBusy = false; missedBusyFor = -1 }
+        }
+    }
+
+    /** The car went straight on past the turn it was given: the route prepared for that, if it fits. */
+    private fun missedTurnRoute(pos: LatLng, bearing: Float?, r: RouteOption): RouteOption? {
+        val m = missed ?: return null
+        if (m.forRoute !== r || bearing == null) return null
+        if (Math.abs(Geo.angleDiff(bearing, m.bearing)) > 35) return null
+        // past the junction, on the stretch straight on from it
+        val (_, off) = Geo.project(pos, m.turn, Geo.offset(m.past, m.bearing, 80.0))
+        if (off > 20 || Geo.distance(pos, m.turn) < 12) return null
+        return m.route
+    }
     /** A route worked out at the first sign of leaving: (from where, when, the route). */
     @Volatile private var specRoute: Triple<LatLng, Long, RouteOption>? = null
     @Volatile private var routeSeq = 0
@@ -925,6 +970,7 @@ object NavEngine {
         nextStep = next
         r.steps.getOrNull(nextStep)?.let { distanceToNext = (r.cum[it.routeIndex] - along).coerceAtLeast(0.0) }
         if (onRoad) currentStep?.let { Voice.progress(nextStep, it, distanceToNext, LocationTracker.speedMps, followingStep) }
+        if (onRoad && real) prepareMissedTurn(r)
 
         // Off the route, any of:
         //  - more than ~30 m away (two fixes in a row, or one fix far away);
@@ -947,6 +993,18 @@ object NavEngine {
         // on that first fix (about a second after the turn) instead of waiting for a second one
         val sure = clearly || (turnedOff && accuracy <= 20) || (wrongWay && accuracy <= 20)
         offRouteCount = if (far || turnedOff || wrongWay) offRouteCount + (if (sure) 2 else 1) else 0
+        // straight on past a turn, with a route ready for exactly that: take it now, on this fix
+        // (the online route still comes after and takes over)
+        if (offRouteCount >= 1 && !loading && System.currentTimeMillis() - lastRouteAt > 3_000) {
+            val ready = missedTurnRoute(LatLng(l.latitude, l.longitude), if (l.hasBearing() && l.speed > 3f) l.bearing else null, r)
+            if (ready != null) {
+                CrashLog.note("off route: missed the turn, route ready")
+                missed = null; offRouteCount = 0; offer = null
+                apply(ready, announce = false)
+                fetchRoute(reroute = true)
+                return
+            }
+        }
         // the first sign of leaving: the phone starts on a new route already, so it's ready (or
         // nearly) if the next fix confirms it; thrown away if the car comes back
         if (offRouteCount == 1 && !specBusy && OfflineRouter.present) {

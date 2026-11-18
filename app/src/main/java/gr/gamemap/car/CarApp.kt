@@ -206,7 +206,13 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
     }
 
     /** Friends on the map: open at a page ("list", "convoy") or close (null). */
-    fun openFriends(page: String?) { renderer.carFriends = page; redraw() }
+    fun openFriends(page: String?) { renderer.carFriends = page; if (page != null) renderer.carPanel = null; redraw() }
+    /** A panel in the style on the map (null: closed). */
+    fun showPanel(p: gr.gamemap.CarPanel?) { if (p?.key != renderer.carPanel?.key) renderer.carPanelPage = 0; renderer.carPanel = p; if (p != null) renderer.carFriends = null; redraw() }
+    val panelKey get() = renderer.carPanel?.key
+    fun panelPage(delta: Int) { renderer.carPanelPage = (renderer.carPanelPage + delta).coerceAtLeast(0); redraw() }
+    /** A short note in the style ("Sent", "Reported"). */
+    fun flash(msg: String) { renderer.carFlash = msg to System.currentTimeMillis(); redraw() }
     val friendsOpen get() = renderer.carFriends != null
     /** ‹ / the car's BACK: the convoy page goes back to the list, the list closes. */
     fun friendsBack() { renderer.carFriends = if (renderer.carFriends == "convoy") "list" else null; redraw() }
@@ -304,6 +310,166 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         override fun handleOnBackPressed() { surface.friendsBack(); isEnabled = surface.friendsOpen }
     }
     init { carContext.onBackPressedDispatcher.addCallback(this, backFriends) }
+
+    // ------------------------------------------------------------ panels drawn in the style
+    // (cars that report taps; the others keep Android Auto's lists, which work with a knob)
+
+    private val panelActions = HashMap<String, () -> Unit>()
+    private val backPanel = object : androidx.activity.OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() { closePanel() }
+    }
+    init { carContext.onBackPressedDispatcher.addCallback(this, backPanel) }
+
+    private fun closePanel() { panelActions.clear(); surface.showPanel(null); backPanel.isEnabled = false }
+
+    private fun show(p: gr.gamemap.CarPanel, actions: Map<String, () -> Unit>) {
+        panelActions.clear(); panelActions.putAll(actions)
+        surface.showPanel(p); backPanel.isEnabled = true
+    }
+
+    private fun onPanel(id: String) {
+        when (id) {
+            "back" -> closePanel()
+            "none" -> {}
+            "page-" -> surface.panelPage(-1)
+            "page+" -> surface.panelPage(1)
+            else -> panelActions[id]?.invoke()
+        }
+    }
+
+    private fun T(s: String) = gr.gamemap.L.t(s)
+
+    /** The ◈ menu, as a panel. */
+    private fun openMenuPanel() {
+        val C = gr.gamemap.Convoy; val F = gr.gamemap.Friends
+        val rows = ArrayList<gr.gamemap.CarRow>(); val acts = HashMap<String, () -> Unit>()
+        fun row(id: String, icon: String, title: String, sub: String? = null, right: String? = null, act: () -> Unit) {
+            rows += gr.gamemap.CarRow(icon, title, sub, right, id); acts[id] = act
+        }
+        if (NavEngine.lastTrip != null) {
+            row("done", "✓", T("Done"), NavEngine.lastTrip?.place) { closePanel(); NavEngine.stop(); NavEngine.dismissTrip() }
+            row("parking", "🅿️", T("Parking nearby")) { NavEngine.stop(); NavEngine.dismissTrip(); openNearbyPanel(false) }
+        } else {
+            if (NavEngine.active) row("end", "⏹", T("End navigation"), NavEngine.destinationName) { closePanel(); NavEngine.stop() }
+            else row("search", "🔍", T("Search")) { closePanel(); screenManager.push(SearchScreen(carContext)) }
+            val cd = C.destination
+            val lobby = C.lobby()
+            if (C.active && !NavEngine.active && cd != null && lobby.isNotEmpty()) {
+                val waiting = lobby.filter { !it.ready }.map { it.name }
+                if (C.meReady) row("unready", "✓", T("Ready (tap to undo)"), if (waiting.isEmpty()) T("Everyone's ready!") else T("Waiting for ") + waiting.joinToString(", ")) { C.setReady(false); openMenuPanel() }
+                else row("ready", "🏁", T("I'm ready"), cd.name) { closePanel(); C.setReady(true) }
+                if (!C.counting) row("along", "🚗", T("Drive along"), T("Same route, no race")) { closePanel(); C.setAlong(true); NavEngine.start(carContext, cd) }
+            } else if (C.active && !NavEngine.active && cd != null) row("go", "🏁", T("Convoy: go"), cd.name) { closePanel(); NavEngine.start(carContext, cd) }
+            else row("fuel", "⛽", T("Fuel nearby"), if (NavEngine.active) T("Add a fuel stop") else T("Prices and ratings")) { openNearbyPanel(true) }
+        }
+        if (F.ready && F.core.started) {
+            val inv = F.core.invites.firstOrNull { it.convoy != C.code }
+            val online = F.core.friends.count { F.core.isOnline(it.fid) }
+            row("friends", if (inv != null) "🔔" else "👥", T("Friends"), when {
+                inv != null -> T("${inv.from} invites you to a convoy")
+                online > 0 -> T("$online friends online")
+                F.core.friends.isNotEmpty() -> T("Invite friends")
+                else -> T("No friends yet")
+            }) { closePanel(); surface.openFriends(if (C.active) "convoy" else "list"); backFriends.isEnabled = true }
+        }
+        if (C.active && C.members.isNotEmpty()) row("msg", "💬", T("Message the convoy"), T("Need fuel, Stopping soon…")) { openQuickPanel() }
+        if (C.active) row("leave", "🚪", T("Leave convoy"), T("${C.members.size + 1} drivers")) { openLeavePanel() }
+        else row("style", "🗺️", T("Map style"), null, (MapState.carTheme ?: MapState.theme).title) { MapState.nextCarTheme(); openMenuPanel() }
+        val stop = NavEngine.stops.firstOrNull()
+        if (stop != null && NavEngine.active) row("unstop", "✖", T("Remove stop"), stop.name) { closePanel(); NavEngine.removeStop(stop) }
+        row("voice", "🔊", T("Spoken directions"), null, if (Voice.muted) T("Off") else T("On")) { Voice.muted = !Voice.muted; openMenuPanel() }
+        show(gr.gamemap.CarPanel("menu", "GameRoute", rows = rows), acts)
+    }
+
+    /** Quick messages to the convoy: four big tiles. */
+    private fun openQuickPanel() {
+        val C = gr.gamemap.Convoy
+        val icons = mapOf("fuel" to "⛽", "stop" to "☕", "ahead" to "👉", "wait" to "✋")
+        val acts = HashMap<String, () -> Unit>()
+        val tiles = C.quick.map { (k, _, _) ->
+            acts["q:$k"] = { C.send(k); closePanel(); surface.flash(T("Sent to the convoy")) }
+            gr.gamemap.CarRow(icons[k] ?: "💬", C.messageText(k), id = "q:$k")
+        }
+        show(gr.gamemap.CarPanel("quick", T("Message the convoy"), tiles = tiles, note = T("Read aloud to everyone driving")), acts)
+    }
+
+    /** Report: big tiles (cameras kept on the phone, and the shared reports when they work). */
+    private fun openReportPanel() {
+        val A = gr.gamemap.Alerts
+        val acts = HashMap<String, () -> Unit>()
+        val tiles = ArrayList<gr.gamemap.CarRow>()
+        for ((k, icon, title) in listOf(Triple("speed", "📷", T("Speed camera")), Triple("redlight", "🚦", T("Red-light camera")))) {
+            tiles += gr.gamemap.CarRow(icon, title, id = "cam:$k")
+            acts["cam:$k"] = { val ok = A.markCamera(k); closePanel(); surface.flash(if (ok) T("Camera marked") else T("Waiting for your location")) }
+        }
+        if (A.reportsReady) for (t in A.reportTypes.take(4)) {
+            tiles += gr.gamemap.CarRow(t.glyph, T(t.title), id = "rep:${t.key}")
+            acts["rep:${t.key}"] = { closePanel(); A.report(t.key) { ok -> main.post { surface.flash(if (ok) T("Thanks! ${t.title} reported") else T("Couldn't send the report")) } } }
+        }
+        show(gr.gamemap.CarPanel("report", T("Report"), tiles = tiles, note = T("Cameras are saved on your phone: you'll be warned next time")), acts)
+    }
+
+    /** Leave the convoy?: asks first, in the style. */
+    private fun openLeavePanel() {
+        show(gr.gamemap.CarPanel("leave", T("Leave the convoy?"), dialog = true,
+            message = T("The others carry on without you. You can join again from an invite."),
+            rows = listOf(gr.gamemap.CarRow("", T("Stay"), id = "stay"), gr.gamemap.CarRow("", T("Leave"), id = "go", red = true))),
+            mapOf("stay" to { closePanel() }, "go" to { gr.gamemap.Convoy.leave(); closePanel(); surface.flash(T("You left the convoy")) }))
+    }
+
+    /** Fuel (or parking) nearby: the phone's map data at once, the online prices after. */
+    private fun openNearbyPanel(fuel: Boolean) {
+        val types = if (fuel) listOf("fuel", "charging_station") else listOf("parking")
+        val key = if (fuel) "fuel" else "parking"
+        val near = LocationTracker.position
+        var results: List<Place>? = null
+        var failed = near == null
+        fun render() {
+            if (surface.panelKey != key && surface.panelKey != null) return
+            val F = gr.gamemap.Fuel
+            val r0 = results
+            val title = if (fuel) T("Fuel") + " · " + F.nameOf(F.chosen) else T("Parking nearby")
+            val acts = HashMap<String, () -> Unit>()
+            var head: gr.gamemap.CarRow? = null
+            if (fuel) {
+                val kinds = F.fuelKinds.filter { it.first in F.myFuels }.map { it.first } + (if (F.showChargers) listOf("ev") else emptyList())
+                val sorts = listOfNotNull("cheapest", "nearest", if (NavEngine.active && !NavEngine.arrived) "route" else null)
+                head = gr.gamemap.CarRow("", T(when (F.sort) { "nearest" -> "Nearest"; "route" -> "On my route"; else -> "Cheapest" }) + " ▾", id = "sort")
+                acts["sort"] = { F.sort = sorts[(sorts.indexOf(F.sort).coerceAtLeast(0) + 1) % sorts.size]; render() }
+                if (kinds.size > 1) {
+                    // the fuel: tapping the title row at the top changes it
+                    acts["kind"] = { F.chosen = kinds[(kinds.indexOf(F.chosen) + 1) % kinds.size]; render() }
+                }
+            }
+            if (r0 == null && !failed) { show(gr.gamemap.CarPanel(key, title, head = head, loading = true), acts); return }
+            val list = if (fuel && near != null) F.arrange(r0.orEmpty(), near) else r0.orEmpty()
+            val rows = ArrayList<gr.gamemap.CarRow>()
+            if (fuel && acts.containsKey("kind")) rows += gr.gamemap.CarRow("⛽", T("Fuel: ") + F.nameOf(F.chosen), T("Tap to change"), null, "kind")
+            list.take(12).forEachIndexed { i, p ->
+                val dist = near?.let { NavEngine.formatDistance(gr.gamemap.Geo.distance(it, p.pos)) }
+                val sub = listOfNotNull(dist, gr.gamemap.Reviews.stars(p.rating, p.ratings), if (!fuel && p.extra.isNotBlank()) gr.gamemap.Fuel.brief(p.extra) else null).joinToString(" · ")
+                val right = if (fuel) {
+                    if (F.isCharger(p)) (if (p.kw > 0) "${p.kw} kW" else "⚡") else F.priceOf(p, F.chosen)?.let { "€" + "%.3f".format(java.util.Locale.US, it) }
+                } else null
+                val id = "p:$i"
+                rows += gr.gamemap.CarRow(if (fuel && F.isCharger(p)) "🔌" else if (fuel) "⛽" else "🅿️", p.name, sub, right, id, highlight = i == 0 && fuel)
+                acts[id] = {
+                    closePanel()
+                    // while navigating it becomes a stop on the way
+                    if (NavEngine.active && !NavEngine.arrived) NavEngine.addStop(p) else NavEngine.plan(carContext, p)
+                }
+            }
+            show(gr.gamemap.CarPanel(key, title, rows = rows, head = head,
+                empty = if (failed) T("Couldn't search: no location or internet") else T("Nothing found nearby")), acts)
+        }
+        render()
+        if (near != null) carWork.execute {
+            val local = try { Places.nearbyLocal(types, near) } catch (e: Exception) { emptyList() }
+            if (local.isNotEmpty()) main.post { results = local; render() }
+            val r = try { if (fuel) Places.fuelAndChargers(near, gr.gamemap.Fuel.showChargers) else Places.nearbyFull(types, near, local) } catch (e: Exception) { null }
+            main.post { results = r ?: local; failed = r == null && local.isEmpty(); render() }
+        }
+    }
     private val nav = carContext.getCarService(NavigationManager::class.java)
     private var navigating = false
     private var lastInvalidate = 0L
@@ -586,8 +752,8 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             what == "back" -> surface.friendsBack()
             what == "convoy" -> surface.openFriends("convoy")
             what == "more" -> screenManager.push(FriendsCarScreen(carContext))
-            what == "msg" -> screenManager.push(QuickMessageCarScreen(carContext))
-            what == "leave" -> screenManager.push(LeaveConvoyCarScreen(carContext))
+            what == "msg" -> { surface.openFriends(null); openQuickPanel() }
+            what == "leave" -> { surface.openFriends(null); openLeavePanel() }
             what == "drive" -> C.destination?.let { surface.openFriends(null); NavEngine.start(carContext, it); MapState.car.recenter() }
             what == "start" -> {
                 if (C.myName.isBlank()) C.myName = "Driver"
@@ -647,6 +813,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         }
         if (id == "convoy:decline") { gr.gamemap.Convoy.decline(); return }
         if (id.startsWith("fp:")) { onFriendsPanel(id.removePrefix("fp:")); backFriends.isEnabled = surface.friendsOpen; surface.redraw(); return }
+        if (id.startsWith("cp:")) { onPanel(id.removePrefix("cp:")); surface.redraw(); return }
         if (id.startsWith("friend:")) {
             // a friend in the convoy box: the map goes to them (me: back to my car)
             val fid = id.removePrefix("friend:")
@@ -662,7 +829,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 CarToast.makeText(carContext, if (gr.gamemap.Traffic.showLayer) gr.gamemap.L.t("Traffic shown") else gr.gamemap.L.t("Traffic hidden"), CarToast.LENGTH_SHORT).show()
             }
             "mute", "unmute" -> Voice.muted = !Voice.muted
-            "report" -> screenManager.push(ReportScreen(carContext))
+            "report" -> openReportPanel()
             // Friends drawn on the map in the style (the convoy first when in one)
             "friends" -> { surface.openFriends(if (gr.gamemap.Convoy.active) "convoy" else "list"); backFriends.isEnabled = true }
             "zoomin" -> MapState.car.zoomBy(1.0)
@@ -670,7 +837,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             "recenter" -> MapState.car.recenter()
             "overview" -> NavEngine.route.takeIf { it.size > 1 }?.let { r -> MapState.car.showOverview(r.filterIndexed { i, _ -> i % 5 == 0 } + r.last()) }
             "end" -> NavEngine.stop()
-            "menu" -> screenManager.push(CarMenuScreen(carContext))
+            "menu" -> openMenuPanel()
             "search" -> screenManager.push(SearchScreen(carContext))
             "home", "work" -> Places.saved(id)?.let { NavEngine.plan(carContext, it) }
             in (0 until 20).map { "fav:$it" } -> Places.labelled().getOrNull(id.removePrefix("fav:").toInt())?.let { NavEngine.plan(carContext, it.place()) }
