@@ -553,6 +553,25 @@ object Places {
     private class Named(val norm: List<String>, val full: String, val name: String, val pos: LatLng, val icon: String, val kind: Int)
     private val nameIndex = java.util.concurrent.ConcurrentHashMap<String, List<Named>>()
 
+    /**
+     * A word of [query] that none of [results] has (in its name or address, Greek or Latin): the
+     * place itself isn't on the map here, and these are only other matches. ("Iatropolis
+     * Argyroupoli": no Iatropolis in Argyroupolis on any map, and the top result was Argyroupoli
+     * metro station: the car drove there.)
+     */
+    fun missingWord(query: String, results: List<Place>): String? {
+        if (results.isEmpty()) return null
+        val hay = results.joinToString(" ") { norm(it.name + " " + it.address) }
+        val hayLatin = norm(Names.latin(hay))
+        for (word in query.trim().split(Regex("[\\s,.]+"))) {
+            val w = norm(word)
+            if (w.length < 5 || w.any { it.isDigit() }) continue
+            val forms = setOf(w, norm(Names.latin(w)), norm(greeklish(w))).map { it.take(maxOf(5, it.length - 2)) }
+            if (forms.none { hay.contains(it) || hayLatin.contains(it) }) return word
+        }
+        return null
+    }
+
     /** Lower case, no accents (ά→α), final ς→σ: so "ομονοια" finds "Ομόνοια". */
     fun norm(s: String): String = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "").replace('ς', 'σ')

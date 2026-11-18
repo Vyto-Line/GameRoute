@@ -1157,7 +1157,11 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
         } else {
             val near = LocationTracker.position
             val list = ItemList.Builder().setNoItemsMessage(message)
-            results.take(6).forEach { p ->
+            // the place itself isn't on the map: say so, so the first match isn't taken for it
+            val notHere = if (!showingStart && typed.trim().length >= 2) Places.missingWord(typed, results) else null
+            if (notHere != null) list.addItem(Row.Builder().setTitle(gr.gamemap.L.t("No “$notHere” on the map here"))
+                .addText(gr.gamemap.L.t("Other matches below. Add it on your phone: Can't find it?")).build())
+            results.take(if (notHere != null) 5 else 6).forEach { p ->
                 val row = Row.Builder().setTitle(p.name.ifBlank { p.address.ifBlank { "📍" } }).setOnClickListener {
                     screenManager.pop()
                     NavEngine.plan(carContext, p)

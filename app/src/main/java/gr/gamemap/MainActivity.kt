@@ -2326,7 +2326,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 if (seq != querySeq || isFinishing) return@runOnUiThread
                 val merged = r.orEmpty()
                 lastResults = merged
+                val notHere = Places.missingWord(q, merged)
                 renderResults(merged, when {
+                    notHere != null -> L.t("No “$notHere” on the map here. Other matches:")
                     merged.isNotEmpty() -> null
                     r == null -> "No connection: check mobile data"
                     else -> "Nothing found"

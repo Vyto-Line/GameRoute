@@ -25,10 +25,16 @@ class IatropolisProbeTest {
             )) {
                 val r = try { f() } catch (e: Exception) { log.append(" $name: ERR $e\n"); continue }
                 log.append(" $name:\n")
+                if (name.startsWith("search")) log.append("   (not on the map here: ${Places.missingWord(q, r)})\n")
                 for (p in r.take(6)) log.append("   '${p.name}' · ${p.address} · ${p.pos.lat},${p.pos.lon} · ${"%.0f".format(Geo.distance(argy, p.pos))} m away" +
                     (p.entry?.let { e -> " · entrance ${e.lat},${e.lon} (${"%.0f".format(Geo.distance(e, p.pos))} m from the place)" } ?: "") + "\n")
             }
         }
         File(out, "iatropolis.txt").writeText(log.toString())
+        // the check: a place that isn't on the map near here is said to be missing, a real one isn't
+        val fake = listOf(Place("Argyroupoli", "Leoforos Vouliagmenis, Elliniko-Argyroupoli", argy))
+        org.junit.Assert.assertEquals("Iatropolis", Places.missingWord("Iatropolis Argyroupoli", fake))
+        org.junit.Assert.assertNull(Places.missingWord("Argyroupoli", fake))
+        org.junit.Assert.assertNull(Places.missingWord("αργυρουπολη", fake))
     }
 }
