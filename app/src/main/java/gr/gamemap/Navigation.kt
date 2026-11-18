@@ -422,6 +422,15 @@ object Places {
     /** TomTom's one-box search; off when the key isn't allowed it (then the two below are used). */
     @Volatile private var fuzzyOk = true
 
+    /** Towns and areas only (TomTom's "Geo" index), typed as you go: "ναυπλ" → Nafplio. */
+    fun tomtomTowns(query: String, near: LatLng?): List<Place>? {
+        if (!tomtomOk() || !fuzzyOk) return null
+        val q = URLEncoder.encode(query.trim(), "UTF-8").replace("+", "%20")
+        var url = "https://api.tomtom.com/search/2/search/$q.json?key=${Traffic.key}&limit=4&language=$searchLang&typeahead=true&idxSet=Geo"
+        if (near != null) url += "&lat=${near.lat}&lon=${near.lon}"
+        return try { parseTomTom(Http.get(url, timeout = 4000)).filter { it.town > 0 } } catch (e: Exception) { null }
+    }
+
     fun tomtom(query: String, near: LatLng?, typeahead: Boolean): List<Place> {
         val q = URLEncoder.encode(query.trim(), "UTF-8").replace("+", "%20")
         val key = Traffic.key
@@ -988,6 +997,10 @@ object Places {
         val fLat = if (!greek) null else finders.submit(java.util.concurrent.Callable { tryTomtom(Voice.latin(query), focus, !full) })
         val fTown = if (q.number != null || q.words.size > 3) null
             else finders.submit(java.util.concurrent.Callable { try { photon(core, focus, townsOnly = true) } catch (e: Exception) { null } })
+        // towns from TomTom too (Photon is often slow or down: then a half-typed town name
+        // found only streets named after it, "ναυπλ" → Nafpliou streets, not Nafplio)
+        val fTomTown = if (q.number != null || q.words.size > 2) null
+            else finders.submit(java.util.concurrent.Callable { tomtomTowns(core, focus) })
         val fAddr = finders.submit(java.util.concurrent.Callable { try { address(query, near) } catch (e: Exception) { null } })
         // the places squares there (downloaded the first time a far area is searched)
         if (area != null && OpenPlaces.ready) try { OpenPlaces.prepare(area.pos) } catch (_: Exception) {}
@@ -998,7 +1011,8 @@ object Places {
         val tom = get(fTom, 7000)?.let { t -> t + fLat?.let { get(it, 1500) }.orEmpty() } ?: fLat?.let { get(it, 3000) }
         val pho = get(fPho, if (tom.isNullOrEmpty()) 4000 else if (full) 2500 else 1500)
         val addr = get(fAddr, 5000)
-        val towns = fTown?.let { get(it, 1200) }.orEmpty()
+        val towns = (fTown?.let { get(it, 1200) }.orEmpty() + fTomTown?.let { get(it, 1500) }.orEmpty())
+            .distinctBy { norm(Names.latin(it.name)) + (it.pos.lat * 100).toInt() + (it.pos.lon * 100).toInt() }
         var osm = pho.orEmpty() + towns
         // Photon down (it often is for a moment): OpenStreetMap through Nominatim, on Enter, so
         // places only it knows (a cave, a chapel) aren't lost
