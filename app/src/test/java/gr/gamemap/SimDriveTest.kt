@@ -51,7 +51,18 @@ class SimDriveTest {
             Dev.stopSim(); NavEngine.debugDrive(Place("Museum", "", r.points.last()), r, 0)
             LocationTracker.onLocationChanged(Location("gps").apply { latitude = start.lat; longitude = start.lon; accuracy = 5f; speed = 0f; time = System.currentTimeMillis() })
             Dev.simulate(activity, null, startNav = false)
-            repeat(15) { looper.idleFor(Duration.ofMillis(1000)) }
+            // the arrow, as drawn, stays on the road (round the corners too): sampled every 100 ms
+            var worst = 0.0
+            repeat(150) {
+                looper.idleFor(Duration.ofMillis(100))
+                LocationTracker.tick()
+                val shown = LocationTracker.displayPosition() ?: return@repeat
+                var dmin = Double.MAX_VALUE
+                for (i in 0 until r.points.size - 1) dmin = minOf(dmin, Geo.project(shown, r.points[i], r.points[i + 1]).second)
+                worst = maxOf(worst, dmin)
+            }
+            log.append("4x: the drawn arrow was at most ${worst.toInt()} m off the road\n")
+            assertTrue("the arrow stays on the road at speed (worst ${worst.toInt()} m)", worst < 15)
             val fast = (LocationTracker.speedMps * 3.6).toInt()
             log.append("fast forward 4x: ${fast} km/h after 15 s, along=${NavEngine.along.toInt()} (was $a0)\n")
             Dev.fastForward = 1
