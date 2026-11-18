@@ -140,6 +140,7 @@ class ConvoyFlowTest {
         Convoy.members.values.first { it.name == "Nikos" }.apply { state = "arrived"; arrivedAt = t - 95_000; kmh = 0 }
         Convoy.debugMember("Giorgos", at(n / 2), 70, t + 4 * 60_000L, r.length * 0.4, r.length, "driving")
         NavEngine.debugArrive(t)
+        Thread.sleep(600) // the convoy's list is kept for half a second
         log.append("my place: ${Convoy.myPlace()} race going on: ${NavEngine.raceGoingOn()}\n")
         assertEquals(2, Convoy.myPlace()?.first)
         assertTrue(NavEngine.raceGoingOn())
