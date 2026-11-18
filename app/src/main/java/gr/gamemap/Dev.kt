@@ -50,7 +50,8 @@ object Dev {
             NavEngine.start(ctx, to)
             CrashLog.note("dev: simulated drive to ${to.name}")
         }
-        main.removeCallbacks(tick); main.postDelayed(tick, 1000)
+        simRoute = null; simAlong = -1.0
+        main.removeCallbacks(tick); main.postDelayed(tick, STEP_MS)
     }
 
     fun stopSim() {
@@ -70,6 +71,7 @@ object Dev {
         val r = NavEngine.route
         if (r.size < 2) return
         pos = r[maxOf(0, r.size - 2)]
+        simRoute = null
     }
 
     /** The faster-route offer, as if a quicker way had been found. */
@@ -85,30 +87,58 @@ object Dev {
         }
     }
 
+    /** Simulator steps: twice a second (smoother than once: the arrow cut corners at speed). */
+    private const val STEP_MS = 500L
+    /** Where the simulated car is along the route it's following (metres), and which route. */
+    private var simAlong = -1.0
+    private var simRoute: RouteOption? = null
+
     private val tick = object : Runnable {
         override fun run() {
             if (!simActive) return
             val now = SystemClock.uptimeMillis()
             val p = pos ?: return
             if (NavEngine.arrived || !NavEngine.active) { simActive = false; return }
+            val dt = STEP_MS / 1000.0
             // speed up / slow down gently towards this road's speed (slower into turns)
             var want = roadSpeed(p)
             val turn = NavEngine.currentStep?.direction.orEmpty()
             if (NavEngine.distanceToNext in 0.0..70.0 && (turn.contains("left") || turn.contains("right") || turn == "uturn")) want = minOf(want, 8.0)
             want *= fastForward
-            v += (want - v).coerceIn(-3.0 * fastForward, 2.5 * fastForward)
-            val route = NavEngine.route
-            val off = route.size < 2 || nearestDistance(p, route) > 25
-            val next = if (now < leaveUntil || off) {
-                // a side street (to the right), or still off the route until the new one comes:
+            v += ((want - v).coerceIn(-3.0 * fastForward, 2.5 * fastForward)) * dt
+            val step = v * dt
+            val r = NavEngine.current
+            val route = r?.points.orEmpty()
+            val leaving = now < leaveUntil
+            // a new route (or none yet): find where we are on it once, then only move forward along
+            // it (re-finding the nearest point every step made it jump across where the route
+            // passes close to itself)
+            if (r !== simRoute) { simRoute = r; simAlong = if (r != null && route.size >= 2 && nearestDistance(p, route) < 25) alongOf(p, r) else -1.0 }
+            val next = if (leaving || simAlong < 0 || r == null) {
+                // a side street (to the right), or off the route until the new one comes:
                 // keep going the way we're going, never back to where we left it
-                Geo.offset(p, bearing, v)
-            } else along(p, route, v) ?: Geo.offset(p, bearing, v)
-            if (Geo.distance(p, next) > 0.5) bearing = Geo.bearing(p, next)
+                Geo.offset(p, bearing, step)
+            } else {
+                simAlong = (simAlong + step).coerceAtMost(r.length)
+                NavEngine.routePointAt(simAlong) ?: Geo.offset(p, bearing, step)
+            }
+            if (leaving) simAlong = -1.0
+            if (Geo.distance(p, next) > 0.3) bearing = Geo.bearing(p, next)
             pos = next
             if (now >= tunnelUntil) fix(next, v.toFloat(), if (now < weakUntil) 60f else 5f)
-            main.postDelayed(this, 1000)
+            main.postDelayed(this, STEP_MS)
         }
+    }
+
+    /** How far along [r] the point nearest to [p] is. */
+    private fun alongOf(p: LatLng, r: RouteOption): Double {
+        val pts = r.points
+        var best = 0; var bestD = Double.MAX_VALUE; var at = pts[0]
+        for (i in 0 until pts.size - 1) {
+            val (q, d) = Geo.project(p, pts[i], pts[i + 1])
+            if (d < bestD) { bestD = d; best = i; at = q }
+        }
+        return r.cum[best] + Geo.distance(pts[best], at)
     }
 
     private fun nearestDistance(p: LatLng, route: List<LatLng>): Double {
@@ -229,6 +259,7 @@ object Dev {
 
     /** Where each made-up driver is: metres ahead of you along the road (minus: behind). */
     private val gaps = doubleArrayOf(180.0, 380.0, -140.0)
+    private val homeGaps = doubleArrayOf(180.0, 380.0, -140.0)
     /** How fast each one drives (m/s): they really move, even while you're parked. */
     private val speeds = doubleArrayOf(12.5, 10.0, 14.0)
     private val factors = doubleArrayOf(1.06, 0.96, 1.1)
@@ -240,29 +271,33 @@ object Dev {
             if (!convoyOn || !Convoy.active) { convoyOn = false; return }
             val me = LocationTracker.position ?: LatLng(37.9838, 23.7275)
             if (trail.isEmpty() || Geo.distance(trail.last(), me) > 3) { trail += me; if (trail.size > 200) trail.removeAt(0) }
-            val moved = lastMe?.let { Geo.distance(it, me).coerceAtMost(60.0) } ?: 0.0
+            val moved = lastMe?.let { Geo.distance(it, me).coerceAtMost(200.0) } ?: 0.0
             lastMe = me
             convoyT++
+            val dt = STEP_MS / 1000.0
             val names = listOf("Nikos (test)", "Eleni (test)", "Maria (test)")
+            val mine = LocationTracker.speedMps.toDouble()
             for (i in 0..2) {
-                // each drives at its own speed (a little faster and slower in turn); I move too
-                // as fast as the road lets you (a little faster or slower each); parked: their own pace
-                val base = maxOf(LocationTracker.speedMps.toDouble(), speeds[i])
-                val v = base * (if (LocationTracker.speedMps > 3) factors[i] else 1.0) + kotlin.math.sin((convoyT + i * 7) / 9.0) * 1.5
-                gaps[i] += v - moved
-                // far ahead: comes round again from behind (so there's always someone to watch)
-                if (gaps[i] > 600) gaps[i] = -300.0
-                if (gaps[i] < -400) gaps[i] = 500.0
+                // each keeps near you like a real convoy: a little faster or slower in turn, and
+                // pulled back into its place (180 m ahead, 380 m ahead, 140 m behind) instead of
+                // jumping round from far ahead to behind (it looked like teleporting)
+                val home = homeGaps[i]
+                val pull = ((home - gaps[i]) / 40.0).coerceIn(-0.25, 0.25)
+                val wobble = kotlin.math.sin((convoyT + i * 11) / 14.0) * 0.06
+                val v = if (mine > 1.0) mine * (1.0 + pull + wobble)
+                    else ((home - gaps[i]) / 8.0).coerceIn(0.0, speeds[i]) // you've stopped: they pull up and wait
+                gaps[i] += v * dt - moved
+                gaps[i] = gaps[i].coerceIn(home - 220.0, home + 220.0)
                 val p = onRoad(me, gaps[i]) ?: continue
                 val ahead = onRoad(me, gaps[i] + 15) ?: p
                 val heading = if (Geo.distance(p, ahead) > 1) Geo.bearing(p, ahead) else LocationTracker.heading
                 val r = NavEngine.current
                 val left = if (r != null) (r.length - NavEngine.along - gaps[i]).coerceAtLeast(0.0) else 30_000.0
-                Convoy.debugMember(names[i], p, (v * 3.6).toInt(), System.currentTimeMillis() + (left / 11 * 1000).toLong(), left, r?.length ?: 120_000.0, "driving", heading)
+                Convoy.debugMember(names[i], p, (v * 3.6).toInt(), System.currentTimeMillis() + (left / maxOf(v, 8.0) * 1000).toLong(), left, r?.length ?: 120_000.0, "driving", heading)
             }
-            if (convoyT % 25 == 5) Convoy.debugMessage(names[convoyT / 25 % 3], listOf("fuel", "stop", "ahead", "wait")[convoyT / 25 % 4])
+            if (convoyT % 50 == 10) Convoy.debugMessage(names[convoyT / 50 % 3], listOf("fuel", "stop", "ahead", "wait")[convoyT / 50 % 4])
             Convoy.changed.fire()
-            main.postDelayed(this, 1000)
+            main.postDelayed(this, STEP_MS)
         }
     }
 

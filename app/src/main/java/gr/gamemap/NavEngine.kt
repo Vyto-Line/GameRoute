@@ -702,6 +702,22 @@ object NavEngine {
         return b.first to segBearing
     }
 
+    /** The point [m] metres further along the route from [p] (on it), or null if [p] isn't on the route. */
+    fun aheadOnRoute(p: LatLng, m: Double): LatLng? {
+        val r = current ?: return null
+        val route = r.points
+        if (!active || route.size < 2) return null
+        var best: Pair<LatLng, Double>? = null; var seg = 0
+        val lo = maxOf(0, nearest - 5); val hi = minOf(route.size - 1, nearest + 60)
+        for (i in lo until hi) {
+            val pr = Geo.project(p, route[i], route[i + 1])
+            if (best == null || pr.second < best.second) { best = pr; seg = i }
+        }
+        val b = best ?: return null
+        if (b.second > 20) return null
+        return routePointAt(r.cum[seg] + Geo.distance(route[seg], b.first) + m)
+    }
+
     /** True if the route itself heads that way within ~40 m of segment [seg] (a turn we're taking). */
     private fun nearRouteTurn(seg: Int, bearing: Float): Boolean {
         val r = current ?: return false

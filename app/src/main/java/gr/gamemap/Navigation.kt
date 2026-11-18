@@ -339,8 +339,9 @@ object LocationTracker : LocationListener {
         // stopped (a red light): the fixes wander a few metres; keep the arrow still
         val held = toPos?.takeIf { real && speed < 0.7f && prev != null && (!prev.hasSpeed() || prev.speed < 0.7f) &&
             Geo.distance(it, p) < maxOf(if (location.hasAccuracy()) location.accuracy * 0.8 else 10.0, 8.0) }
+        val onRoute = if (held != null || speed <= 1f) null else NavEngine.snap(p, bearing)
         val snapped = if (held != null || speed <= 1f) null
-            else NavEngine.snap(p, bearing)
+            else onRoute
                 // no route (or off it): the map's own roads, by heading, speed and the road we were on
                 ?: if (speed > 2f) RoadMatch.match(p, matchBearing, speed, if (location.hasAccuracy()) location.accuracy else 20f) else null
         if (held != null) {
@@ -360,7 +361,12 @@ object LocationTracker : LocationListener {
         fromPos = if (firstFix) p else displayPosition()
         // The arrow glides to the new fix over the next second, so aim it where the car will be by
         // then (a fix is already a moment old): otherwise the arrow trails the car by 1-2 s.
-        val target = if (!firstFix && held == null && speed > 2f) Geo.offset(p, moveBearing, (speed * LEAD_S).coerceAtMost(40.0)) else p
+        // (on the route: aimed along the route, round the corner, not straight on past it into the
+        // buildings: at a turn the arrow overshot and swung back)
+        val lead = (speed * LEAD_S).coerceAtMost(40.0)
+        val target = if (!firstFix && held == null && speed > 2f)
+            (if (onRoute != null) NavEngine.aheadOnRoute(p, lead) else null) ?: Geo.offset(p, moveBearing, lead)
+        else p
         glideMeters = fromPos?.let { Geo.distance(it, target) } ?: 0.0
         // leave along the arrow's current heading for a third of the way, then curve into the fix
         ctrlPos = fromPos?.takeIf { !firstFix && held == null && speed > 2f && glideMeters > 3.0 }?.let { Geo.offset(it, heading, glideMeters / 3) }
