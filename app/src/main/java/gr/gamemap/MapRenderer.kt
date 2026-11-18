@@ -1362,7 +1362,7 @@ class MapRenderer(private val car: Boolean = false) {
             text.color = white
             c.drawText(gr.gamemap.L.t("End"), r.left + 22 * d, r.centerY() + 6.5f * d, text)
             carHits += r to "end"
-        } else if (!NavEngine.active && selectedPlace == null && !carLobbyShown && carFriends == null) {
+        } else if (!NavEngine.active && selectedPlace == null && !carLobbyShown && carFriends == null && carPanel?.takeIf { !it.dialog } == null) {
             // "Where to?" and saved places, top left (a place's card takes the corner when open)
             val r = RectF(a.left + 14 * d, 12 * d, a.left + 14 * d + 300 * d, 12 * d + 50 * d)
             glassButton(c, r, d, t)
