@@ -49,21 +49,29 @@ class SimDriveTest {
             Dev.fastForward = 4
             val a0 = NavEngine.along
             Dev.stopSim(); NavEngine.debugDrive(Place("Museum", "", r.points.last()), r, 0)
-            LocationTracker.onLocationChanged(Location("gps").apply { latitude = start.lat; longitude = start.lon; accuracy = 5f; speed = 0f; time = System.currentTimeMillis() })
+            // back at the start (a few fixes there: one alone is taken for a GPS jump)
+            repeat(5) {
+                LocationTracker.onLocationChanged(Location("gps").apply { latitude = start.lat; longitude = start.lon; accuracy = 5f; speed = 0f; time = System.currentTimeMillis() })
+                looper.idleFor(Duration.ofMillis(1000))
+            }
             Dev.simulate(activity, null, startNav = false)
             // the arrow, as drawn, stays on the road (round the corners too): sampled every 100 ms
             var worst = 0.0
-            repeat(20) { looper.idleFor(Duration.ofMillis(100)); LocationTracker.tick() } // (the restart's own jump settles)
+            repeat(10) { looper.idleFor(Duration.ofMillis(100)); LocationTracker.tick() } // (the restart's own jump settles)
+            var samples = 0
             repeat(150) {
                 looper.idleFor(Duration.ofMillis(100))
                 LocationTracker.tick()
+                // only while it's driving the route (this test route is short: at 4x it ends soon)
+                if (!NavEngine.active || NavEngine.arrived || NavEngine.remainingDistance < 40) return@repeat
+                samples++
                 val shown = LocationTracker.displayPosition() ?: return@repeat
                 var dmin = Double.MAX_VALUE
                 for (i in 0 until r.points.size - 1) dmin = minOf(dmin, Geo.project(shown, r.points[i], r.points[i + 1]).second)
                 worst = maxOf(worst, dmin)
                 if (it % 15 == 0) log.append("  4x t=${it / 10.0}s: off ${dmin.toInt()} m, fix ${LocationTracker.position?.let { q -> Geo.distance(q, shown).toInt() }} m from the arrow, along ${NavEngine.along.toInt()}, v ${(LocationTracker.speedMps * 3.6).toInt()}\n")
             }
-            log.append("4x: the drawn arrow was at most ${worst.toInt()} m off the road\n")
+            log.append("4x: the drawn arrow was at most ${worst.toInt()} m off the road ($samples samples)\n")
             assertTrue("the arrow stays on the road at speed (worst ${worst.toInt()} m)", worst < 15)
             val fast = (LocationTracker.speedMps * 3.6).toInt()
             log.append("fast forward 4x: ${fast} km/h after 15 s, along=${NavEngine.along.toInt()} (was $a0)\n")
