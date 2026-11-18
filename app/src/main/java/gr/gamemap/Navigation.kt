@@ -43,9 +43,9 @@ object LocationTracker : LocationListener {
     private var speed = 0f
     private var moveBearing = 0f
     private var hasMoved = false
-    private var movedAt = 0L
+    private var drovenAt = 0L
     /** The way the car was last really going (within 15 min): a new trip from a parked car starts that way. */
-    val lastDriveHeading: Float? get() = if (hasMoved && System.currentTimeMillis() - movedAt < 15 * 60_000L) moveBearing else null
+    val lastDriveHeading: Float? get() = if (hasMoved && System.currentTimeMillis() - drovenAt < 15 * 60_000L) moveBearing else null
     private var headingTarget = 0f
     private var compass: Float? = null
     private var lastTick = 0L
@@ -354,7 +354,7 @@ object LocationTracker : LocationListener {
             // kept turning left and right; it keeps the last good direction until moving properly
             headingTarget = location.bearing
         }
-        if (speed > 3f) { moveBearing = headingTarget; hasMoved = true; movedAt = System.currentTimeMillis() }
+        if (speed > 3f) { moveBearing = headingTarget; hasMoved = true; drovenAt = System.currentTimeMillis() }
 
         val firstFix = toPos == null
         fromPos = if (firstFix) p else displayPosition()

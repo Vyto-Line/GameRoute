@@ -2004,7 +2004,7 @@ class MapRenderer(private val car: Boolean = false) {
         val name = roadName
         if (name.isBlank()) return
         // slim, so it hides as little of the map's own street names as it can
-        text.textAlign = Paint.Align.CENTER; text.textSize = (if (car) 15 else 13.5f) * d
+        text.textAlign = Paint.Align.CENTER; text.textSize = (if (car) 15f else 13.5f) * d
         val tf = text.typeface; text.typeface = t.typeface
         val shown = ellipsize(name, minOf(360 * d, a.width() * 0.5f))
         val w = text.measureText(shown) + 22 * d
