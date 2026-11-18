@@ -320,6 +320,7 @@ class MapRenderer(private val car: Boolean = false) {
         if (car && hud && carButtons && carFriends == null) carPanel?.let { drawCarPanel(c, area, d, theme, it) }
         if (car && hud) carFlash?.let { (msg, at) -> if (System.currentTimeMillis() - at < 2200) { drawCarFlash(c, area, d, theme, msg); animating = true } else carFlash = null }
         if (car && hud && carButtons) InvitePop.current?.let { drawCarInvite(c, area, d, theme, it); animating = true }
+        if (car && hud && LocationStatus.state != LocationStatus.State.OK && InvitePop.current == null) drawCarLocationOff(c, area, d, theme)
         drawDiscovery(c, area, d, theme)
         if (hud && (view.userBearing != null || !following)) drawCompass(c, area, bearing, d, theme)
         drawAttribution(c, area, d, theme)
@@ -1831,6 +1832,31 @@ class MapRenderer(private val car: Boolean = false) {
         }
         if (line.isNotEmpty()) out += line
         return out
+    }
+
+    /** Car: location is off (or not allowed) on the phone: where the invite card goes, until it's back. */
+    private fun drawCarLocationOff(c: Canvas, a: Rect, d: Float, t: Theme) {
+        val leftEdge = maxOf(bannerRight, if (!NavEngine.active) a.left + 14 * d + 300 * d else a.left.toFloat()) + 14 * d
+        val rightEdge = a.right - 84 * d
+        val room = rightEdge - leftEdge
+        val wide = room >= 440 * d
+        val w = if (wide) minOf(620 * d, room) else minOf(620 * d, a.width() - 110 * d)
+        val x0 = if (wide) leftEdge + (room - w) / 2 else a.left + 14 * d
+        val y0 = if (wide) a.top + 12 * d else maxOf(bannerBottom, a.top + 12 * d + 112 * d) + 10 * d
+        val r = RectF(x0, y0, x0 + w, y0 + 78 * d)
+        panel(c, r, d, t, outline = true, outlineColor = Color.rgb(255, 107, 107))
+        // a location mark, crossed out
+        val cx = r.left + 36 * d; val cy = r.centerY()
+        stroke.color = Color.rgb(255, 107, 107); stroke.strokeWidth = 3 * d
+        c.drawCircle(cx, cy, 11 * d, stroke)
+        c.drawLine(cx - 17 * d, cy - 17 * d, cx + 17 * d, cy + 17 * d, stroke)
+        val off = LocationStatus.state == LocationStatus.State.OFF
+        text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 19 * d; text.color = Ui.ink(t)
+        val tx = r.left + 66 * d; val tw = r.right - tx - 14 * d
+        c.drawText(ellipsize(gr.gamemap.L.t(if (off) "Location is off on your phone" else "GameRoute can't use your location"), tw), tx, r.top + 33 * d, text)
+        text.typeface = Typeface.DEFAULT; text.textSize = 15 * d; text.color = withAlpha(Ui.ink(t), 175)
+        c.drawText(ellipsize(gr.gamemap.L.t(if (off) "Turn it on on the phone (when you're parked) to be guided" else "Allow it on the phone (when you're parked) to be guided"), tw), tx, r.top + 58 * d, text)
+        text.typeface = t.typeface
     }
 
     /** Car: a convoy invite, centred at the top for ~10 s: who, where, big Not now and Join. */

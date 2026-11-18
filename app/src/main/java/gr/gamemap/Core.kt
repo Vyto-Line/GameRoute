@@ -57,6 +57,7 @@ class GameMapApp : Application() {
         Startup.step("friends") { Friends.init(this) }
         Avatars.init(this)
         InvitePop.init(this)
+        LocationStatus.init(this)
         Dev.cleanForPublic() // a public build keeps nothing from testing
         Startup.step("fuel") { Fuel.init(this) }
         Startup.step("parked") { Parked.init(this) }

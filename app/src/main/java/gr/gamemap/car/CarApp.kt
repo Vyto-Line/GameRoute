@@ -580,12 +580,14 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 NavEngine.changed += surface.redraw
                 gr.gamemap.Convoy.changed += surface.redraw
                 gr.gamemap.InvitePop.changed += surface.redraw
+                gr.gamemap.LocationStatus.changed += surface.redraw
                 gr.gamemap.Convoy.proposed += onProposal
                 NavEngine.changed += onNav
                 Voice.changed += onNav
                 gr.gamemap.Alerts.changed += onAlerts
                 gr.gamemap.Friends.changed += onFriends
                 gr.gamemap.Friends.setInCar(true)
+                gr.gamemap.LocationStatus.onCar(true)
                 onFriends()
                 ensureLocation()
                 tryResume(0)
@@ -601,6 +603,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 surface.release()
                 gr.gamemap.Convoy.changed -= surface.redraw
                 gr.gamemap.InvitePop.changed -= surface.redraw
+                gr.gamemap.LocationStatus.changed -= surface.redraw
                 gr.gamemap.Convoy.proposed -= onProposal
                 TileCache.loaded -= surface.redraw
                 LocationTracker.changed -= surface.redraw
@@ -612,6 +615,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 gr.gamemap.Alerts.changed -= onAlerts
                 gr.gamemap.Friends.changed -= onFriends
                 gr.gamemap.Friends.setInCar(false)
+                gr.gamemap.LocationStatus.onCar(false)
                 if (navigating) nav.navigationEnded()
                 LocationTracker.release(carContext, "car")
             }
