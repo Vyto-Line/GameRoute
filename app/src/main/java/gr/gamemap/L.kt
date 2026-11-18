@@ -514,7 +514,7 @@ object L {
         "Where are you going together?" to "Πού πάτε μαζί;", "Where is the convoy going?" to "Πού πάει το κομβόι;",
         "Everyone in the convoy gets this place." to "Όλοι στο κομβόι παίρνουν αυτό το μέρος.",
         "Suggest a place: the others are asked to confirm." to "Προτείνετε ένα μέρος: οι άλλοι καλούνται να επιβεβαιώσουν.",
-        "Search a place" to "Αναζήτηση μέρους", "A place, an address or a saved one" to "Ένα μέρος, μια διεύθυνση ή ένα αποθηκευμένο",
+        "Search a place" to "Αναζήτηση μέρους", "Where you're going now" to "Εκεί που πηγαίνετε τώρα", "A place, an address or a saved one" to "Ένα μέρος, μια διεύθυνση ή ένα αποθηκευμένο",
         "No shared place: just see each other on the map ›" to "Χωρίς κοινό προορισμό: απλώς βλέπετε ο ένας τον άλλον στον χάρτη ›",
         "How do you want to drive?" to "Πώς θέλετε να οδηγήσετε;", "How do you want to come?" to "Πώς θέλετε να έρθετε;",
         "Race" to "Αγώνας", "Join the race" to "Μπείτε στον αγώνα", "Drive together" to "Οδηγήστε μαζί", "Drive together, no race" to "Οδηγήστε μαζί, χωρίς αγώνα",

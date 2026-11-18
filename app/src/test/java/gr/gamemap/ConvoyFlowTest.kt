@@ -77,11 +77,10 @@ class ConvoyFlowTest {
         activity.openSheetForTest("convoy"); shot("flow_43a_start")
         assertTrue(texts().any { it.contains("Start a convoy") })
 
-        // 43b: my convoy, no place yet: step 1
-        activity.onBackPressedDispatcher.onBackPressed()
-        Convoy.debugStart(Place("x", "", start), "k7p2qx"); Convoy.debugSet(null, true)
-        prefs.edit().putString("convoyModeFor", "").apply()
-        activity.openSheetForTest("convoy"); shot("flow_43b_where")
+        // 43b: Start a convoy opens step 1 in the sheet (not straight into search)
+        click("Start a convoy"); shot("flow_43b_where")
+        log.append("after Start a convoy: active=${Convoy.active} host=${Convoy.host} searching=${activity.window.decorView.findFocus() is android.widget.EditText}\n")
+        assertTrue(Convoy.active && Convoy.host)
         log.append("43b: ${texts().filter { it.contains("together") || it.contains("Search") }}\n")
         assertTrue(texts().any { it == "Where are you going together?" })
 

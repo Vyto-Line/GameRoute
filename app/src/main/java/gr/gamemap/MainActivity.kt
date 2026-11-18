@@ -3994,6 +3994,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         body.addView(label(if (Convoy.host) "Where are you going together?" else "Where is the convoy going?", 19f, bold = true).apply { setTextColor(ink) })
         body.addView(label(if (Convoy.host) "Everyone in the convoy gets this place." else "Suggest a place: the others are asked to confirm.", 14f).apply { setTextColor(dim()); setPadding(0, p / 4, 0, p) })
         fun gap() = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p * 2 / 3 }
+        // where I'm going already (on a route, or a place I'm looking at): one tap
+        val now = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
+        if (now != null) body.addView(choiceCard("➤", now.name, L.t("Where you're going now"), null) {
+            Convoy.setDestination(now); convoyKey = ""; renderConvoy()
+        }, gap())
         body.addView(choiceCard("🔍", "Search a place", "A place, an address or a saved one", null) { closeSheet(); startPicking("convoy") }, gap())
         for ((k, icon) in listOf("home" to "🏠", "work" to "💼")) Places.saved(k)?.let { pl ->
             val here = LocationTracker.position
@@ -4176,7 +4181,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(label("›", 22f).apply { setTextColor(fg) })
         }
         cbody.addView(big("🏁", L.t("Start a convoy"), L.t("Pick where you're going, then invite people. Race or drive together: you choose next."), true) {
-            withConvoyName { Convoy.create(null); closeSheet(); startPicking("convoy") }
+            // step 1 (Where) opens in the sheet: search is one of the choices there, not a jump
+            withConvoyName { Convoy.create(null); setConvoyModeChosen(false); pendingMode = null; convoyKey = ""; openSheet("convoy"); renderConvoy() }
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         cbody.addView(big("▦", L.t("Join one"), L.t("Type a code, or scan the QR with your camera"), false) {
             convoyJoinOpen = !convoyJoinOpen; convoyKey = ""; renderConvoy()
