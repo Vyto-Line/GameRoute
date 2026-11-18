@@ -726,7 +726,7 @@ object Convoy {
             if (mine && NavEngine.arrived) 1.0 else if (mine && routeTotal > 0) (1 - NavEngine.remainingDistance / routeTotal).coerceIn(0.0, 1.0) else 0.0,
             if (mine) NavEngine.remainingDistance else -1.0,
             myState(), false,
-            NavEngine.lastTrip?.arrivedAt ?: 0, meReady, myId, meAlong)
+            if (NavEngine.arrived) NavEngine.arrivedAtMs else 0, meReady, myId, meAlong)
         val others = members.values.filter { !it.sharing }.map { Row(it.name, it.color, false, it.kmh, it.eta, it.progress, it.left, it.state, it.stale, it.arrivedAt, it.ready, it.id, it.along) }
         // the racers first, furthest along first; anyone driving along after them
         return (if (meSharing) others else others + me).sortedWith(compareBy<Row> { it.along }.thenByDescending { it.progress }.thenBy { it.eta })

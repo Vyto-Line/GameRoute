@@ -157,7 +157,8 @@ object Friends {
     fun invite(f: FriendCore.Friend) {
         val c = Convoy.code ?: return
         val dest = Convoy.destination?.name.orEmpty()
-        bg { core.invite(f, c, dest) }
+        val mode = when { Convoy.meSharing -> "share"; Convoy.meAlong -> "along"; else -> "race" }
+        bg { core.invite(f, c, dest, mode) }
     }
 
     fun answer(convoy: String, status: String) {

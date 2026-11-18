@@ -1987,6 +1987,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Convoy.myPlace()?.let { (place, of) ->
             val nth = when (place) { 1 -> "1st 👑"; 2 -> "2nd"; 3 -> "3rd"; else -> "${place}th" }
             tripCard.addView(label("Convoy: $nth of $of", 15f, bold = true).apply { setTextColor(readable(accent)); gravity = Gravity.CENTER; setPadding(0, (6 * d).toInt(), 0, 0) })
+            // the others still racing: follow them live (the card stays until everyone's in)
+            tripCard.addView(pill("🏁  " + L.t("See the race")) { NavEngine.dismissTrip(); openSheet("convoy") }.apply {
+                textSize = 15f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 12f)
+            }, LinearLayout.LayoutParams(MATCH_PARENT, (46 * d).toInt()).apply { topMargin = (8 * d).toInt() })
         }
         // the people I drove with who aren't friends yet: one tap to add
         if (Friends.ready && Convoy.active) {
@@ -3561,7 +3565,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private fun joinConvoy(link: String) {
         withConvoyName {
-            if (Convoy.join(link)) openSheet("convoy")
+            if (Convoy.join(link)) {
+                // joined from an invite: who and how they drive (step 2 offers the same, picked)
+                val inv = if (Friends.ready) Friends.core.invites.firstOrNull { it.convoy == Convoy.code } else null
+                prefs().edit().putString("convoyInviteMode", if (inv != null) "${Convoy.code}|${inv.from}|${inv.mode}" else "").apply()
+                openSheet("convoy")
+            }
             else Toast.makeText(this, L.t("That isn't a convoy code or link"), Toast.LENGTH_SHORT).show()
         }
     }
@@ -3721,7 +3730,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val fk = if (!Friends.ready) "" else Convoy.members.values.joinToString { m -> m.fc + Friends.core.isFriend(m.fid) + Friends.core.requested(m.fc) }
         val key = "${Convoy.code}|${Convoy.myName}|${Convoy.destination?.name}|${rows.joinToString { "${it.name}${it.kmh}${it.state}${it.eta / 60000}${(it.progress * 50).toInt()}${it.ready}${it.stale}${it.along}" }}|" +
             "${Convoy.sharers().size}|${Convoy.meSharing}|${Convoy.meAlong}|${Convoy.meReady}|${Convoy.counting}|${NavEngine.active}|${theme.name}|${MapState.dark}|$fk|${friendsWaiting()}|" +
-            "${onlineFriends().joinToString { it.fid }}|$convoyJoinOpen|${Convoy.host}"
+            "${onlineFriends().joinToString { it.fid }}|$convoyJoinOpen|${Convoy.host}|${convoyModeChosen()}|$pendingMode|${NavEngine.arrived}|${Convoy.myPlace()}"
         if (key == convoyKey && sheetHost.childCount > 0) return
         convoyKey = key
         sheetHost.removeAllViews()
@@ -3734,8 +3743,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val underway = Convoy.underway
         val choosing = !NavEngine.active && dest != null && Convoy.atStart().isNotEmpty() && !underway
         val beforeStart = !NavEngine.active && dest != null && !underway
+        // one question at a time: 1 where → 2 how → 3 the lobby; then driving; then the standings
+        if (dest == null && !Convoy.meSharing && !NavEngine.active && !underway) { renderConvoyWhere(p); return }
+        if (beforeStart && !convoyModeChosen()) { renderConvoyHow(p); return }
+        if (raceStandingsShown()) { renderRaceStandings(p, rows); return }
+        if (NavEngine.active && !NavEngine.arrived && Convoy.onConvoyRoute) { renderConvoyDriving(p, rows); return }
+
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         sheetHost.addView(SheetScroll(0.56).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        if (beforeStart) body.addView(stepBar(3))
 
         // quick messages: one tap, everyone gets it (and hears it while driving)
         if (Convoy.members.isNotEmpty()) body.addView(android.widget.HorizontalScrollView(this).apply {
@@ -3855,35 +3871,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }, LinearLayout.LayoutParams(MATCH_PARENT, (50 * d).toInt()).apply { topMargin = p * 2 / 3 })
 
-        // me: Race · Drive along · Just share (free to switch until the 3-2-1)
+        // me: how I'm driving, with Change (back to the "how" step; free until the 3-2-1)
         if (beforeStart) {
-            body.addView(sectionTitle(L.t("YOU")))
-            val mode = when { Convoy.meSharing -> 2; Convoy.meAlong -> 1; else -> 0 }
-            body.addView(LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                val q = (4 * d).toInt(); setPadding(q, q, q, q)
-                background = bg(dim(26), radius = 14f)
-                listOf("🏁 Race", "🚗 Drive along", "📍 Just share").forEachIndexed { i, t ->
-                    val sel = i == mode
-                    addView(TextView(context).apply {
-                        text = L.t(t); textSize = 14f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; maxLines = 1
-                        setTextColor(if (sel) onAccent(accent) else ink)
-                        if (sel) background = bg(accent, radius = 11f)
-                        contentDescription = L.t(t) + if (sel) ", " + L.t("selected") else ""
-                        setOnClickListener {
-                            if (Convoy.counting) return@setOnClickListener
-                            when (i) { 0 -> { Convoy.setSharing(false); Convoy.setAlong(false) }; 1 -> Convoy.setAlong(true); else -> Convoy.setSharing(true) }
-                        }
-                    }, LinearLayout.LayoutParams(0, (42 * d).toInt(), 1f))
-                }
-            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             val lobby = Convoy.lobby()
+            body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(p, p * 2 / 3, p / 2, p * 2 / 3); background = bg(dim(22), dim(70), 1f, 14f)
+                addView(label(L.t("You: ") + L.t(when { Convoy.meSharing -> "📍 Just sharing"; Convoy.meAlong -> "🚗 Driving together"; else -> "🏁 Racing" }), 15.5f, bold = true).apply { setTextColor(ink) },
+                    LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                if (!Convoy.counting) addView(pill("Change") { setConvoyModeChosen(false); pendingMode = null; convoyKey = ""; renderConvoy() }.apply { textSize = 14f; setTextColor(readable(accent)) })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p })
+            // what's happening, and what's next
+            val waiting = lobby.filter { !it.ready }.map { it.name }
             body.addView(label(when {
                 Convoy.meSharing -> "The others see you on their map. You're not in the race and no route starts."
                 Convoy.meAlong -> "Same route, no race: go whenever you like."
-                lobby.isEmpty() -> "Nobody else is racing yet."
-                else -> L.t("Racing: ") + (lobby.map { it.name } + L.t("you")).joinToString(", ") + ". " + L.t("When everyone's ready: 3-2-1, then go.")
-            }, 13f).apply { setTextColor(dim()); setPadding(p / 4, p / 2, 0, 0) })
+                lobby.isEmpty() -> "Nobody else is racing yet: invite people, or start on your own."
+                Convoy.counting -> "3-2-1…"
+                waiting.isNotEmpty() -> L.t("Waiting for ") + waiting.joinToString(", ") + L.t(" to be ready. Then 3-2-1 and go.")
+                else -> "Everyone's ready: 3-2-1 and go."
+            }, 14f).apply { setTextColor(dim()); gravity = Gravity.CENTER; setPadding(p / 4, p, p / 4, 0) })
         }
 
         // the one big button
@@ -3927,6 +3934,228 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         })
     }
 
+    // ---------------------------------------------------------------- the convoy, step by step
+
+    /** The "how" I picked on step 2 but haven't confirmed yet (null: as it is now). */
+    private var pendingMode: String? = null
+
+    /** Step 2 is done for this convoy (each convoy asks once; Change asks again). */
+    private fun convoyModeChosen() = Convoy.code != null && prefs().getString("convoyModeFor", "") == Convoy.code
+    private fun setConvoyModeChosen(v: Boolean) { prefs().edit().putString("convoyModeFor", if (v) Convoy.code.orEmpty() else "").apply() }
+
+    private fun currentMode() = when { Convoy.meSharing -> "share"; Convoy.meAlong -> "along"; else -> "race" }
+
+    /** 1 · Where — 2 · How — 3 · Who, with the step we're on lit. */
+    private fun stepBar(step: Int) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL; setPadding(0, (2 * d).toInt(), 0, (12 * d).toInt())
+        listOf("Where", "How", "Who").forEachIndexed { i, t ->
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(View(context).apply { setBackgroundColor(if (i < step) accent else dim(60)) }, LinearLayout.LayoutParams(MATCH_PARENT, (4 * d).toInt()))
+                addView(label("${i + 1} · " + L.t(t).uppercase(), 11f, bold = true).apply {
+                    setTextColor(if (i == step - 1) readable(accent) else dim()); letterSpacing = 0.08f; setPadding(0, (5 * d).toInt(), 0, 0)
+                })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { if (i > 0) marginStart = (6 * d).toInt() })
+        }
+    }
+
+    /** A big choice row: icon, title, a line or two, and a round mark when it's the chosen one. */
+    private fun choiceCard(icon: String, title: String, sub: String, selected: Boolean?, extra: String? = null, onClick: () -> Unit) = LinearLayout(this).apply {
+        val p = (12 * d).toInt()
+        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(p, p, p, p)
+        background = if (selected == true) bg(dim(22), accent, 2f, 14f) else bg(dim(22), radius = 14f)
+        isClickable = true; setOnClickListener { onClick() }
+        contentDescription = L.t(title) + if (selected == true) ", " + L.t("selected") else ""
+        addView(label(icon, 26f).apply { gravity = Gravity.CENTER; setTextColor(ink) }, LinearLayout.LayoutParams((40 * d).toInt(), WRAP_CONTENT).apply { marginEnd = p })
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(label(L.t(title), 17f, bold = true).apply { setTextColor(ink) })
+            addView(label(L.t(sub), 13.5f).apply { setTextColor(dim()) })
+            if (extra != null) addView(label(L.t(extra), 12.5f, bold = true).apply { setTextColor(readable(accent)); setPadding(0, (4 * d).toInt(), 0, 0) })
+        }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        if (selected != null) addView(View(context).apply {
+            background = if (selected) android.graphics.drawable.LayerDrawable(arrayOf(bg(Color.TRANSPARENT, accent, 2f, 11f), bg(accent, radius = 6f).also { })).apply {
+                setLayerInset(1, (5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt())
+            } else bg(Color.TRANSPARENT, dim(), 2f, 11f)
+        }, LinearLayout.LayoutParams((22 * d).toInt(), (22 * d).toInt()))
+        else addView(label("›", 22f).apply { setTextColor(dim()) })
+    }
+
+    private fun bigButton(text: String, onClick: () -> Unit) = pill(text) { onClick() }.apply {
+        textSize = 17f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+        setTextColor(onAccent(accent)); background = bg(accent, radius = 16f); typeface = theme.typeface
+    }
+
+    /** Step 1: where are you going together? */
+    private fun renderConvoyWhere(p: Int) {
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.62).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        body.addView(stepBar(1))
+        body.addView(label(if (Convoy.host) "Where are you going together?" else "Where is the convoy going?", 19f, bold = true).apply { setTextColor(ink) })
+        body.addView(label(if (Convoy.host) "Everyone in the convoy gets this place." else "Suggest a place: the others are asked to confirm.", 14f).apply { setTextColor(dim()); setPadding(0, p / 4, 0, p) })
+        fun gap() = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p * 2 / 3 }
+        body.addView(choiceCard("🔍", "Search a place", "A place, an address or a saved one", null) { closeSheet(); startPicking("convoy") }, gap())
+        for ((k, icon) in listOf("home" to "🏠", "work" to "💼")) Places.saved(k)?.let { pl ->
+            val here = LocationTracker.position
+            body.addView(choiceCard(icon, pl.name, listOfNotNull(here?.let { NavEngine.formatDistance(Geo.distance(it, pl.pos)) }, pl.address.takeIf { it.isNotBlank() }).joinToString(" · "), null) {
+                Convoy.setDestination(pl); convoyKey = ""; renderConvoy()
+            }, gap())
+        }
+        body.addView(label("No shared place: just see each other on the map ›", 14f, bold = true).apply {
+            setTextColor(readable(Color.rgb(77, 171, 247))); setPadding(p / 4, p / 2, 0, p / 2)
+            setOnClickListener { Convoy.setSharing(true); setConvoyModeChosen(true); convoyKey = ""; renderConvoy() }
+        })
+        sheetHost.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, p / 2, 0, 0)
+            addView(pill("Leave") { confirmLeaveConvoy() }.apply { textSize = 14f; setTextColor(readable(Color.rgb(230, 70, 70))) })
+        })
+    }
+
+    /** Step 2 (and joining): how do you want to drive? Race · Drive together · Just share. */
+    private fun renderConvoyHow(p: Int) {
+        val dest = Convoy.destination
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.62).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // someone joining: whose convoy, and how the one who invited me drives (picked for me)
+        val inv = if (Convoy.host) null else prefs().getString("convoyInviteMode", "").orEmpty().split("|").takeIf { it.size == 3 && it[0] == Convoy.code }
+        val drivers = Convoy.members.size + 1
+        if (Convoy.host) body.addView(stepBar(2))
+        else {
+            body.addView(label(L.t(if (inv != null) "${inv[1]}'s convoy" else "The convoy"), 20f, bold = true).apply { setTextColor(ink); gravity = Gravity.CENTER })
+            body.addView(label("🏁 " + L.t("To ${dest?.name ?: "—"}") + " · " + L.t("$drivers drivers"), 14f).apply { setTextColor(dim()); gravity = Gravity.CENTER; setPadding(0, p / 4, 0, p) })
+        }
+        body.addView(label(if (Convoy.host) "How do you want to drive?" else "How do you want to come?", 19f, bold = true).apply { setTextColor(ink) })
+        if (Convoy.host) body.addView(label(L.t("To ${dest?.name ?: "—"}") + " · " + L.t("each person picks their own when they join."), 14f).apply { setTextColor(dim()); setPadding(0, p / 4, 0, p) })
+        val chosen = pendingMode ?: inv?.get(2)?.takeIf { it.isNotBlank() } ?: currentMode()
+        fun gap() = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p * 2 / 3 }
+        val pick: (String) -> Unit = { m -> pendingMode = m; convoyKey = ""; renderConvoy() }
+        body.addView(choiceCard("🏁", if (Convoy.host) "Race" else "Join the race", "3-2-1 start together. Same place, fastest wins. Places and times at the end.", chosen == "race",
+            if (Convoy.host) "The default for people you invite" else null) { pick("race") }, gap())
+        body.addView(choiceCard("🚗", if (Convoy.host) "Drive together" else "Drive together, no race", "Same place, same route, no race. You see each other the whole way.", chosen == "along") { pick("along") }, gap())
+        body.addView(choiceCard("📍", "Just share where I am", "I'm going somewhere else: the others see me on the map, I see them.", chosen == "share") { pick("share") }, gap())
+        val label = when {
+            Convoy.host -> "Next: invite people ›"
+            chosen == "race" -> "Join the race ›"
+            chosen == "along" -> "Drive together ›"
+            else -> "Share where I am ›"
+        }
+        sheetHost.addView(bigButton(L.t(label)) {
+            when (chosen) { "race" -> { Convoy.setSharing(false); Convoy.setAlong(false) }; "along" -> Convoy.setAlong(true); else -> Convoy.setSharing(true) }
+            setConvoyModeChosen(true); pendingMode = null; convoyKey = ""
+            if (Convoy.host && Convoy.members.isEmpty()) openSheet("convoyinvite") else renderConvoy()
+        }, LinearLayout.LayoutParams(MATCH_PARENT, (56 * d).toInt()).apply { topMargin = p })
+    }
+
+    /** While driving: quick messages first, everyone in order with the gap, See everyone / Invite / Leave. */
+    private fun renderConvoyDriving(p: Int, rows: List<Convoy.Row>) {
+        val dest = Convoy.destination
+        val racing = !Convoy.meAlong && !Convoy.meSharing && Convoy.members.values.any { !it.along && !it.sharing }
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.6).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        val racers = rows.filter { !it.along }
+        val myPlace = racers.indexOfFirst { it.me } + 1
+        body.addView(label((if (racing) "🏁 " + L.t("Race to ${dest?.name ?: ""}") else "🚗 " + L.t("Together to ${dest?.name ?: ""}")), 19f, bold = true).apply { setTextColor(ink); typeface = theme.typeface })
+        body.addView(label(listOfNotNull(if (racing && myPlace > 0) L.t(ordinal(myPlace)) else null, NavEngine.formatDistance(NavEngine.remainingDistance) + " " + L.t("to go")).joinToString(" · "), 13.5f).apply {
+            setTextColor(dim()); setPadding(0, p / 4, 0, p * 2 / 3)
+        })
+        // quick messages: four big tiles
+        val icons = mapOf("fuel" to "⛽", "stop" to "☕", "ahead" to "👉", "wait" to "✋")
+        body.addView(android.widget.GridLayout(this).apply {
+            columnCount = 4
+            for ((k, _, _) in Convoy.quick) addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(0, p / 2, 0, p / 2)
+                background = bg(dim(22), radius = 12f); isClickable = true
+                contentDescription = Convoy.messageText(k)
+                setOnClickListener { Convoy.send(k); Toast.makeText(this@MainActivity, L.t("Sent to the convoy"), Toast.LENGTH_SHORT).show() }
+                addView(label(icons[k] ?: "💬", 22f).apply { gravity = Gravity.CENTER })
+                addView(label(Convoy.messageText(k), 12f, bold = true).apply { setTextColor(ink); gravity = Gravity.CENTER; maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+            }, android.widget.GridLayout.LayoutParams(android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED), android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)).apply {
+                width = 0; setMargins(p / 4, 0, p / 4, 0)
+            })
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = p * 2 / 3 })
+        // everyone, in order (the racers by place, then those driving together)
+        var place = 0
+        for (r in rows) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(p / 2, p / 3, p / 2, p / 3) }
+            if (r.me) row.background = bg(dim(26), radius = 10f)
+            if (!r.along) place++
+            row.addView(label(if (!r.along && racing) "$place" else "", 15f, bold = true).apply { setTextColor(readable(accent)) }, LinearLayout.LayoutParams((20 * d).toInt(), WRAP_CONTENT))
+            row.addView(dot(if (r.me) Convoy.myName.ifBlank { "You" } else r.name, r.color, 32, r.stale))
+            row.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(if (r.me) L.t("You") else r.name, 15.5f, bold = true).apply { setTextColor(ink) })
+                val sub = (if (r.me) "" else L.t(Convoy.relative(r))) + (if (r.along && !r.me) "" else "")
+                if (sub.isNotBlank()) addView(label(sub, 12.5f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            row.addView(label(if (r.state == "arrived") "🏁" else "${r.kmh} km/h", 14f, bold = true).apply { setTextColor(readable(Color.rgb(61, 220, 132))) })
+            if (!r.me) { row.isClickable = true; row.setOnClickListener { showFriend(r.id) } }
+            body.addView(row)
+        }
+        sheetHost.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
+            addView(pill("👀 See everyone") {
+                closeSheet()
+                val pts = Convoy.members.values.mapNotNull { it.shown ?: it.pos } + listOfNotNull(LocationTracker.position)
+                MapState.phone.requestFit(pts)
+            }.apply { textSize = 14f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 12f) }, LinearLayout.LayoutParams(0, (46 * d).toInt(), 1f))
+            addView(pill("👥 Invite") { openSheet("convoyinvite") }.apply { textSize = 14f; setTextColor(readable(accent)); background = bg(Color.TRANSPARENT, accent, 1.5f, 12f) },
+                LinearLayout.LayoutParams(0, (46 * d).toInt(), 1f).apply { marginStart = p / 2 })
+            addView(pill("Leave") { confirmLeaveConvoy() }.apply { textSize = 14f; setTextColor(readable(Color.rgb(230, 70, 70))) },
+                LinearLayout.LayoutParams(WRAP_CONTENT, (46 * d).toInt()).apply { marginStart = p / 2 })
+        })
+    }
+
+    private fun ordinal(n: Int) = when (n) { 1 -> "You're 1st"; 2 -> "You're 2nd"; 3 -> "You're 3rd"; else -> "You're ${n}th" }
+
+    /** I finished a race and the convoy is still on: the standings (live until everyone's in). */
+    private fun raceStandingsShown() = Convoy.active && NavEngine.arrived && Convoy.myPlace() != null
+
+    private fun renderRaceStandings(p: Int, rows: List<Convoy.Row>) {
+        val (mine, total) = Convoy.myPlace() ?: return
+        val racers = rows.filter { !it.along }
+        val arrived = racers.filter { it.state == "arrived" }.sortedBy { it.arrivedAt }
+        val stillDriving = racers.filter { it.state != "arrived" }
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sheetHost.addView(SheetScroll(0.62).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        val medal = when (mine) { 1 -> "🥇"; 2 -> "🥈"; 3 -> "🥉"; else -> "🏁" }
+        body.addView(label(medal, 44f).apply { gravity = Gravity.CENTER })
+        body.addView(label(L.t(when (mine) { 1 -> "You won!"; 2 -> "You finished 2nd"; 3 -> "You finished 3rd"; else -> "You finished ${mine}th" }), 22f, bold = true).apply { setTextColor(ink); gravity = Gravity.CENTER; typeface = theme.typeface })
+        val first = arrived.firstOrNull()
+        val me = arrived.firstOrNull { it.me }
+        if (me != null && first != null && !first.me) body.addView(label("+" + fmtGap((me.arrivedAt - first.arrivedAt) / 1000) + " · " + L.t("Winner: ") + first.name, 14f).apply { setTextColor(dim()); gravity = Gravity.CENTER })
+        body.addView(sectionTitle(if (stillDriving.isEmpty()) L.t("FINAL ORDER · $total RACERS") else L.t("LIVE · ${stillDriving.size} STILL DRIVING")))
+        val start = arrived.minOfOrNull { it.arrivedAt } ?: 0L
+        arrived.forEachIndexed { i, r ->
+            body.addView(standingRow("${i + 1}", r, L.t("Arrived ") + NavEngine.clock(r.arrivedAt) + (if (i > 0 && start > 0) " · +" + fmtGap((r.arrivedAt - start) / 1000) else ""), "🏁", p))
+        }
+        for (r in stillDriving) body.addView(standingRow("", r, if (r.stale) L.t("no signal") else NavEngine.formatDistance(r.left.coerceAtLeast(0.0)) + " " + L.t("to go") +
+            (if (r.eta > 0) " · ~" + NavEngine.clock(r.eta) else ""), "${r.kmh} km/h", p))
+        body.addView(label(if (stillDriving.isEmpty()) "Everyone's in." else "Stays open until everyone's in, then shows the final order.", 13f).apply {
+            setTextColor(dim()); gravity = Gravity.CENTER; setPadding(0, p, 0, 0)
+        })
+        sheetHost.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
+            addView(bigButton(L.t("Done")) { closeSheet() }, LinearLayout.LayoutParams(0, (52 * d).toInt(), 1f))
+            addView(pill("Leave") { confirmLeaveConvoy() }.apply { textSize = 14f; setTextColor(readable(Color.rgb(230, 70, 70))) },
+                LinearLayout.LayoutParams(WRAP_CONTENT, (52 * d).toInt()).apply { marginStart = p / 2 })
+        })
+    }
+
+    private fun fmtGap(s: Long) = if (s < 60) "$s s" else "${s / 60} min ${s % 60} s"
+
+    private fun standingRow(place: String, r: Convoy.Row, sub: String, right: String, p: Int) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(p / 2, p / 3, p / 2, p / 3)
+        if (r.me) background = bg(dim(26), radius = 10f)
+        addView(label(place, 15f, bold = true).apply { setTextColor(readable(accent)) }, LinearLayout.LayoutParams((20 * d).toInt(), WRAP_CONTENT))
+        addView(dot(if (r.me) Convoy.myName.ifBlank { "You" } else r.name, r.color, 32, r.stale))
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(label(if (r.me) L.t("You") else r.name, 15.5f, bold = true).apply { setTextColor(ink) })
+            addView(label(sub, 12.5f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+        }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        addView(label(right, 14f, bold = true).apply { setTextColor(readable(Color.rgb(61, 220, 132))) })
+    }
+
     /** Not in a convoy: Start one, Join one, or invite a friend who's online. */
     private fun renderConvoyStart(p: Int) {
         val cbody = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -3946,7 +4175,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(label("›", 22f).apply { setTextColor(fg) })
         }
-        cbody.addView(big("🏁", L.t("Start a convoy"), L.t("Pick where to go, then invite people"), true) {
+        cbody.addView(big("🏁", L.t("Start a convoy"), L.t("Pick where you're going, then invite people. Race or drive together: you choose next."), true) {
             withConvoyName { Convoy.create(null); closeSheet(); startPicking("convoy") }
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         cbody.addView(big("▦", L.t("Join one"), L.t("Type a code, or scan the QR with your camera"), false) {

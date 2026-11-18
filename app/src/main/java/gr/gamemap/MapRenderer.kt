@@ -257,7 +257,12 @@ class MapRenderer(private val car: Boolean = false) {
         // player: centred when following, otherwise wherever it is on the map
         var playerAt: android.graphics.PointF? = null
         val weakNow = hud && LocationTracker.weak
-        if (me != null) {
+        val locOff = LocationStatus.state != LocationStatus.State.OK
+        if (me != null && locOff) {
+            // location off / not allowed: a faint "?" where I was last (not an arrow that looks live)
+            val (sx, sy) = if (following) cx to cy else toScreen(me, camera!!)
+            if (area.contains(sx.toInt(), sy.toInt())) drawLastKnown(c, sx, sy, d, theme)
+        } else if (me != null) {
             if (following) {
                 drawPlayer(c, cx, cy, 0f, d, theme)
                 if (weakNow) drawWeakGps(c, cx, cy, d, area)
@@ -889,6 +894,17 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     // ---------------------------------------------------------------- player & frames
+
+    /** Where I was last, when location is off: a faint grey circle with a "?". */
+    private fun drawLastKnown(c: Canvas, x: Float, y: Float, d: Float, t: Theme) {
+        val r = 15 * d
+        fill.color = Color.argb(70, 140, 146, 156); c.drawCircle(x, y, r * 1.9f, fill)
+        fill.color = Color.argb(200, 122, 128, 137); c.drawCircle(x, y, r, fill)
+        stroke.color = Color.argb(220, 255, 255, 255); stroke.strokeWidth = 2 * d; c.drawCircle(x, y, r, stroke)
+        text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = Color.WHITE
+        c.drawText("?", x, y + 6 * d, text)
+        text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface
+    }
 
     private fun drawPlayer(c: Canvas, x: Float, y: Float, rotation: Float, d: Float, t: Theme) {
         val s = 15 * d
@@ -2295,42 +2311,57 @@ class MapRenderer(private val car: Boolean = false) {
         animating = true // it goes away by itself after 8 s
     }
 
-    /** Phone: a slim strip under the turn card: everyone on a line to the flag, with how far along (%). */
+    /**
+     * Phone: the convoy button under the turn card: my place in the race (or "Together"), who's
+     * in it, and the nearest gap. A tap opens the convoy panel.
+     */
     private fun drawConvoyStrip(c: Canvas, a: Rect, d: Float, t: Theme) {
         val rows = Convoy.rows(t.route)
-        val r = RectF(a.left + 12 * d, bannerBottom + 8 * d, a.right - 12 * d, bannerBottom + 8 * d + 54 * d)
-        panel(c, r, d, t, outline = true)
-        val x0 = r.left + 18 * d; val x1 = r.right - 52 * d; val ly = r.top + 18 * d
-        fill.color = withAlpha(Ui.ink(t), 60); c.drawRoundRect(x0, ly - 1.5f * d, x1, ly + 1.5f * d, 2 * d, 2 * d, fill)
-        text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT; text.textSize = 13 * d
-        c.drawText("🏁", x1 + 14 * d, ly + 5 * d, text)
-        for (row in rows.sortedBy { if (it.me) 1 else 0 }) { // me on top
-            val x = x0 + ((x1 - x0) * row.progress).toFloat()
-            if (row.along) {
-                // driving along (not racing): a grey, dashed dot
-                fill.color = Color.argb(150, 122, 128, 137); c.drawCircle(x, ly, 11 * d, fill)
-                stroke.color = Ui.dim(t, 200); stroke.strokeWidth = 1.6f * d
-                stroke.pathEffect = android.graphics.DashPathEffect(floatArrayOf(3 * d, 2.5f * d), 0f)
-                c.drawCircle(x, ly, 10 * d, stroke); stroke.pathEffect = null
-            } else {
-                fill.color = if (row.stale) Color.GRAY else row.color
-                c.drawCircle(x, ly, 11 * d, fill)
-                stroke.color = Ui.panel(t); stroke.strokeWidth = 2 * d; c.drawCircle(x, ly, 11 * d, stroke)
-            }
-            text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 11 * d; text.color = Color.rgb(17, 20, 24)
-            c.drawText(if (row.me) "★" else row.name.take(1).uppercase(), x, ly + 4 * d, text)
-            // how much of the race each has done (their speed stays on their tag on the map)
-            text.textSize = 10 * d
-            text.color = Ui.dim(t, 220)
-            val known = row.me || row.left >= 0
-            val pct = (row.progress * 100).toInt().coerceIn(0, 99) // 100 is the ✓
-            c.drawText(when { row.along -> gr.gamemap.L.t("along"); row.state == "arrived" -> "✓"; row.state == "own" || !known -> "–"; else -> "$pct%" }, x, ly + 25 * d, text)
+        val racing = !Convoy.meAlong && !Convoy.meSharing && rows.any { !it.me && !it.along }
+        val racers = rows.filter { !it.along }
+        val place = racers.indexOfFirst { it.me } + 1
+        val head = when {
+            racing && place > 0 -> "🏁 " + gr.gamemap.L.t(when (place) { 1 -> "1st"; 2 -> "2nd"; 3 -> "3rd"; else -> "${place}th" })
+            else -> "🚗 " + gr.gamemap.L.t("Together")
         }
-        text.textSize = 15 * d; text.color = Ui.onPanel(t, t.route, 3.0)
-        c.drawText("▾", r.right - 16 * d, ly + 5 * d, text)
-        text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface
+        // the nearest one (by the gap along the route), else the first other
+        val others = rows.filter { !it.me }
+        val near = others.filter { it.state != "arrived" && !it.stale }.minByOrNull { Convoy.gapTo(it)?.let { g -> Math.abs(g) } ?: Double.MAX_VALUE } ?: others.firstOrNull()
+        val gap = near?.let { it.name + " " + gr.gamemap.L.t(Convoy.relative(it)) }.orEmpty()
+        val h = 40 * d; val pad = 12 * d
+        text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 14 * d
+        val headW = text.measureText(head)
+        val av = 24 * d; val avStep = 18 * d
+        val shown = others.take(4)
+        val avW = if (shown.isEmpty()) 0f else av + (shown.size - 1) * avStep
+        text.typeface = Typeface.DEFAULT; text.textSize = 13 * d
+        val maxW = a.width() - 24 * d
+        val fixed = pad + headW + 17 * d + avW + (if (avW > 0) 8 * d else 0f) + pad
+        val gapText = ellipsize(gap, (maxW - fixed).coerceAtLeast(0f))
+        val w = minOf(maxW, fixed + text.measureText(gapText))
+        val r = RectF(a.left + 12 * d, bannerBottom + 8 * d, a.left + 12 * d + w, bannerBottom + 8 * d + h)
+        panel(c, r, d, t, outline = true)
+        val cy = r.centerY()
+        var x = r.left + pad
+        text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 14 * d
+        text.color = Ui.onPanel(t, t.route, 3.0)
+        c.drawText(head, x, cy + 5 * d, text); x += headW + 8 * d
+        fill.color = Ui.dim(t, 70); c.drawRect(x, cy - 10 * d, x + 1 * d, cy + 10 * d, fill); x += 9 * d
+        // avatars, overlapping a little
+        for ((i, row) in shown.withIndex()) {
+            val cx = x + av / 2 + i * avStep
+            fill.color = if (row.stale) Color.GRAY else row.color
+            c.drawCircle(cx, cy, av / 2, fill)
+            stroke.color = Ui.panel(t); stroke.strokeWidth = 2 * d; c.drawCircle(cx, cy, av / 2, stroke)
+            text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 11 * d; text.color = Color.rgb(17, 20, 24)
+            c.drawText(row.name.trim().split(" ").last().take(1).uppercase().ifBlank { "?" }, cx, cy + 4 * d, text)
+        }
+        x += avW + (if (avW > 0) 8 * d else 0f)
+        text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT; text.textSize = 13 * d; text.color = Ui.dim(t, 210)
+        c.drawText(gapText, x, cy + 5 * d, text)
+        text.typeface = t.typeface
         convoyStrip.set(r)
-        bannerBottom = r.bottom; bannerRight = r.right
+        bannerBottom = r.bottom; bannerRight = maxOf(bannerRight, r.right)
     }
 
     /** Car: the convoy box under the turn box (name · how far ahead, % of the race, speed, arrival). */

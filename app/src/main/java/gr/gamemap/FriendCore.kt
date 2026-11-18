@@ -35,7 +35,9 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     /** A request I sent: by code, so I don't know who they are until they answer. [status]: waiting, accepted, declined. */
     class Pending(val nonce: String, val code: String, val name: String, val at: Long, val status: String = "waiting")
     /** A convoy invite I got (several for the same convoy count as one). */
-    class Invite(val iid: String, val fid: String, val from: String, val convoy: String, val dest: String, val at: Long, val count: Int)
+    class Invite(val iid: String, val fid: String, val from: String, val convoy: String, val dest: String, val at: Long, val count: Int,
+                 /** How the inviter is driving: race, along or share ("": not said, older versions). */
+                 val mode: String = "")
     /** A convoy invite I sent, and how far it got: sent, seen, joined, no. */
     class Sent(val fid: String, val iid: String, val convoy: String, val at: Long, val status: String)
     /** Someone I drove with in a convoy (to add them later). */
@@ -109,7 +111,7 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     val invites: List<Invite> get() {
         if (status == DND) return emptyList()
         val now = clock()
-        return arr("invites").map { Invite(it.getString("iid"), it.getString("fid"), it.optString("n"), it.getString("cv"), it.optString("d"), it.optLong("at"), it.optInt("k", 1)) }
+        return arr("invites").map { Invite(it.getString("iid"), it.getString("fid"), it.optString("n"), it.getString("cv"), it.optString("d"), it.optLong("at"), it.optInt("k", 1), it.optString("md")) }
             .filter { now - it.at < INVITE_TTL && it.fid !in blocked && friend(it.fid) != null }
     }
     val sent: List<Sent> get() = arr("sent").map { Sent(it.getString("fid"), it.getString("iid"), it.getString("cv"), it.optLong("at"), it.optString("st", "sent")) }
@@ -157,11 +159,11 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     }
 
     /** Invites [f] to the convoy with [convoy] code (going to [dest]); returns the invite's id. */
-    fun invite(f: Friend, convoy: String, dest: String): String {
+    fun invite(f: Friend, convoy: String, dest: String, mode: String = ""): String {
         val iid = hex(bytes(6))
         removeWhere("sent") { it.getString("fid") == f.fid && it.getString("cv") == convoy }
         edit("sent") { a -> a.put(JSONObject().put("fid", f.fid).put("iid", iid).put("cv", convoy).put("at", clock()).put("st", "sent")) }
-        send(f.secret, JSONObject().put("t", "inv").put("iid", iid).put("cv", convoy).put("d", dest))
+        send(f.secret, JSONObject().put("t", "inv").put("iid", iid).put("cv", convoy).put("d", dest).put("md", mode))
         return iid
     }
 
@@ -296,7 +298,7 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
                 val old = arr("invites").firstOrNull { it.getString("cv") == cv }
                 val k = (old?.optInt("k", 1) ?: 0) + 1
                 removeWhere("invites") { it.getString("cv") == cv }
-                edit("invites") { a -> a.put(JSONObject().put("iid", o.optString("iid")).put("fid", from).put("n", name).put("cv", cv).put("d", o.optString("d")).put("at", o.optLong("at")).put("k", k)) }
+                edit("invites") { a -> a.put(JSONObject().put("iid", o.optString("iid")).put("fid", from).put("n", name).put("cv", cv).put("d", o.optString("d")).put("at", o.optLong("at")).put("k", k).put("md", o.optString("md"))) }
                 return invites.firstOrNull { it.convoy == cv }
             }
             "invx" -> { removeWhere("invites") { it.getString("cv") == o.optString("cv") && it.getString("fid") == from }; return Unit }

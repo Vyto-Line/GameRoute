@@ -59,6 +59,11 @@ object NavEngine {
         private set
     var arrived = false
         private set
+    /** When I arrived (kept after the arrival card closes: the race standings need it). */
+    var arrivedAtMs = 0L
+        private set
+
+    internal fun debugArrive(at: Long) { arrived = true; arrivedAtMs = at; changed.fire() }
     var error: String? = null
         private set
     var nextStep = -1
@@ -219,6 +224,10 @@ object NavEngine {
         changed.fire()
     }
 
+    /** I finished a race and others are still racing (no stale ones: they may never come). */
+    fun raceGoingOn() = Convoy.myPlace() != null &&
+        Convoy.members.values.any { !it.along && !it.sharing && !it.stale && it.state != "arrived" && it.state != "left" }
+
     /** Where and when the last trip ended (the card goes by itself once you drive off, or after a while). */
     private var tripEndAt: LatLng? = null
     private var tripEndTime = 0L
@@ -227,6 +236,8 @@ object NavEngine {
     /** The arrival card left open: it closes when you drive off (300 m away, or moving 20 s), or after 30 seconds. */
     private fun autoDismissTrip(pos: LatLng, speed: Float) {
         if (lastTrip == null || active) return
+        // a race: the card (and the standings) stay until every racer is in
+        if (raceGoingOn()) { tripEndTime = System.currentTimeMillis(); return }
         val now = System.currentTimeMillis()
         val end = tripEndAt ?: run { tripEndAt = pos; tripEndTime = now; return }
         if (speed > 4f) { if (awaySince == 0L) awaySince = now } else awaySince = 0L
@@ -279,7 +290,7 @@ object NavEngine {
     private val closeArrival: Runnable = object : Runnable {
         override fun run() {
             if (!arrived) return
-            if (CarParking.list != null) { main.postDelayed(this, 30_000); return }
+            if (CarParking.list != null || raceGoingOn()) { main.postDelayed(this, 30_000); return }
             stop(); dismissTrip()
         }
     }
@@ -971,7 +982,7 @@ object NavEngine {
         // (30 m from it on the other carriageway used to count: the route's end must be close too)
         if (real && ((Geo.distance(pos, dest) < 30 && remainingDistance < 120 && bestD < 25) || (remainingDistance < 20 && bestD < 35))) {
             if (!arrived) {
-                arrived = true
+                arrived = true; arrivedAtMs = System.currentTimeMillis()
                 clearResume()
                 offer = null
                 finishTrip()
