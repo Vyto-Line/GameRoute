@@ -51,15 +51,16 @@ class ConvoyFlowTest {
             if (v is ViewGroup) for (i in 0 until v.childCount) texts(v.getChildAt(i), acc)
             return acc
         }
-        fun click(t: String) {
-            fun find(v: View): View? {
-                if (v.visibility != View.VISIBLE) return null
-                if (v is TextView && v.text.toString() == t) return v
-                if (v.contentDescription?.toString()?.startsWith(t) == true && v.hasOnClickListeners()) return v
-                if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i))?.let { return it }
-                return null
+        fun click(t: String, last: Boolean = false) {
+            val found = mutableListOf<View>()
+            fun find(v: View) {
+                if (v.visibility != View.VISIBLE) return
+                if (v is TextView && v.text.toString() == t) found += v
+                else if (v.contentDescription?.toString()?.startsWith(t) == true && v.hasOnClickListeners()) found += v
+                if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i))
             }
-            val v = find(root) ?: error("no \"$t\" in ${texts()}")
+            find(root)
+            val v = (if (last) found.lastOrNull() else found.firstOrNull()) ?: error("no \"$t\" in ${texts()}")
             var c: View? = v
             while (c != null && !c.hasOnClickListeners()) c = c.parent as? View
             (c ?: v).performClick(); looper.idle()
@@ -102,7 +103,7 @@ class ConvoyFlowTest {
         activity.onBackPressedDispatcher.onBackPressed(); activity.openSheetForTest("convoy"); shot("flow_43d_lobby")
         log.append("43d: ${texts().filter { it.startsWith("You:") || it.startsWith("Waiting") || it.contains("ready") }}\n")
         assertTrue(texts().any { it.startsWith("You: ") })
-        click("Change"); shot("flow_43d_change")
+        click("Change", last = true); shot("flow_43d_change")
         assertTrue(texts().any { it == "How do you want to drive?" })
         click("Next: invite people ›")
         activity.onBackPressedDispatcher.onBackPressed()
