@@ -43,10 +43,10 @@ object SpeedLimit {
         }
     }
 
-    /** How far over the limit: 0 = not over (or no limit), 1 = up to 5 km/h over (orange), 2 = more (red). */
+    /** How far over the limit: 0 = not over (or no limit), 1 = up to 15 km/h over (orange), 2 = more (red). */
     fun level(kmh: Int, limit: Int?): Int = when {
         limit == null || kmh <= limit -> 0
-        kmh <= limit + 5 -> 1
+        kmh <= limit + 15 -> 1
         else -> 2
     }
 

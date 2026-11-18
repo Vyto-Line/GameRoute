@@ -33,9 +33,9 @@ class InviteSpeedTest {
 
     private fun run() {
         // speed colours
-        assertEquals(0, SpeedLimit.level(30, 30)); assertEquals(1, SpeedLimit.level(31, 30)); assertEquals(1, SpeedLimit.level(35, 30))
-        assertEquals(2, SpeedLimit.level(36, 30)); assertEquals(0, SpeedLimit.level(80, null))
-        log.append("levels: 30→0 31→1 35→1 36→2\n")
+        assertEquals(0, SpeedLimit.level(30, 30)); assertEquals(1, SpeedLimit.level(31, 30)); assertEquals(1, SpeedLimit.level(45, 30))
+        assertEquals(2, SpeedLimit.level(46, 30)); assertEquals(0, SpeedLimit.level(80, null))
+        log.append("levels: 30→0 31→1 45→1 46→2\n")
 
         val data = File(System.getProperty("previewData") ?: "../previewdata")
         data.listFiles()?.filter { it.name.endsWith(".pbf") }?.forEach { f ->
@@ -103,7 +103,7 @@ class InviteSpeedTest {
         // 2) driving: speed colours and the road name under the arrow
         NavEngine.debugDrive(Place("Museum", "", r.points.last()), r, 0)
         val rend = (MainActivity::class.java.getDeclaredField("map").apply { isAccessible = true }.get(activity) as GameMapView).rendererForTest
-        for ((kmh, want) in listOf(28f to 0, 33f to 1, 43f to 2)) {
+        for ((kmh, want) in listOf(28f to 0, 40f to 1, 50f to 2)) {
             SpeedLimit.setForTest(30)
             fix(kmh); shot("speed_$kmh")
             val col = rend.speedColor
