@@ -277,7 +277,7 @@ class MapRenderer(private val car: Boolean = false) {
             }
         }
 
-        drawSpeed(c, area, d, theme)
+        if (!locOff) drawSpeed(c, area, d, theme) else speedRect.setEmpty() // no live speed without location
         if (car && hud) drawCarEta(c, area, d, theme)
         if (hud && NavEngine.showRoadName && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planningOn(car) && !NavEngine.arrived)
             playerAt?.let { drawCurrentRoad(c, area, d, theme, it.x, it.y, weakNow) } // (map moved away from you: no name)
