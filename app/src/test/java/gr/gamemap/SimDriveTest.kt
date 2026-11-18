@@ -53,6 +53,7 @@ class SimDriveTest {
             Dev.simulate(activity, null, startNav = false)
             // the arrow, as drawn, stays on the road (round the corners too): sampled every 100 ms
             var worst = 0.0
+            repeat(20) { looper.idleFor(Duration.ofMillis(100)); LocationTracker.tick() } // (the restart's own jump settles)
             repeat(150) {
                 looper.idleFor(Duration.ofMillis(100))
                 LocationTracker.tick()
