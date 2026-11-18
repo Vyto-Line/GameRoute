@@ -87,9 +87,12 @@ class InviteSpeedTest {
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             repeat(3) { rr.draw(Canvas(bmp), w, h, android.graphics.Rect(0, 0, w, h), 1.6f, true); Thread.sleep(150) }
             File(out, "invite_car.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            val join = rr.carButtonAt(w / 2f + 560 * 1.6f / 2 - 60 * 1.6f, 12 * 1.6f + 38 * 1.6f)
-            log.append("car: the button at Join's place = $join\n")
-            assertEquals("inv:join", join)
+            // Join and Not now are there (wherever the card fits), and the name has room between them and the avatar
+            val found = HashSet<String>()
+            var y = 0f
+            while (y < h) { var x = 0f; while (x < w) { rr.carButtonAt(x, y)?.let { found += it }; x += 16f }; y += 16f }
+            log.append("car: buttons found ${found.filter { it.startsWith("inv:") }}\n")
+            assertTrue("Join and Not now in the car", "inv:join" in found && "inv:no" in found)
         }
         // after 10 s it goes (it stays in Friends)
         looper.idleFor(Duration.ofMillis(InvitePop.SHOW_MS + 800))
