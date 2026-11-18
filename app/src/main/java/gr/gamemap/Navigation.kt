@@ -498,19 +498,21 @@ object Places {
                     kw = maxOf(kw, cn.optDouble("ratedPowerKW", 0.0).toInt())
                 }
             }
-            // the main entrance, on the street the route should end in
-            val ep = r.optJSONArray("entryPoints")?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }
-                ?.let { l -> l.firstOrNull { it.optString("type") == "main" } ?: l.firstOrNull() }?.optJSONObject("position")
-            val entry = ep?.let { LatLng(it.getDouble("lat"), it.getDouble("lon")) }
             val cats = poi?.optJSONArray("categories")?.let { a -> (0 until a.length()).joinToString(" ") { a.optString(it) } }.orEmpty()
             val at = LatLng(pos.getDouble("lat"), pos.getDouble("lon"))
+            // the entrance the route should end at: the main one nearest the place (the first listed
+            // could be far round the block: Iatropolis was sent 350 m up the side road), and only a
+            // close one: a far "entrance" is more likely wrong than the place itself
+            val entries = r.optJSONArray("entryPoints")?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
+                .mapNotNull { e -> e.optJSONObject("position")?.let { p -> (e.optString("type") == "main") to LatLng(p.getDouble("lat"), p.getDouble("lon")) } }
+            val entry = (entries.filter { it.first }.ifEmpty { entries }).map { it.second }.minByOrNull { Geo.distance(it, at) }
             val town = if (r.optString("type") != "Geography") 0 else when (r.optString("entityType")) {
                 "Municipality" -> 3
                 "Country", "CountrySubdivision", "CountrySecondarySubdivision", "CountryTertiarySubdivision" -> 2
                 else -> 1 // MunicipalitySubdivision, Neighbourhood, PostalCodeArea
             }
             out += Place(name, address, at, tomtomIcon(code, r.optString("type"), cats),
-                brand = brand, plugs = plugs, kw = kw, entry = entry?.takeIf { Geo.distance(it, at) in 3.0..400.0 }, town = town)
+                brand = brand, plugs = plugs, kw = kw, entry = entry?.takeIf { Geo.distance(it, at) in 3.0..120.0 }, town = town)
         }
         return out.distinctBy { it.name + "|" + it.address }
     }
