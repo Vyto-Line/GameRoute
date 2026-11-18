@@ -152,7 +152,8 @@ class ConvoyFlowTest {
         // the faint "?" when location is off
         NavEngine.stop(); Convoy.leave()
         LocationStatus.setForTest(LocationStatus.State.OFF)
-        MapState.zoomBy(16.0 - MapState.targetZoom)
+        repeat(3) { activity.onBackPressedDispatcher.onBackPressed(); looper.idle() }
+        MapState.recenter(); MapState.zoomBy(16.0 - MapState.targetZoom)
         shot("flow_45_location_off")
         LocationStatus.setForTest(LocationStatus.State.OK)
         File(out, "convoyflow.txt").writeText(log.toString())
