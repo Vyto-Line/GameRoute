@@ -4093,7 +4093,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         sheetHost.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; setPadding(0, p, 0, 0)
-            addView(pill("👀 See everyone") {
+            addView(pill("👀 See all") {
                 closeSheet()
                 val pts = Convoy.members.values.mapNotNull { it.shown ?: it.pos } + listOfNotNull(LocationTracker.position)
                 MapState.phone.requestFit(pts)

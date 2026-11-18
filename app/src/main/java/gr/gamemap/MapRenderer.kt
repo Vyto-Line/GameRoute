@@ -2326,7 +2326,8 @@ class MapRenderer(private val car: Boolean = false) {
         }
         // the nearest one (by the gap along the route), else the first other
         val others = rows.filter { !it.me }
-        val near = others.filter { it.state != "arrived" && !it.stale }.minByOrNull { Convoy.gapTo(it)?.let { g -> Math.abs(g) } ?: Double.MAX_VALUE } ?: others.firstOrNull()
+        // in a race: the nearest racer (the ones driving together don't count for the gap)
+        val near = others.filter { it.state != "arrived" && !it.stale && (!racing || !it.along) }.minByOrNull { Convoy.gapTo(it)?.let { g -> Math.abs(g) } ?: Double.MAX_VALUE } ?: others.firstOrNull()
         val gap = near?.let { it.name + " " + gr.gamemap.L.t(Convoy.relative(it)) }.orEmpty()
         val h = 40 * d; val pad = 12 * d
         text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 14 * d

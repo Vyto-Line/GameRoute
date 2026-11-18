@@ -530,7 +530,7 @@ object L {
         "Nobody else is racing yet: invite people, or start on your own." to "Κανείς άλλος δεν αγωνίζεται ακόμα: προσκαλέστε άτομα ή ξεκινήστε μόνοι σας.",
         " to be ready. Then 3-2-1 and go." to " να είναι έτοιμοι. Μετά 3-2-1 και φύγατε.", "Waiting for " to "Αναμονή για ",
         "Everyone's ready: 3-2-1 and go." to "Όλοι έτοιμοι: 3-2-1 και φύγατε.",
-        "👀 See everyone" to "👀 Δείτε όλους", "👥 Invite" to "👥 Πρόσκληση", "to go" to "ακόμα",
+        "👀 See all" to "👀 Όλοι", "👥 Invite" to "👥 Πρόσκληση", "to go" to "ακόμα",
         "You're 1st" to "Είστε 1οι", "You're 2nd" to "Είστε 2οι", "You're 3rd" to "Είστε 3οι",
         "You won!" to "Κερδίσατε!", "You finished 2nd" to "Τερματίσατε 2οι", "You finished 3rd" to "Τερματίσατε 3οι",
         "Arrived " to "Έφτασε ", "Everyone's in." to "Έφτασαν όλοι.", "See the race" to "Δείτε τον αγώνα", "Winner: " to "Νικητής: ",

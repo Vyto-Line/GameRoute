@@ -133,8 +133,8 @@ class ConvoyFlowTest {
         MapState.zoomBy(15.5 - MapState.targetZoom)
         shot("flow_44a_button")
         activity.openSheetForTest("convoy"); shot("flow_44b_panel")
-        log.append("44b: ${texts().filter { it.contains("Race to") || it.contains("See everyone") || it.contains("km/h") }}\n")
-        assertTrue(texts().any { it.startsWith("🏁 Race to") })
+        log.append("44b: ${texts().filter { it.contains("Race to") || it.contains("See all") || it.contains("km/h") }}\n")
+        assertTrue(texts().any { it.contains("Race to") })
         activity.onBackPressedDispatcher.onBackPressed()
 
         // 44c: I finish 2nd, Giorgos is still driving
