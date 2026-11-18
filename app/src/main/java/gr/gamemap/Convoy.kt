@@ -695,6 +695,8 @@ object Convoy {
     // ------------------------------------------------------------- tests
 
     internal fun debugHost(on: Boolean) { host = on }
+    internal fun debugSet(dest: Place?, host: Boolean) { destination = dest; this.host = host; changed.fire() }
+
     internal fun debugStart(dest: Place, code: String = "k7p2qx") { this.code = code; destination = dest; members.clear(); routeTotal = -1.0 }
 
     internal fun debugMember(name: String, pos: LatLng, kmh: Int, eta: Long, left: Double, total: Double, state: String, heading: Float = 0f) {

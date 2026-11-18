@@ -78,7 +78,7 @@ class ConvoyFlowTest {
 
         // 43b: my convoy, no place yet: step 1
         activity.onBackPressedDispatcher.onBackPressed()
-        Convoy.debugStart(Place("x", "", start), "k7p2qx"); Convoy.destination = null; Convoy.host = true
+        Convoy.debugStart(Place("x", "", start), "k7p2qx"); Convoy.debugSet(null, true)
         prefs.edit().putString("convoyModeFor", "").apply()
         activity.openSheetForTest("convoy"); shot("flow_43b_where")
         log.append("43b: ${texts().filter { it.contains("together") || it.contains("Search") }}\n")
@@ -86,7 +86,7 @@ class ConvoyFlowTest {
 
         // a place: step 2 (how)
         val dest = Place("National Archaeological Museum", "Patision 44", r.points.last())
-        Convoy.destination = dest; activity.onBackPressedDispatcher.onBackPressed(); activity.openSheetForTest("convoy"); shot("flow_43c_how")
+        Convoy.debugSet(dest, true); activity.onBackPressedDispatcher.onBackPressed(); activity.openSheetForTest("convoy"); shot("flow_43c_how")
         assertTrue(texts().any { it == "How do you want to drive?" })
         click("Drive together"); shot("flow_43c_how_along_picked")
         log.append("picked along, not confirmed: meAlong=${Convoy.meAlong} (want false)\n")
@@ -108,7 +108,7 @@ class ConvoyFlowTest {
         activity.onBackPressedDispatcher.onBackPressed()
 
         // 43e: joining someone else's convoy from an invite (they race: Race is picked for me)
-        Convoy.host = false; Convoy.debugStart(dest, "q4m8zt")
+        Convoy.debugStart(dest, "q4m8zt"); Convoy.debugSet(dest, false)
         Convoy.debugMember("Nikos", Geo.offset(start, 90f, 25.0), 0, 0, -1.0, -1.0, "ready")
         prefs.edit().putString("convoyInviteMode", "q4m8zt|Nikos|race").putString("convoyModeFor", "").apply()
         activity.openSheetForTest("convoy"); shot("flow_43e_join")
@@ -118,7 +118,7 @@ class ConvoyFlowTest {
         activity.onBackPressedDispatcher.onBackPressed()
 
         // 44a/b: driving
-        Convoy.host = true
+        Convoy.debugSet(dest, true)
         NavEngine.debugDrive(dest, r, 60)
         val n = r.points.size
         fun at(i: Int) = r.points[i.coerceIn(0, n - 1)]
