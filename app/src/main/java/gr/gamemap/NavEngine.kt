@@ -215,8 +215,25 @@ object NavEngine {
 
     fun dismissTrip() {
         CarParking.list = null
-        lastTrip = null
+        lastTrip = null; tripEndAt = null; tripEndTime = 0L; awaySince = 0L
         changed.fire()
+    }
+
+    /** Where and when the last trip ended (the card goes by itself once you drive off, or after a while). */
+    private var tripEndAt: LatLng? = null
+    private var tripEndTime = 0L
+    private var awaySince = 0L
+
+    /** The arrival card left open: it closes when you drive off (300 m away, or moving 20 s), or after 15 minutes. */
+    private fun autoDismissTrip(pos: LatLng, speed: Float) {
+        if (lastTrip == null || active) return
+        val now = System.currentTimeMillis()
+        val end = tripEndAt ?: run { tripEndAt = pos; tripEndTime = now; return }
+        if (speed > 4f) { if (awaySince == 0L) awaySince = now } else awaySince = 0L
+        if (Geo.distance(end, pos) > 300 || (awaySince > 0 && now - awaySince > 20_000) || now - tripEndTime > 15 * 60_000) {
+            CrashLog.note("trip card closed by itself")
+            dismissTrip()
+        }
     }
 
     /** Trips shorter than this earn no XP (else a few quick 100 m "trips" would farm levels). */
@@ -237,6 +254,7 @@ object NavEngine {
         val sim = Dev.simTrip; Dev.simTrip = false
         val parts = if (tooShort || sim) emptyList() else Xp.finish(tripMeters, tripBonus, Explorer.tripFound, inConvoy, place, racers.size + 1)
         val xp = if (sim) 0 else if (tooShort) Explorer.tripFound * 25 else parts.sumOf { it.xp }
+        tripEndAt = null; tripEndTime = 0L; awaySince = 0L
         lastTrip = Explorer.Trip(
             destinationName, System.currentTimeMillis(), secs, tripMeters, tripSaved,
             xp, Explorer.tripFound, levelBefore, parts,
@@ -906,7 +924,7 @@ object NavEngine {
     }
 
     fun onLocation(l: Location) {
-        if (!active) return
+        if (!active) { autoDismissTrip(LatLng(l.latitude, l.longitude), l.speed); return }
         val r = current
         val pos = LatLng(l.latitude, l.longitude)
         val real = l.provider != LocationTracker.ESTIMATE
@@ -1140,7 +1158,7 @@ object NavEngine {
     }
 
     internal fun debugTrip(t: Explorer.Trip) {
-        lastTrip = t
+        lastTrip = t; tripEndAt = null; tripEndTime = 0L; awaySince = 0L
         changed.fire()
     }
 
