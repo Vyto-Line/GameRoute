@@ -11,7 +11,7 @@ Android · Android Auto · English and Ελληνικά
 
 <sub><a href="../../releases/latest">All releases</a> · <a href="#-install">How to install</a> · Android 8+ · free, no account</sub>
 
-<img src="docs/screenshots/hero.jpg" alt="A convoy lobby, driving in Violet Rain, and the You screen" width="100%">
+<img src="docs/screenshots/hero.jpg" alt="Choosing how to drive in a convoy, driving in Violet Rain, and the You screen" width="100%">
 
 </div>
 
@@ -67,7 +67,7 @@ Download a region in **Settings ▸ Offline maps** and the map and places work w
 
 ## 👥 Convoy
 
-<img src="docs/screenshots/convoy.webp" alt="Driving in a convoy, and the convoy lobby" width="100%">
+<img src="docs/screenshots/convoy.webp" alt="Driving in a convoy with the convoy button, and choosing how to drive" width="100%">
 
 **One tap away:** the Convoy chip sits right after ≡ and shows the convoy's live status.
 
