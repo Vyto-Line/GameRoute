@@ -14,15 +14,16 @@ object RoadSnap {
 
     /** Road segments in world pixels (relative to an origin), with a grid for fast lookups. */
     class Index(private val cell: Float) {
-        // x0, y0, x1, y1, direction (1 = one-way along, -1 = one-way against, 0 = two-way), half width
+        // x0, y0, x1, y1, direction (1 = one-way along, -1 = one-way against, 0 = two-way), half width,
+        // wide (1: a big road drawn wide enough for a lane each way; 0: one line in the middle)
         val segs = ArrayList<FloatArray>()
         private val grid = HashMap<Long, ArrayList<Int>>()
 
         private fun key(cx: Int, cy: Int) = (cx.toLong() shl 32) or (cy.toLong() and 0xffffffffL)
 
-        fun add(x0: Float, y0: Float, x1: Float, y1: Float, dir: Float, half: Float) {
+        fun add(x0: Float, y0: Float, x1: Float, y1: Float, dir: Float, half: Float, wide: Boolean = true) {
             val i = segs.size
-            segs += floatArrayOf(x0, y0, x1, y1, dir, half)
+            segs += floatArrayOf(x0, y0, x1, y1, dir, half, if (wide) 1f else 0f)
             val cx0 = floor(minOf(x0, x1) / cell).toInt(); val cx1 = floor(maxOf(x0, x1) / cell).toInt()
             val cy0 = floor(minOf(y0, y1) / cell).toInt(); val cy1 = floor(maxOf(y0, y1) / cell).toInt()
             if ((cx1 - cx0 + 1) * (cy1 - cy0 + 1) > 64) return // absurdly long segment
@@ -37,6 +38,9 @@ object RoadSnap {
 
         val isEmpty get() = segs.isEmpty()
     }
+
+    /** Roads drawn wide enough to show a lane each way; on the others one line goes down the middle. */
+    private val WIDE = setOf("motorway", "trunk", "primary", "secondary")
 
     private val roadMeters = mapOf(
         "motorway" to 22f, "trunk" to 20f, "primary" to 16f, "secondary" to 14f, "tertiary" to 12f,
@@ -70,7 +74,7 @@ object RoadSnap {
                     while (i < part.size) {
                         val x0 = (tx * osmSpan + part[i - 2] * k - ox).toFloat(); val y0 = (ty * osmSpan + part[i - 1] * k - oy).toFloat()
                         val x1 = (tx * osmSpan + part[i] * k - ox).toFloat(); val y1 = (ty * osmSpan + part[i + 1] * k - oy).toFloat()
-                        idx.add(x0, y0, x1, y1, dir, half)
+                        idx.add(x0, y0, x1, y1, dir, half, f["class"] in WIDE)
                         i += 2
                     }
                 }
@@ -182,12 +186,13 @@ object RoadSnap {
                 }
                 if (best < 0) { if (againstD <= maxDist) wrongWay++; flush(); continue }
                 val sg = idx.segs[best]
-                if (sg[4] == 0f) {
-                    // a two-way road: the middle of our half
+                if (sg[4] == 0f && sg[6] > 0f) {
+                    // a big two-way road: our half of it, but never past its edge (on a thin
+                    // street the lane sat beside the road, over the buildings)
                     var sx = sg[2] - sg[0]; var sy = sg[3] - sg[1]
                     val sl = hypot(sx, sy); sx /= sl; sy /= sl
                     if (sx * dx + sy * dy < 0) { sx = -sx; sy = -sy }
-                    val off = maxOf(sg[5] / 2, minHalfLane) * side
+                    val off = minOf(maxOf(sg[5] / 2, minHalfLane), sg[5]) * side
                     qx += -sy * off; qy += sx * off
                 }
                 // a jump (onto another road, or across a gap): start a new piece
