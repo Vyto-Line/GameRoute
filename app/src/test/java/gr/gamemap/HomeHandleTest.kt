@@ -37,6 +37,9 @@ class HomeHandleTest {
         val start = r.points[0]
         Places.addRecent(Place("National Archaeological Museum", "Patision 44", r.points.last()))
         Places.addRecent(Place("Syntagma", "Athens", Geo.offset(start, 120f, 900.0)))
+        // no update check and no level celebration over the pictures
+        org.robolectric.RuntimeEnvironment.getApplication().getSharedPreferences("gamemap", 0).edit()
+            .putLong("lastUpdateCheck", System.currentTimeMillis()).putInt("levelCelebrated", 50).apply()
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         val root = activity.window.decorView
         val looper = shadowOf(Looper.getMainLooper())
