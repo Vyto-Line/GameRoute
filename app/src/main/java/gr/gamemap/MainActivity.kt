@@ -149,7 +149,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeTitle.visibility = View.GONE; homeContent.visibility = View.GONE; homeHandle.visibility = View.VISIBLE
         homeSheet.measure(spec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); homeDragMin = homeSheet.measuredHeight
         homeHandle.visibility = View.GONE
-        if (any) { homeTitle.visibility = View.VISIBLE; homeContent.visibility = View.VISIBLE }
+        if (any) { homeTitle.visibility = View.VISIBLE; homeContent.visibility = View.VISIBLE; homeCards.visibility = View.VISIBLE }
         homeSheet.measure(spec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); homeDragMax = homeSheet.measuredHeight
         // while dragging the strip is laid out (clipped by the sheet's height); the bar's words fade
         homeHandle.visibility = View.VISIBLE
