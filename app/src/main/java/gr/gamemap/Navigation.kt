@@ -113,6 +113,7 @@ object LocationTracker : LocationListener {
      */
     @Volatile var restingGps = false
         private set
+    @Volatile private var deepRest = false
     private var stillSince = 0L
 
     private fun checkResting(l: Location) {
@@ -121,8 +122,10 @@ object LocationTracker : LocationListener {
         val still = l.hasSpeed() && l.speed < 0.5f
         if (!still) stillSince = 0L else if (stillSince == 0L) stillSince = now
         val rest = Perf.saveGpsStopped && precise && still && now - stillSince > 15_000
-        if (rest != restingGps && (rest || (l.hasSpeed() && l.speed > 1.5f) || !Perf.saveGpsStopped)) {
-            restingGps = rest
+        // parked for three minutes with no route (Android Auto on, a convoy waiting): every 10 s
+        val deep = rest && !NavEngine.active && now - stillSince > 180_000
+        if ((rest != restingGps || deep != deepRest) && (rest || (l.hasSpeed() && l.speed > 1.5f) || !Perf.saveGpsStopped)) {
+            restingGps = rest; deepRest = deep
             CrashLog.note(if (rest) "gps resting (stopped)" else "gps every second")
             val ctx = appCtx ?: return
             if (started) {
@@ -136,7 +139,10 @@ object LocationTracker : LocationListener {
     /** Called when navigation starts/stops or the car connects/disconnects. */
     fun updateMode() {
         val want = NavEngine.active || NavEngine.planning || "car" in users || "nav" in users || (Convoy.active && !convoyIdle)
-        if (want == precise && started) return
+        // a route starts while parked in the deep rest: GPS every second again straight away
+        val wake = deepRest && (NavEngine.active || NavEngine.planning)
+        if (wake) { deepRest = false; restingGps = false }
+        if (want == precise && started && !wake) return
         val ctx = appCtx ?: return
         if (started) {
             val lm = ctx.getSystemService(LocationManager::class.java)
@@ -166,7 +172,7 @@ object LocationTracker : LocationListener {
         val plan: List<Triple<String, Long, Float>> = when {
             // GPS every second; the fused/network one only as a backup (indoors, a cold start):
             // its fixes are dropped anyway while GPS ones come, so asking every second was waste
-            precise -> listOfNotNull(Triple(LocationManager.GPS_PROVIDER, if (restingGps) 3000L else 1000L, 0f),
+            precise -> listOfNotNull(Triple(LocationManager.GPS_PROVIDER, if (deepRest) 10_000L else if (restingGps) 3000L else 1000L, 0f),
                 (fused ?: LocationManager.NETWORK_PROVIDER).let { Triple(it, 5000L, 0f) })
             fused != null -> listOf(Triple(fused, 3000L, 5f))
             else -> listOf(Triple(LocationManager.GPS_PROVIDER, 3000L, 5f), Triple(LocationManager.NETWORK_PROVIDER, 5000L, 10f))
@@ -281,7 +287,7 @@ object LocationTracker : LocationListener {
         if (NavEngine.estimating) return false
         if (!NavEngine.active && speed < 2f) return false
         val age = System.currentTimeMillis() - r.time
-        return (r.hasAccuracy() && r.accuracy > 30f) || age in (if (restingGps) 7_000L else 4_000L)..90_000L
+        return (r.hasAccuracy() && r.accuracy > 30f) || age in (if (deepRest) 25_000L else if (restingGps) 7_000L else 4_000L)..90_000L
     }
 
     /** True if [l] is farther from [prev] than a car could have got in the time between them. */
