@@ -66,23 +66,23 @@ class HomeHandleTest {
         val log = StringBuilder()
         shot("home_46b_handle")
         val handle = find({ it is TextView && it.text.startsWith("⌃") }) as TextView?
+        fun sheet0() = find({ it.contentDescription?.toString() == "Saved & recent" })!!
         log.append("handle: ${handle?.text}\n")
         assertTrue("the handle shows", handle != null)
-        assertFalse("cards hidden", texts().any { it.contains("Syntagma") })
+        assertTrue("tucked away: slid down", sheet0().translationY > 0f)
         // swipe up on the sheet
         val sheet = find({ it.contentDescription?.toString() == "Saved & recent" }) as ViewGroup
         val loc = IntArray(2); sheet.getLocationOnScreen(loc)
         val x = loc[0] + sheet.width / 2f; val y = loc[1] + sheet.height / 2f
         val t0 = SystemClock.uptimeMillis()
         fun ev(a: Int, yy: Float, dt: Long) = MotionEvent.obtain(t0, t0 + dt, a, x, yy, 0)
-        val h0 = sheet.height
+        val h0 = sheet.height - sheet.translationY.toInt()
         root.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, y, 0))
         root.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, y - 20, 16))
         root.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, y - 70, 48))
         looper.idle()
-        val hMid = sheet.height
-        log.append("lp height ${sheet.layoutParams.height}, handle alpha ${handle!!.alpha}, y=$y loc=${loc.toList()} root=${root.height} range=${activity.homeDragRangeForTest()}\n")
-        File(out, "home46.txt").writeText(log.toString())
+        val hMid = sheet.height - sheet.translationY.toInt()
+        log.append("handle alpha ${handle!!.alpha}, cards laid out whole: ${sheet.height}\n")
         shot("home_46b_dragging")
         log.append("sheet height: closed $h0, mid-drag $hMid\n")
         assertTrue("the sheet follows the finger ($h0 → $hMid)", hMid > h0)
@@ -90,12 +90,13 @@ class HomeHandleTest {
         root.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, y - 120, 80))
         // the glide: part-way, then done
         looper.idleFor(java.time.Duration.ofMillis(100))
-        val hGlide = sheet.height
+        val hGlide = sheet.height - sheet.translationY.toInt()
         looper.idleFor(java.time.Duration.ofMillis(500))
-        log.append("gliding $hGlide, open ${sheet.height}\n")
+        log.append("gliding $hGlide, open ${sheet.height - sheet.translationY.toInt()}\n")
+        assertTrue("fully open", sheet.translationY == 0f)
         shot("home_46b_open")
         log.append("after swipe up: ${texts().filter { it.contains("Syntagma") || it.startsWith("Saved") || it.startsWith("Recent") }}\n")
-        assertTrue("swipe up opens it", texts().any { it.contains("Syntagma") })
+        assertTrue("swipe up opens it", sheet.translationY == 0f && texts().any { it.contains("Syntagma") })
         // picking a place tucks it away
         find({ it is TextView && it.text.contains("Syntagma") })!!.let { v -> var c: View? = v; while (c != null && !c.hasOnClickListeners()) c = c.parent as? View; c!!.performClick() }
         looper.idle()

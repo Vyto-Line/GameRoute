@@ -84,87 +84,69 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var homeSheet: LinearLayout
     private lateinit var homeTitle: TextView
     private lateinit var homeCards: LinearLayout
-    /** The slim bar shown when Saved & recent is tucked away (46b). */
+    /** The slim bar's words, shown when Saved & recent is tucked away (46b). */
     private lateinit var homeHandle: TextView
     /** Saved & recent pulled up (remembered); tucks itself away after you pick a place. */
     private var homeOpen: Boolean
         get() = prefs().getBoolean("homeOpen", false)
-        set(v) { glideHome(v) }
-
-    private var homeAnim: android.animation.ValueAnimator? = null
-
-    /** The cards' row (inside its sideways scroll). */
-    private val homeContent get() = homeCards.parent as View
+        set(v) { slideHome(v) }
 
     /**
-     * Opens or tucks away Saved & recent with the sheet's height gliding from where it is now
-     * (the closed bar, the open strip, or wherever the finger let go) to where it ends up.
+     * The sheet is always laid out open; tucked away it slides down so only its top bar shows.
+     * Sliding (not resizing) keeps the cards whole while it moves, and nothing re-lays out.
      */
-    private fun glideHome(v: Boolean) {
-        val from = homeSheet.height
-        // where each part's fade starts: hidden ones from nothing, ones mid-drag from where they are
-        val startAlpha = listOf(homeTitle, homeContent, homeHandle).associateWith { if (it.visibility == View.VISIBLE) it.alpha else 0f }
-        val changed = v != prefs().getBoolean("homeOpen", false)
-        if (changed) prefs().edit().putBoolean("homeOpen", v).apply()
-        lastHomeKey = ""; refreshChrome()   // the end state's views
-        if (homeSheet.visibility != View.VISIBLE || from <= 0) return
+    private var homeAnim: android.animation.ValueAnimator? = null
+    private var homeDragging = false
+
+    /** How far down the sheet slides when tucked away (0 when there's nothing to tuck). */
+    private fun homeClosedOffset(): Float {
+        if (homeSheet.height == 0 || homeTitle.visibility != View.VISIBLE) return 0f
+        val header = homeTitle.parent as View
+        return (homeSheet.height - header.bottom - homeSheet.paddingBottom + 6 * d).coerceAtLeast(0f)
+    }
+
+    /** 0 = tucked away, 1 = open: moves the sheet, cross-fades the bar's words and the title. */
+    private fun setHomeFraction(f: Float) {
+        val off = homeClosedOffset()
+        homeSheet.translationY = off * (1f - f)
+        homeHandle.alpha = (1f - f * 2.2f).coerceIn(0f, 1f)
+        homeTitle.alpha = ((f - 0.25f) * 1.6f).coerceIn(0f, 1f)
+        homeHandle.visibility = if (homeHandle.alpha > 0f) View.VISIBLE else View.INVISIBLE
+        updateMapInsets()
+    }
+
+    private fun homeFraction(): Float {
+        val off = homeClosedOffset()
+        return if (off <= 0f) 1f else (1f - homeSheet.translationY / off).coerceIn(0f, 1f)
+    }
+
+    /** Glides from wherever the sheet is (open, tucked, or where the finger let go) to [open]. */
+    private fun slideHome(open: Boolean, velocity: Float = 0f) {
+        if (open != prefs().getBoolean("homeOpen", false)) prefs().edit().putBoolean("homeOpen", open).apply()
         homeAnim?.cancel()
-        homeSheet.measure(View.MeasureSpec.makeMeasureSpec(homeSheet.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-        val to = homeSheet.measuredHeight
-        val incoming = if (v) listOf(homeTitle, homeContent) else listOf(homeHandle)
-        if (from == to) { homeSheet.layoutParams = homeSheet.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }; incoming.forEach { it.alpha = 1f }; return }
-        // the incoming part fades in as the sheet grows / shrinks
-        incoming.forEach { it.alpha = startAlpha[it] ?: 0f }
-        val a0 = incoming.associateWith { it.alpha }
-        homeAnim = android.animation.ValueAnimator.ofInt(from, to).apply {
-            duration = animMs(if (Math.abs(to - from) > 60 * d) 280L else 180L)
+        val from = homeFraction(); val to = if (open) 1f else 0f
+        if (from == to || homeSheet.height == 0) { setHomeFraction(to); return }
+        val dist = Math.abs(to - from) * homeClosedOffset()
+        homeAnim = android.animation.ValueAnimator.ofFloat(from, to).apply {
+            // a flick carries on at its own speed; otherwise ~260 ms for the whole way
+            val ms = if (Math.abs(velocity) > 0.3f) (dist / Math.abs(velocity)).toLong().coerceIn(120L, 300L) else (260 * Math.abs(to - from)).toLong().coerceAtLeast(140L)
+            duration = animMs(ms)
             interpolator = android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f)
-            addUpdateListener { a ->
-                homeSheet.layoutParams = homeSheet.layoutParams.apply { height = a.animatedValue as Int }
-                val f = (a.animatedFraction * 1.4f - 0.3f).coerceIn(0f, 1f)
-                incoming.forEach { val s0 = a0[it] ?: 0f; it.alpha = s0 + (1f - s0) * f }
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(a: android.animation.Animator) {
-                    homeSheet.layoutParams = homeSheet.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
-                    incoming.forEach { it.alpha = 1f }
-                }
-            })
+            addUpdateListener { setHomeFraction(it.animatedValue as Float) }
             start()
         }
     }
 
-    // the finger dragging the sheet: it follows, between the closed bar and the open strip
-    private var homeDragFrom = 0
-    private var homeDragMin = 0
-    private var homeDragMax = 0
-
-    private fun homeDragStart() {
-        homeAnim?.cancel()
-        val open = prefs().getBoolean("homeOpen", false)
-        homeDragFrom = homeSheet.height
-        val spec = View.MeasureSpec.makeMeasureSpec(homeSheet.width, View.MeasureSpec.EXACTLY)
-        val any = homeCards.childCount > 0
-        // both sizes: the bar alone, and the strip
-        homeTitle.visibility = View.GONE; homeContent.visibility = View.GONE; homeHandle.visibility = View.VISIBLE
-        homeSheet.measure(spec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); homeDragMin = homeSheet.measuredHeight
-        homeHandle.visibility = View.GONE
-        if (any) { homeTitle.visibility = View.VISIBLE; homeContent.visibility = View.VISIBLE; homeCards.visibility = View.VISIBLE }
-        homeSheet.measure(spec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); homeDragMax = homeSheet.measuredHeight
-        // while dragging the strip is laid out (clipped by the sheet's height); the bar's words fade
-        homeHandle.visibility = View.VISIBLE
-        homeHandle.alpha = if (open) 0f else 1f
-        homeSheet.layoutParams = homeSheet.layoutParams.apply { height = homeDragFrom }
-    }
-
-    internal fun homeDragRangeForTest() = "$homeDragFrom $homeDragMin..$homeDragMax"
-
+    // the finger on the sheet: it follows, between tucked away and open
+    private var homeDragStartF = 0f
+    private fun homeDragStart() { homeAnim?.cancel(); homeDragging = true; homeDragStartF = homeFraction() }
     private fun homeDragTo(dy: Float) {
-        val h = (homeDragFrom - dy).toInt().coerceIn(homeDragMin, maxOf(homeDragMin, homeDragMax))
-        val f = if (homeDragMax > homeDragMin) (h - homeDragMin).toFloat() / (homeDragMax - homeDragMin) else 0f
-        homeHandle.alpha = (1f - f * 2f).coerceIn(0f, 1f)
-        homeTitle.alpha = ((f - 0.3f) * 1.6f).coerceIn(0f, 1f); homeContent.alpha = homeTitle.alpha
-        homeSheet.layoutParams = homeSheet.layoutParams.apply { height = h }
+        val off = homeClosedOffset()
+        if (off > 0f) setHomeFraction((homeDragStartF - dy / off).coerceIn(0f, 1f))
+    }
+    private fun homeDragEnd(dy: Float, vy: Float) {
+        homeDragging = false
+        slideHome(when { vy < -0.5f -> true; vy > 0.5f -> false; else -> homeFraction() > 0.5f }, vy * 1f)
     }
     private lateinit var navCard: LinearLayout
     private lateinit var etaBig: TextView
@@ -1179,10 +1161,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     }
                     android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> if (dragging) {
                         dragging = false
-                        val dy = e.rawY - downY
                         // a flick decides; otherwise past halfway
-                        val mid = (homeDragMin + homeDragMax) / 2
-                        homeOpen = when { vy < -0.5f -> true; vy > 0.5f -> false; else -> (homeDragFrom - dy) > mid }
+                        homeDragEnd(e.rawY - downY, vy)
                         return true
                     }
                 }
@@ -1198,12 +1178,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 background = bg(Color.argb(140, 150, 150, 160), radius = 3f)
                 setOnClickListener { homeOpen = !homeOpen }
             }, LinearLayout.LayoutParams((40 * d).toInt(), (5 * d).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = (9 * d).toInt(); bottomMargin = (6 * d).toInt() })
-            addView(homeHandle, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-            addView(homeTitle)
+            // the bar's words and the title share one line: one fades out as the other fades in
+            addView(FrameLayout(context).apply {
+                addView(homeTitle, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.START or Gravity.CENTER_VERTICAL))
+                addView(homeHandle, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER))
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             addView(HorizontalScrollView(context).apply {
                 isHorizontalScrollBarEnabled = false
                 addView(homeCards)
             })
+            // laid out again (new cards, rotation): keep it where it should be
+            addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+                if (!homeDragging && homeAnim?.isRunning != true && (bottom - top != oldBottom - oldTop || homeSheet.translationY == 0f))
+                    setHomeFraction(if (homeOpen) 1f else 0f)
+            }
         }
     }
 
@@ -1276,18 +1264,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             homeCards.addView(card, LinearLayout.LayoutParams((176 * d).toInt(), WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() })
         }
         val anyCard = rec.isNotEmpty() || Parked.get() != null || Convoy.active
-        val open = homeOpen
-        homeTitle.visibility = if (anyCard && open) View.VISIBLE else View.GONE
-        homeCards.visibility = if (anyCard && open) View.VISIBLE else View.GONE
-        (homeCards.parent as? View)?.visibility = if (anyCard && open) View.VISIBLE else View.GONE
+        // always laid out open; tucked away = slid down so only the bar shows
+        homeTitle.visibility = if (anyCard) View.VISIBLE else View.GONE
+        homeCards.visibility = if (anyCard) View.VISIBLE else View.GONE
+        (homeCards.parent as? View)?.visibility = if (anyCard) View.VISIBLE else View.GONE
         // tucked away: one slim bar ("⌃ Saved & recent · 🚗 Car 350 m"), the car's distance kept in sight
-        homeHandle.visibility = if (open) View.GONE else View.VISIBLE
         homeHandle.setTextColor(dim(210))
         homeHandle.text = listOfNotNull("⌃ " + L.t(if (fav.isEmpty()) "Recent" else "Saved & recent"),
             Parked.place()?.let { car -> "🚗 " + L.t("Car") + (near?.let { " " + NavEngine.formatDistance(Geo.distance(it, car.pos)) } ?: "") },
             if (Convoy.active) "👥 " + L.t("Convoy") else null).joinToString(" · ")
         homeHandle.contentDescription = L.t("Open Saved & recent")
-        if (open) renderExploreCard(near) else exploreCard?.let { homeSheet.removeView(it); exploreCard = null }
+        renderExploreCard(near)
+        if (homeAnim?.isRunning != true && !homeDragging) homeSheet.post { setHomeFraction(if (homeOpen) 1f else 0f) }
         // live ETAs for recents, home and work (once a minute at most; TomTom answers are cached 5 min)
         if (near != null && Traffic.active && System.currentTimeMillis() - etaAskedAt > 60_000) {
             etaAskedAt = System.currentTimeMillis()
@@ -2323,7 +2311,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         // stopped (the trip is over, or arrived and the card is closed): show what waited
         if (held > 0 && !Later.driving && (!nav || NavEngine.arrived) && NavEngine.lastTrip == null && sheetOverlay.visibility != View.VISIBLE) main.post { showLater() }
-        val homeKey = "$homeOpen|${t.name}|${MapState.dark}|${MapState.imperial}|$etaVersion|${Explorer.version}|${Explorer.xp}|${Places.recents().joinToString { it.name }}|" +
+        val homeKey = "${t.name}|${MapState.dark}|${MapState.imperial}|$etaVersion|${Explorer.version}|${Explorer.xp}|${Places.recents().joinToString { it.name }}|" +
             "${Places.saved("home")?.name}|${Places.saved("work")?.name}|${LocationTracker.position != null}|${Parked.get()?.at}|${Convoy.active}|${Convoy.members.size}|${Convoy.destination?.name}|${Convoy.onConvoyRoute}|${Convoy.status()}|${java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)}|${Places.labelled().joinToString { it.label + it.icon }}|" +
             (if (Friends.ready && Friends.core.started) "${Friends.core.invites.joinToString { it.convoy + it.count }}|${Friends.core.requests.size}" else "")
         if (homeKey != lastHomeKey) {
@@ -2451,7 +2439,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             placeCard.visibility == View.VISIBLE -> placeCard.height
             preview.visibility == View.VISIBLE -> preview.height
             navCard.visibility == View.VISIBLE -> navCard.height
-            homeSheet.visibility == View.VISIBLE -> homeSheet.height
+            homeSheet.visibility == View.VISIBLE -> (homeSheet.height - homeSheet.translationY).toInt()
             else -> insets.bottom
         }
         val styleUp = if (styleBtn.visibility == View.VISIBLE) 60 * d else 0f
@@ -6232,6 +6220,7 @@ class GameMapView(ctx: Context) : View(ctx) {
     private val area = Rect()
     var insetTop = 0
     var insetBottom = 0
+    private var shownInsetBottom = -1f
     /** Called when a finger first touches the map (closes search). */
     var onTouchStart: (() -> Unit)? = null
     /** Where the middle of the map is right now. */
@@ -6352,7 +6341,12 @@ class GameMapView(ctx: Context) : View(ctx) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        area.set(0, insetTop, width, height - insetBottom)
+        // the bottom edge eases to where it's going (a sheet sliding up or down): the arrow and
+        // the speed box glide with it instead of hopping
+        val diff = insetBottom - shownInsetBottom
+        shownInsetBottom = if (Math.abs(diff) < 1.5f || shownInsetBottom < 0f) insetBottom.toFloat() else shownInsetBottom + diff * 0.3f
+        if (shownInsetBottom != insetBottom.toFloat()) postInvalidateOnAnimation()
+        area.set(0, insetTop, width, height - shownInsetBottom.toInt())
         val t0 = android.os.SystemClock.uptimeMillis()
         renderer.draw(canvas, width, height, area, resources.displayMetrics.density, hud = true)
         Perf.frameDrawn(android.os.SystemClock.uptimeMillis() - t0)
