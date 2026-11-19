@@ -298,7 +298,7 @@ object L {
         "Couldn't search: no location or internet" to "Δεν έγινε αναζήτηση: χωρίς τοποθεσία ή ίντερνετ",
         "TomTom search failed" to "Η αναζήτηση TomTom απέτυχε",
         "Recent" to "Πρόσφατα",
-        "Saved & recent" to "Αποθηκευμένα & πρόσφατα",
+        "Saved & recent" to "Αποθηκευμένα & πρόσφατα", "Open Saved & recent" to "Άνοιγμα αποθηκευμένων & πρόσφατων", "Car" to "Αυτοκίνητο", 
         "Home" to "Σπίτι", "Work" to "Δουλειά", "Fuel" to "Καύσιμα", "Food" to "Φαγητό", "Parking" to "Πάρκινγκ",
         "🏠 Home" to "🏠 Σπίτι", "💼 Work" to "💼 Δουλειά", "⛽ Fuel" to "⛽ Καύσιμα", "🍽 Food" to "🍽 Φαγητό", "🅿 Parking" to "🅿 Πάρκινγκ",
         "Home +" to "Σπίτι +", "Work +" to "Δουλειά +",

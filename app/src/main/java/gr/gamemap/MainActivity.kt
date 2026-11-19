@@ -84,6 +84,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var homeSheet: LinearLayout
     private lateinit var homeTitle: TextView
     private lateinit var homeCards: LinearLayout
+    /** The slim bar shown when Saved & recent is tucked away (46b). */
+    private lateinit var homeHandle: TextView
+    /** Saved & recent pulled up (remembered); tucks itself away after you pick a place. */
+    private var homeOpen: Boolean
+        get() = prefs().getBoolean("homeOpen", false)
+        set(v) { if (v != homeOpen) { prefs().edit().putBoolean("homeOpen", v).apply(); lastHomeKey = ""; refreshChrome() } }
     private lateinit var navCard: LinearLayout
     private lateinit var etaBig: TextView
     private lateinit var etaTraffic: TextView
@@ -1068,10 +1074,38 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun buildHomeSheet() {
         homeTitle = label("Recent", 17f, bold = true).apply { setPadding((18 * d).toInt(), 0, 0, (8 * d).toInt()) }
         homeCards = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding((14 * d).toInt(), 0, (8 * d).toInt(), 0) }
-        homeSheet = LinearLayout(this).apply {
+        homeHandle = label("", 14f, bold = true).apply {
+            gravity = Gravity.CENTER; setPadding((12 * d).toInt(), (4 * d).toInt(), (12 * d).toInt(), (12 * d).toInt())
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            setOnClickListener { homeOpen = true }
+        }
+        homeSheet = object : LinearLayout(this) {
+            // a swipe up opens it, a swipe down tucks it away (taps and the cards' sideways scroll still work)
+            private var downX = 0f; private var downY = 0f
+            override fun dispatchTouchEvent(e: android.view.MotionEvent): Boolean {
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        val dy = e.rawY - downY; val dx = e.rawX - downX
+                        if (Math.abs(dy) > 40 * d && Math.abs(dy) > Math.abs(dx) * 1.5f) {
+                            homeOpen = dy < 0
+                            e.action = android.view.MotionEvent.ACTION_CANCEL
+                        }
+                    }
+                }
+                return super.dispatchTouchEvent(e)
+            }
+        }.apply {
             orientation = LinearLayout.VERTICAL
             elevation = 8 * d
             isClickable = true
+            contentDescription = L.t("Saved & recent")
+            // the grab line: always there, says "this pulls up"
+            addView(View(context).apply {
+                background = bg(Color.argb(140, 150, 150, 160), radius = 3f)
+                setOnClickListener { homeOpen = !homeOpen }
+            }, LinearLayout.LayoutParams((40 * d).toInt(), (5 * d).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = (9 * d).toInt(); bottomMargin = (6 * d).toInt() })
+            addView(homeHandle, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             addView(homeTitle)
             addView(HorizontalScrollView(context).apply {
                 isHorizontalScrollBarEnabled = false
@@ -1117,7 +1151,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 val p = (12 * d).toInt()
                 setPadding(p, p - p / 4, p, p - p / 4)
                 background = bg(Color.argb(28, Color.red(ink), Color.green(ink), Color.blue(ink)), dim(60), 1f, 14f)
-                setOnClickListener { NavEngine.plan(this@MainActivity, pl) }
+                setOnClickListener { homeOpen = false; NavEngine.plan(this@MainActivity, pl) }
             }
             val isSaved = fav.any { it === pl }
             card.addView(LinearLayout(this).apply {
@@ -1149,9 +1183,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             homeCards.addView(card, LinearLayout.LayoutParams((176 * d).toInt(), WRAP_CONTENT).apply { marginEnd = (10 * d).toInt() })
         }
         val anyCard = rec.isNotEmpty() || Parked.get() != null || Convoy.active
-        homeTitle.visibility = if (anyCard) View.VISIBLE else View.GONE
-        homeCards.visibility = if (anyCard) View.VISIBLE else View.GONE
-        renderExploreCard(near)
+        val open = homeOpen
+        homeTitle.visibility = if (anyCard && open) View.VISIBLE else View.GONE
+        homeCards.visibility = if (anyCard && open) View.VISIBLE else View.GONE
+        (homeCards.parent as? View)?.visibility = if (anyCard && open) View.VISIBLE else View.GONE
+        // tucked away: one slim bar ("⌃ Saved & recent · 🚗 Car 350 m"), the car's distance kept in sight
+        homeHandle.visibility = if (open) View.GONE else View.VISIBLE
+        homeHandle.setTextColor(dim(210))
+        homeHandle.text = listOfNotNull("⌃ " + L.t(if (fav.isEmpty()) "Recent" else "Saved & recent"),
+            Parked.place()?.let { car -> "🚗 " + L.t("Car") + (near?.let { " " + NavEngine.formatDistance(Geo.distance(it, car.pos)) } ?: "") },
+            if (Convoy.active) "👥 " + L.t("Convoy") else null).joinToString(" · ")
+        homeHandle.contentDescription = L.t("Open Saved & recent")
+        if (open) renderExploreCard(near) else exploreCard?.let { homeSheet.removeView(it); exploreCard = null }
         // live ETAs for recents, home and work (once a minute at most; TomTom answers are cached 5 min)
         if (near != null && Traffic.active && System.currentTimeMillis() - etaAskedAt > 60_000) {
             etaAskedAt = System.currentTimeMillis()
@@ -2187,7 +2230,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         // stopped (the trip is over, or arrived and the card is closed): show what waited
         if (held > 0 && !Later.driving && (!nav || NavEngine.arrived) && NavEngine.lastTrip == null && sheetOverlay.visibility != View.VISIBLE) main.post { showLater() }
-        val homeKey = "${t.name}|${MapState.dark}|${MapState.imperial}|$etaVersion|${Explorer.version}|${Explorer.xp}|${Places.recents().joinToString { it.name }}|" +
+        val homeKey = "$homeOpen|${t.name}|${MapState.dark}|${MapState.imperial}|$etaVersion|${Explorer.version}|${Explorer.xp}|${Places.recents().joinToString { it.name }}|" +
             "${Places.saved("home")?.name}|${Places.saved("work")?.name}|${LocationTracker.position != null}|${Parked.get()?.at}|${Convoy.active}|${Convoy.members.size}|${Convoy.destination?.name}|${Convoy.onConvoyRoute}|${Convoy.status()}|${java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)}|${Places.labelled().joinToString { it.label + it.icon }}|" +
             (if (Friends.ready && Friends.core.started) "${Friends.core.invites.joinToString { it.convoy + it.count }}|${Friends.core.requests.size}" else "")
         if (homeKey != lastHomeKey) {
