@@ -157,6 +157,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeSheet.layoutParams = homeSheet.layoutParams.apply { height = homeDragFrom }
     }
 
+    internal fun homeDragRangeForTest() = "$homeDragFrom $homeDragMin..$homeDragMax"
+
     private fun homeDragTo(dy: Float) {
         val h = (homeDragFrom - dy).toInt().coerceIn(homeDragMin, maxOf(homeDragMin, homeDragMax))
         val f = if (homeDragMax > homeDragMin) (h - homeDragMin).toFloat() / (homeDragMax - homeDragMin) else 0f

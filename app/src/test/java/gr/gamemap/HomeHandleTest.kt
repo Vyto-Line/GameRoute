@@ -81,7 +81,7 @@ class HomeHandleTest {
         root.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, y - 70, 48))
         looper.idle()
         val hMid = sheet.height
-        log.append("lp height ${sheet.layoutParams.height}, handle alpha ${handle!!.alpha}, y=$y loc=${loc.toList()} root=${root.height}\n")
+        log.append("lp height ${sheet.layoutParams.height}, handle alpha ${handle!!.alpha}, y=$y loc=${loc.toList()} root=${root.height} range=${activity.homeDragRangeForTest()}\n")
         File(out, "home46.txt").writeText(log.toString())
         shot("home_46b_dragging")
         log.append("sheet height: closed $h0, mid-drag $hMid\n")
