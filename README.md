@@ -16,7 +16,9 @@ Android · Android Auto · English and Ελληνικά
 </div>
 
 > [!TIP]
-> **New in build 111.2:** convoy invites in a small card that slides out under the search bar (or the turn box while driving, and centred at the top in Android Auto) with Join and Not now; your speed turns orange up to 5 km/h over the limit and red past that, with limits filled in from Roads of Greece and even without a route; and the road name now sits just under your arrow, clear of the speedometer.
+> **New in build 113:** a steadier arrow and map (no more jumping to the other side of the road, swinging as you pull away, or "you have arrived" from the wrong carriageway), a new route the moment you take another street, and an arrival time that doesn't jump around. Convoys are clearer: pick where, then how (race, drive together or just share), then invite; a convoy button while driving, and a race board that stays open until everyone's in. Android Auto gets GameRoute's own panels everywhere and a closer view of the road. Traffic lines sit on the roads, street names don't blink, Saved & recent tucks into a sliding bar, a card tells you when location is off, and the battery lasts longer.
+>
+> **Build 111.2:** convoy invites in a small card, your speed orange or red over the limit, and the road name just under your arrow.
 >
 > **Build 110:** a new route in a second or two when you take another street, an arrow that curves smoothly through turns, pop-ups in GameRoute's own look, 12 avatars your friends see, their own level celebrations for seven more styles, Friends drawn in the style on Android Auto (activity, invites, convoy actions), at most one faster-route message every 5 minutes, and a switch for the road name under the arrow.
 >
@@ -52,6 +54,8 @@ A **turn box like a rally roadbook**: the distance, a sketch of the junction wit
 - **Clear voice:** "In 200 metres, turn right", then "Turn right" at the right moment (1 km and 500 m on the motorway). Just the turn, no street names. Choose how much it talks
 - **Street names your way:** in English, Greek street names show in Latin letters, like the road signs ("Aiolou", "Panagi Tsaldari")
 - **Zooms with the road:** out on highways, in on small streets, with or without a route
+- **Live traffic on the roads:** colours drawn along the streets themselves, one line on small streets, a lane each way on big roads
+- **Steady:** the map doesn't swing as you pull away, street names don't blink, and the arrival time doesn't jump
 - **Better GPS:** the arrow stays on the road, ignores jumps between tall buildings, and tells you when the signal is weak
 - **Calm while moving:** the buttons fade; tap the map to bring them back
 - **Nothing pops up at speed:** landmarks and friend news wait for when you stop
@@ -67,10 +71,12 @@ Download a region in **Settings ▸ Offline maps** and the map and places work w
 
 **One tap away:** the Convoy chip sits right after ≡ and shows the convoy's live status.
 
-**In the lobby,** everyone picks:
+**Step by step:** where you're going together, then how each of you drives, then who's coming:
 - 🏁 **Race:** the host taps **START**, everyone else **READY UP**, then 3-2-1
-- 🚗 **Drive along:** same route, no race
-- 📍 **Just share:** be on the map without driving
+- 🚗 **Drive together:** same route, no race
+- 📍 **Just share where I am:** going somewhere else, still on each other's map
+
+Friends you invite get your choice picked for them. While driving, the **convoy button** shows your place and the gap to the nearest driver; tap it for quick messages and everyone in race order. Finish first? The **race board** stays open with everyone still driving until the last one is in.
 
 <img src="docs/screenshots/race.webp" alt="A friend's convoy invite, and the 3-2-1 start" width="100%">
 
@@ -117,6 +123,8 @@ The same map on the car screen, with the convoy box, places to tap, and its own 
 - **Turns on the car's own display** behind the wheel and the head-up display, where the car supports it
 - **Friends in the car:** see who's online and what they're doing, invite in one tap, start a convoy, READY UP in the lobby, send a quick message, drive to the convoy's destination, or leave the convoy
 - **Choose your route on the car screen:** up to three routes, all on screen, and the choice stays in the car (your phone keeps its own map)
+- **GameRoute's own panels:** the menu, fuel and parking nearby, quick messages, Report and Leave, all in your style, no grey screens
+- **A closer view of the road,** with the arrow low on the screen, like the big navigation apps
 
 <details>
 <summary><b>More car screens</b></summary>
@@ -158,7 +166,9 @@ Light, dark, or switching by itself at sunset.
 
 ## ⚡ Performance and your data
 
-**Settings ▸ Performance:** Auto, Smooth or Battery; map effects, animations and smoothness your way. The map draws about a third faster than before, keeps finished map squares on the phone, and rests the GPS at red lights.
+**Settings ▸ Performance:** Auto, Smooth or Battery; map effects, animations and smoothness your way. The map draws about a third faster than before, keeps finished map squares on the phone, rests the GPS at red lights and when parked, and pauses rain and snow when nobody's looking.
+
+**Location off?** A card says so with a button to turn it on, and a notification only when it matters (a convoy, a shared ETA, Android Auto).
 
 **Backup & restore** keeps your level, prestige, Garage, trips, places and friends in one file when you change phones. A **home screen widget** shows Home and Work with the drive time.
 

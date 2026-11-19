@@ -555,7 +555,7 @@ object L {
         "👥 Inviting a friend starts a convoy. Then you choose where you're going and how you drive." to "👥 Η πρόσκληση φίλου ξεκινά ένα κομβόι. Μετά διαλέγετε πού πηγαίνετε και πώς οδηγείτε.",
         "👥 Convoy started: choose where you're going ›" to "👥 Το κομβόι ξεκίνησε: διαλέξτε πού πηγαίνετε ›",
         "👥 Invite to your convoy" to "👥 Πρόσκληση στο κομβόι σας", "👥 Start a convoy and invite" to "👥 Νέο κομβόι και πρόσκληση",
-        "Sent to the convoy" to "Στάλθηκε στο κομβόι", "Message the convoy" to "Μήνυμα στο κομβόι", "Message" to "Μήνυμα",
+        "Version " to "Έκδοση ", "Sent to the convoy" to "Στάλθηκε στο κομβόι", "Message the convoy" to "Μήνυμα στο κομβόι", "Message" to "Μήνυμα",
         "Need fuel, Stopping soon…" to "Χρειάζομαι καύσιμο, Σταματάω σε λίγο…", "Invites" to "Προσκλήσεις", "In your convoy" to "Στο κομβόι σας",
         "Invited" to "Προσκεκλημένοι", "Online now" to "Συνδεδεμένοι τώρα", "Not online" to "Εκτός σύνδεσης", "Again" to "Ξανά",
         "Start a convoy" to "Ξεκινήστε κομβόι", "Convoy started: invite friends below" to "Το κομβόι ξεκίνησε: προσκαλέστε φίλους παρακάτω",

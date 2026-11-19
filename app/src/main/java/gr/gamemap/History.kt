@@ -6,6 +6,8 @@ package gr.gamemap
  */
 object History {
     val builds: List<Triple<String, String, String>> = listOf(
+        Triple("113", "Steadier GPS and arrow, faster rerouting, a clear convoy flow with a race board, the car's own panels and a closer car view, traffic lines on the roads, steady street names, a sliding Saved & recent bar, a location-off card, better battery",
+            "Πιο σταθερό GPS και βέλος, ταχύτερος επανυπολογισμός, καθαρό κομβόι με πίνακα αγώνα, τα δικά μας πάνελ και πιο κοντινή όψη στο αυτοκίνητο, κίνηση πάνω στους δρόμους, σταθερά ονόματα οδών, συρόμενη μπάρα αποθηκευμένων, κάρτα όταν η τοποθεσία είναι κλειστή, καλύτερη μπαταρία"),
         Triple("111.2", "Convoy invites in a small card (phone and car); speed orange or red over the limit; the road name under your arrow", "Προσκλήσεις κομβόι σε μικρή κάρτα (κινητό και αυτοκίνητο)· η ταχύτητα πορτοκαλί ή κόκκινη πάνω από το όριο· το όνομα του δρόμου κάτω από το βέλος"),
         Triple("111.1", "Same as 110 (so testers can update)", "Ίδιο με το 110 (για να ενημερωθούν οι δοκιμαστές)"),
         Triple("110", "Faster rerouting, GameRoute-style pop-ups, avatars, more level celebrations, Friends on the car map", "Ταχύτερος επανυπολογισμός, αναδυόμενα στο στυλ του GameRoute, άβαταρ, περισσότερες γιορτές επιπέδου, Φίλοι στον χάρτη του αυτοκινήτου"),

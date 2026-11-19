@@ -3115,7 +3115,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             heading("Earlier builds")
             History.builds.filter { (it.first.substringBefore('.').toIntOrNull() ?: 0) < 100 }.forEach { line(it.first, it.second, it.third) }
-            prefs().edit().putBoolean("seenWhatsNew100", true).apply()
+            prefs().edit().putBoolean("seenWhatsNew113", true).apply()
             sheetHost.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             body.post { (body.parent as? View)?.let { sv -> if (body.height > maxH) { sv.layoutParams.height = maxH; sv.requestLayout() } } }
             return
@@ -3179,7 +3179,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Reset what's been seen", "Welcome screens, What's new, this level's celebration · the app reopens") {
                     // your current level celebrates again; the app reopens on the welcome screens
                     prefs().edit().putInt("levelCelebrated", (Explorer.level - 1).coerceAtLeast(1))
-                        .remove("seenWhatsNew100").remove("welcomeDone").commit()
+                        .remove("seenWhatsNew113").remove("welcomeDone").commit()
                     Toast.makeText(this, L.t("Reset"), Toast.LENGTH_SHORT).show()
                     closeSheet(); recreate()
                 },
@@ -3306,7 +3306,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 settingRow("Star ratings & reviews", if (Reviews.enabled) "Google key set" else "Off: Reviews opens Google Maps") { chooseGoogleKey() },
                 settingRow("Show the welcome screens again", null) { closeSheet(); showWelcome() },
                 switchRow("Classic voice timing (exact distances)", Voice.classic) { Voice.classic = it },
-                settingRow(L.t("What's new") + if (!prefs().getBoolean("seenWhatsNew100", false)) "  · " + L.t("NEW") else "", L.t("Version 100")) { settingsPage = "whatsnew"; refreshChrome() },
+                settingRow(L.t("What's new") + if (!prefs().getBoolean("seenWhatsNew113", false)) "  · " + L.t("NEW") else "", L.t("Version ") + BuildConfig.VERSION_NAME.removePrefix("build-")) { settingsPage = "whatsnew"; refreshChrome() },
             )
         }
     }
