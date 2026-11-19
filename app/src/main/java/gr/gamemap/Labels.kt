@@ -39,6 +39,11 @@ class Labels {
     private val order = ArrayList<Cand>(256)
     private var frameNow = 0L
     private var lastFullPass = 0L
+    /** Names that just lost their room: they fade out where they are instead of vanishing. */
+    private val leaving = HashMap<String, Pair<Cand, Long>>()
+    /** The label being placed was on screen last frame (it keeps its room more easily). */
+    private var wasShown = false
+    private var forced = false
 
     private var cacheKey = ""
     private var cands: List<Cand> = emptyList()
@@ -148,8 +153,36 @@ class Labels {
             val country = cd.rank < 0
             text.letterSpacing = if (country) 0.14f else 0f; halo.letterSpacing = text.letterSpacing
             text.color = if (country) countryInk else ink
+            wasShown = !legacy && shownAt.containsKey(cd.id)
+            // back within a moment of leaving: carries on from how faded it was (no blink)
+            val back = leaving.remove(cd.id)?.let { (_, at) -> val left = (255 - (frameNow - at) * 255 / FADE_OUT).coerceIn(0, 255); frameNow - (left - 80).coerceAtLeast(0) * 250 / 175 }
             val ok = if (cd.place) placePoint(c, cd, area, d) else placeStreet(c, cd, n, area, d)
-            if (ok) { count++; nowShown[cd.id] = shownAt[cd.id] ?: frameNow }
+            if (ok) { count++; nowShown[cd.id] = shownAt[cd.id] ?: back ?: frameNow }
+        }
+        // (tests: how often names come and go)
+        for (id in nowShown.keys) if (!shownAt.containsKey(id)) appeared++
+        for (id in shownAt.keys) if (!nowShown.containsKey(id)) vanished++
+        // names shown last frame that didn't fit now: fade out over a fifth of a second
+        if (!legacy) for ((id, _) in shownAt) if (!nowShown.containsKey(id)) cands.firstOrNull { it.id == id }?.let { leaving[id] = it to frameNow }
+        if (leaving.isNotEmpty()) {
+            forced = true
+            val it = leaving.entries.iterator()
+            while (it.hasNext()) {
+                val (id, v) = it.next(); val (cd, at) = v
+                if (frameNow - at >= FADE_OUT || nowShown.containsKey(id)) { it.remove(); continue }
+                if (cd.maxX < vMinX || cd.minX > vMaxX || cd.maxY < vMinY || cd.minY > vMaxY) { it.remove(); continue }
+                val n = minOf(cd.pts.size, screen.size)
+                var i = 0
+                while (i < n) {
+                    val wx = (cd.pts[i] - cam.px) * cam.scale; val wy = (cd.pts[i + 1] - cam.py) * cam.scale
+                    screen[i] = (cam.cx + wx * ca - wy * sa).toFloat(); screen[i + 1] = (cam.cy + wx * sa + wy * ca).toFloat()
+                    i += 2
+                }
+                text.textSize = cd.textSize * d; halo.textSize = text.textSize
+                fadeAlpha = ((FADE_OUT - (frameNow - at)) * 255 / FADE_OUT).toInt()
+                if (cd.place) placePoint(c, cd, area, d) else placeStreet(c, cd, n, area, d)
+            }
+            forced = false; fadeAlpha = -1
         }
         val t = shownAt; shownAt = nowShown; nowShown = t
         text.letterSpacing = 0f; halo.letterSpacing = 0f
@@ -157,8 +190,19 @@ class Labels {
         bmpPaint.alpha = 255
     }
 
+    companion object {
+        /** Tests: the old placement (no keeping room, no fade-out), to compare. */
+        @JvmStatic var legacy = false
+        @JvmStatic var appeared = 0
+        @JvmStatic var vanished = 0
+    }
+
+    private var fadeAlpha = -1
+    private val FADE_OUT = 200L
+
     /** New names fade in over a quarter second instead of popping. */
     private fun alphaFor(cd: Cand): Int {
+        if (fadeAlpha >= 0) return fadeAlpha
         val since = frameNow - (shownAt[cd.id] ?: frameNow)
         return if (shownAt.containsKey(cd.id)) (80 + since * 175 / 250).toInt().coerceAtMost(255) else 80
     }
@@ -168,7 +212,7 @@ class Labels {
         text.textAlign = Paint.Align.CENTER; halo.textAlign = Paint.Align.CENTER
         val w = text.measureText(cd.name) / 2 + 4 * d
         val box = box(x - w, y - text.textSize, x + w, y + text.textSize * 0.35f)
-        if (!inside(box, area) || !free(box)) return false
+        if (!forced && (!inside(box, area) || !free(box))) return false
         val img = image(cd.name)
         bmpPaint.alpha = alphaFor(cd)
         c.drawBitmap(img, x - img.width / 2f, y - img.height / 2f - text.textSize * 0.3f, bmpPaint)
@@ -181,7 +225,7 @@ class Labels {
         var i = 2
         while (i < n) { len += hypot(screen[i] - screen[i - 2], screen[i + 1] - screen[i - 1]); i += 2 }
         val tw = text.measureText(cd.name)
-        if (len < tw * 1.15f) return false
+        if (len < tw * (if (wasShown || forced) 1.0f else 1.15f)) return false
         // the middle of the street and its direction there (no Path objects: this runs every frame)
         var walked = 0f
         var mx = screen[0]; var my = screen[1]; var tx = 1f; var ty = 0f
@@ -204,12 +248,12 @@ class Labels {
         flipped[cd.id] = flip
         if (flip) { tx = -tx; ty = -ty }
         // same street already named close by?
-        for ((nm, at) in placedNames) if (nm == cd.name && hypot(at[0] - mx, at[1] - my) < 260 * d) return false
+        if (!forced) for ((nm, at) in placedNames) if (nm == cd.name && hypot(at[0] - mx, at[1] - my) < 260 * d) return false
         val hw = tw / 2; val h = text.textSize * 0.7f
         val ex = kotlin.math.abs(tx * hw) + kotlin.math.abs(ty * h); val ey = kotlin.math.abs(ty * hw) + kotlin.math.abs(tx * h)
         val box = box(mx - ex, my - ey, mx + ex, my + ey)
-        if (!inside(box, area) || !free(box)) return false
-        placedNames += cd.name to floatArrayOf(mx, my)
+        if (!forced && (!inside(box, area) || !free(box))) return false
+        if (!forced) placedNames += cd.name to floatArrayOf(mx, my)
         val img = image(cd.name)
         bmpPaint.alpha = alphaFor(cd)
         c.save()
@@ -222,8 +266,17 @@ class Labels {
 
     private fun inside(r: RectF, a: Rect) = r.left >= a.left && r.right <= a.right && r.top >= a.top && r.bottom <= a.bottom
 
+    /**
+     * Room for [r]? A name already on screen keeps its room unless it clearly overlaps (its box
+     * counts a quarter smaller); a new one needs a little margin. Without this, a name at the
+     * edge of fitting came and went every few frames as the map turned.
+     */
+    private val probe = RectF()
     private fun free(r: RectF): Boolean {
-        for (o in placed) if (RectF.intersects(o, r)) return false
+        val k = if (wasShown) -0.12f else 0.06f
+        val dx = r.width() * k; val dy = r.height() * k
+        probe.set(r.left - dx, r.top - dy, r.right + dx, r.bottom + dy)
+        for (o in placed) if (RectF.intersects(o, probe)) return false
         placed += r
         return true
     }
