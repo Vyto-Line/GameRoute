@@ -2983,8 +2983,10 @@ class MapRenderer(private val car: Boolean = false) {
 
     private fun drawCompass(c: Canvas, a: Rect, bearing: Float, d: Float, t: Theme) {
         val r = 22 * d
-        val x = a.left + 14 * d + r
-        val y = maxOf(a.top + 14 * d, bannerBottom + 12 * d) + r
+        var x = a.left + 14 * d + r
+        var y = maxOf(a.top + 14 * d, bannerBottom + 12 * d, carConvoyRect.bottom + 12 * d, convoyStrip.bottom + 12 * d) + r
+        // a tall race box on a short car screen: beside the box rather than down into the speed box
+        if (!carConvoyRect.isEmpty && y + r > a.bottom - 130 * d) { x = carConvoyRect.right + 12 * d + r; y = carConvoyRect.top + r }
         compassBounds.set(x - r, y - r, x + r, y + r)
         fill.color = Ui.panel(t); c.drawCircle(x, y, r, fill)
         stroke.color = t.route; stroke.strokeWidth = 2 * d; c.drawCircle(x, y, r, stroke)
