@@ -49,6 +49,13 @@ class LabelFlickerTest {
                 // the app's clock (names are re-placed 8 times a second, fades run on it)
                 org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(16))
             }
+            // then a pinch in and out across a zoom level (15.7 → 16.3 → 15.7)
+            repeat(60) { i ->
+                MapState.zoomBy(if (i < 30) 0.02 else -0.02)
+                repeat(3) { MapState.tick() }
+                mr.draw(c, 1080, 2000, Rect(0, 0, 1080, 2000), 2.75f, hud = false)
+                org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(16))
+            }
             counts[legacy] = Labels.blinks to 0
             log.append("bearing now ${MapState.phone.userBearing} following=${MapState.phone.following}\n")
             log.append("${if (legacy) "old" else "new"}: names appeared ${Labels.appeared} times, vanished ${Labels.vanished} times, blinked (gone and back within 0.6 s) ${Labels.blinks} times over 120 frames\n")

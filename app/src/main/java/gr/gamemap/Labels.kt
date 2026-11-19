@@ -26,9 +26,15 @@ class Labels {
         val place: Boolean,
         val textSize: Float,
         val minX: Double, val minY: Double, val maxX: Double, val maxY: Double,
+        /** The world's size in pixels at the zoom [pts] are in. */
+        world: Double,
     ) {
-        /** Same label from frame to frame (and across tile reloads). */
-        val id = "$name@${(pts[0] / 48).toInt()},${(pts[1] / 48).toInt()}"
+        /**
+         * Same label from frame to frame, across tile reloads and across zoom levels (it was in
+         * pixels of the zoom level, so crossing a level made every name new: they all faded
+         * out and in again, which read as blinking while zooming).
+         */
+        val id = "$name@${(pts[0] / world * 262144).toInt()},${(pts[1] / world * 262144).toInt()}"
     }
 
     // Steady labels while driving: names shown last frame keep their spot first, new ones
@@ -318,7 +324,7 @@ class Labels {
                         else f["name:en"] ?: f["name_en"] ?: f["name:latin"] ?: name
                     } else name
                     // capitals are for countries; towns read as written ("Larissa", not "LARISSA")
-                    out += Cand(shown, w, rank, true, size, w[0], w[1], w[0], w[1])
+                    out += Cand(shown, w, rank, true, size, w[0], w[1], w[0], w[1], dataPx * (1 shl dz))
                 } else if (f.layer == "transportation_name" && f.type == 2 && z >= 15) {
                     val rank = when (f["class"]) {
                         "motorway", "trunk" -> 4; "primary" -> 5; "secondary" -> 6; "tertiary" -> 7
@@ -334,7 +340,7 @@ class Labels {
                     while (i < w.size) {
                         minX = minOf(minX, w[i]); maxX = maxOf(maxX, w[i]); minY = minOf(minY, w[i + 1]); maxY = maxOf(maxY, w[i + 1]); i += 2
                     }
-                    out += Cand(name, w, rank, false, 12.5f, minX, minY, maxX, maxY)
+                    out += Cand(name, w, rank, false, 12.5f, minX, minY, maxX, maxY, dataPx * (1 shl dz))
                 }
             }
         }
@@ -355,7 +361,7 @@ class Labels {
             val y = Geo.y(k.lat, world)
             for (wrap in -1..1) {
                 val x = Geo.x(k.lon, world) + wrap * world
-                out += Cand(name, doubleArrayOf(x, y), -10 + k.rank, true, size, x, y, x, y)
+                out += Cand(name, doubleArrayOf(x, y), -10 + k.rank, true, size, x, y, x, y, world)
             }
         }
         return out
