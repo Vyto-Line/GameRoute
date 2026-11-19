@@ -285,7 +285,15 @@ class Labels {
         return true
     }
 
-    private fun inside(r: RectF, a: Rect) = r.left >= a.left && r.right <= a.right && r.top >= a.top && r.bottom <= a.bottom
+    /**
+     * On screen? A name already shown may run a little past the edge before it goes (a third of
+     * its box); a new one has to fit with a small margin. At the edges names otherwise flickered
+     * in and out as the map turned or zoomed.
+     */
+    private fun inside(r: RectF, a: Rect): Boolean {
+        val mx = r.width() * (if (wasShown) -0.33f else 0.04f); val my = r.height() * (if (wasShown) -0.33f else 0.04f)
+        return r.left - mx >= a.left && r.right + mx <= a.right && r.top - my >= a.top && r.bottom + my <= a.bottom
+    }
 
     /**
      * Room for [r]? A name already on screen keeps its room unless it clearly overlaps (its box
