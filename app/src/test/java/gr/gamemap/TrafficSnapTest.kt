@@ -34,16 +34,24 @@ class TrafficSnapTest {
         } ?: emptyList()
         val log = StringBuilder("traffic active=${Traffic.active}, map squares ${z14.size}\n")
         if (!Traffic.active) { File(out, "trafficsnap.txt").writeText(log.append("no TomTom key: skipped\n").toString()); return }
-        val z = 16
-        val squares = z14.flatMap { (x, y) -> (0..3).flatMap { dx -> (0..3).map { dy -> (x * 4 + dx) to (y * 4 + dy) } } }.take(48)
+        // the video's area (Nea Smyrni / Neos Kosmos, Ilia Iliou): map data downloaded live
+        VectorSource.init(org.robolectric.RuntimeEnvironment.getApplication())
+        val vx = Geo.x(23.7215, 16384.0).toInt(); val vy = Geo.y(37.9555, 16384.0).toInt()
+        val video = ArrayList<Pair<Int, Int>>()
+        for (dy in -1..1) for (dx in -1..1) if (VectorSource.get(14, vx + dx, vy + dy) != null) video += (vx + dx) to (vy + dy)
+        log.append("video area squares ${video.size}\n")
+        val d = 2.75f; val u = d
+        val r = MapRenderer()
+        val results = ArrayList<Double>()
+        for ((areaName, area) in listOf("video area" to video, "central Athens" to z14)) for (z in listOf(15, 16)) {
+        val f = 1 shl (z - 14)
+        val squares = area.flatMap { (x, y) -> (0 until f).flatMap { dx -> (0 until f).map { dy -> (x * f + dx) to (y * f + dy) } } }.take(48)
         // fetch them all
         val deadline = System.currentTimeMillis() + 40_000
         while (System.currentTimeMillis() < deadline && squares.any { (x, y) -> Traffic.tile(z, x, y) == null }) Thread.sleep(300)
         val tilePx = TileCache.tilePx.toDouble()
         val span = tilePx
         val world = tilePx * 2.0.pow(z)
-        val d = 2.75f; val u = d
-        val r = MapRenderer()
         var newOff = 0; var newAll = 0; var oldOff = 0; var oldAll = 0; var ms = 0L; var lines = 0
         val worst = ArrayList<String>()
         for ((ax, ay) in squares) {
@@ -95,18 +103,22 @@ class TrafficSnapTest {
         }
         val newPct = if (newAll == 0) 0.0 else newOff * 100.0 / newAll
         val oldPct = if (oldAll == 0) 0.0 else oldOff * 100.0 / oldAll
+        log.append("== $areaName, zoom $z\n")
         log.append("traffic lines: $lines\n")
         log.append("old: ${"%.1f".format(oldPct)}% of the drawn line more than 6 m off any road ($oldOff of $oldAll points)\n")
         log.append("new: ${"%.1f".format(newPct)}% ($newOff of $newAll points); building all squares took $ms ms\n")
         worst.forEach { log.append("  $it\n") }
+        results += newPct
+        }
         // a picture: the map with the new traffic, around the video's area is outside the data, so central Athens
-        MapState.setTheme(Theme.VIOLET_RAIN); MapState.zoomBy(16.0 - MapState.targetZoom)
+        MapState.setTheme(Theme.VIOLET_RAIN); MapState.zoomBy(15.6 - MapState.targetZoom)
+        LocationTracker.onLocationChanged(android.location.Location("gps").apply { latitude = 37.9555; longitude = 23.7215; accuracy = 5f; time = System.currentTimeMillis() })
         repeat(200) { MapState.tick(); Thread.sleep(2) }
         val frame = Bitmap.createBitmap(1080, 1920, Bitmap.Config.ARGB_8888)
         val c = Canvas(frame)
         repeat(40) { r.draw(c, 1080, 1920, Rect(0, 0, 1080, 1920), d, hud = false); Thread.sleep(60) }
         File(out, "traffic_on_roads.png").outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 90, it) }
         File(out, "trafficsnap.txt").writeText(log.toString())
-        assertTrue("new traffic lines off the roads: ${"%.1f".format(newPct)}%", newAll == 0 || newPct < 2.0)
+        assertTrue("new traffic lines off the roads: $results", results.all { it < 2.0 })
     }
 }
