@@ -256,7 +256,7 @@ object LocationTracker : LocationListener {
         // road and back as you pulled away; there the way you were driving is kept instead.
         val useCompass = c != null && !NavEngine.active && "car" !in users && lastDriveHeading == null
         val target = when {
-            speed < 1.0f && useCompass -> c
+            speed < 1.0f && useCompass -> c!!
             gliding -> {
                 // the curve's own direction right here: the arrow is always tangent to its path
                 val gt = ((now - fixAt) / 1000.0).coerceIn(0.0, 0.95)
