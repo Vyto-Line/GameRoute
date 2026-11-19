@@ -148,7 +148,12 @@ class MapRenderer(private val car: Boolean = false) {
         val radius = min(area.width(), area.height()) / 2f - 14 * d
         val cx = area.exactCenterX()
         val cy = if (theme.radar) area.exactCenterY()
-        else area.top + area.height() * (if (NavEngine.active && following) 0.68f else 0.55f)
+        else area.top + area.height() * arrowFrac(when {
+            // the car, moving or on a route: the arrow low on the screen, the road ahead in view
+            car && following && (NavEngine.active || LocationTracker.speedMps > 3f) -> 0.74f
+            NavEngine.active && following -> 0.68f
+            else -> 0.55f
+        })
         camera = Camera(px, py, world, scale, bearing, cx, cy)
 
         c.save()
@@ -2263,6 +2268,14 @@ class MapRenderer(private val car: Boolean = false) {
     val convoyStrip = RectF()
     private var carConvoyBottom = 0f
     private val carConvoyRect = RectF()
+
+    /** Where the arrow sits (a share of the height), easing to a new place instead of jumping. */
+    private var shownArrowFrac = -1f
+    private fun arrowFrac(target: Float): Float {
+        if (shownArrowFrac < 0f || Math.abs(target - shownArrowFrac) < 0.002f) shownArrowFrac = target
+        else { shownArrowFrac += (target - shownArrowFrac) * 0.06f; animating = true }
+        return shownArrowFrac
+    }
     internal fun carConvoyRectForTest() = RectF(carConvoyRect)
     private var carLobbyShown = false
 

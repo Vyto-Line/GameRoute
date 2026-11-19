@@ -213,6 +213,30 @@ object LocationTracker : LocationListener {
         return LatLng(u * u * from.lat + 2 * u * t * c.lat + t * t * to.lat, u * u * from.lon + 2 * u * t * c.lon + t * t * to.lon)
     }
 
+    /**
+     * Pulling away or creeping (under ~20 km/h): a big change of direction (over 50°) only counts
+     * once the next fix agrees with it. Just after starting, the road match could pick the cross
+     * street or the right street facing the wrong way for one fix, and the map swung there and back.
+     */
+    private var slowPending: Float? = null
+    private var savedDriveAt = 0L
+
+    /**
+     * Starting the app where the car was parked (within 60 m, last 12 hours): the map starts facing
+     * the way you parked, not north, so it doesn't turn round as you set off.
+     */
+    private fun parkedHeading(p: LatLng): Float? = try {
+        val v = MapState.prefsOrNull()?.getString("lastDrive", null)?.split(",") ?: emptyList()
+        if (v.size == 4 && System.currentTimeMillis() - v[3].toLong() < 12 * 3600_000L &&
+            Geo.distance(LatLng(v[0].toDouble(), v[1].toDouble()), p) < 60) v[2].toFloat() else null
+    } catch (e: Exception) { null }
+    private fun confirmSlow(dir: Float, speed: Float): Float {
+        if (speed >= 5.5f || abs(Geo.angleDiff(headingTarget, dir)) <= 50f) { slowPending = null; return dir }
+        val pend = slowPending
+        return if (pend != null && abs(Geo.angleDiff(pend, dir)) <= 30f) { slowPending = null; dir }
+        else { slowPending = dir; headingTarget }
+    }
+
     /** Advances the heading animation. Returns true while anything is still moving. */
     private var glideMeters = 0.0
 
@@ -225,9 +249,14 @@ object LocationTracker : LocationListener {
         // the glide already heads into the new street while the road's heading lagged behind, and
         // the arrow slid sideways ("moonwalking"). Small glides keep the road's heading.
         val from = fromPos; val to = toPos
-        val gliding = from != null && to != null && now - fixAt < 1000 && glideMeters > 3.0 && speed > 2f
+        // (only at a proper speed: pulling away, the glide between two wobbly fixes swung the map)
+        val gliding = from != null && to != null && now - fixAt < 1000 && glideMeters > 3.0 && speed > 5f
+        // the phone's compass, standing still: only on foot. In the car (Android Auto, or just
+        // driven) it points anywhere (metal, the phone mount), and the map swung from it to the
+        // road and back as you pulled away; there the way you were driving is kept instead.
+        val useCompass = c != null && !NavEngine.active && "car" !in users && lastDriveHeading == null
         val target = when {
-            speed < 1.0f && c != null && !NavEngine.active -> c
+            speed < 1.0f && useCompass -> c
             gliding -> {
                 // the curve's own direction right here: the arrow is always tangent to its path
                 val gt = ((now - fixAt) / 1000.0).coerceIn(0.0, 0.95)
@@ -237,7 +266,11 @@ object LocationTracker : LocationListener {
         }
         val diff = Geo.angleDiff(heading, target)
         val turning = abs(diff) > 0.3f
-        heading = if (turning) (heading + diff * (1 - exp(-dt / (if (gliding) 70.0 else 260.0))).toFloat() + 360f) % 360f else target
+        var step = diff * (1 - exp(-dt / (if (gliding) 70.0 else 260.0))).toFloat()
+        // slow (pulling away, creeping in traffic): the map turns at most 40° a second, so one odd
+        // reading can't swing it; at speed, turns follow the road as before
+        if (speed < 5f && !gliding) step = step.coerceIn(-0.04f * dt, 0.04f * dt)
+        heading = if (turning) (heading + step + 360f) % 360f else target
         // standing still, a new fix a few cm away isn't worth 30 frames a second
         val moving = toPos != null && ((now - fixAt < 1000 && glideMeters > 0.8) || speed >= 2f)
         return turning || moving
@@ -354,16 +387,24 @@ object LocationTracker : LocationListener {
             p = held
         } else if (snapped != null) {
             p = snapped.first
-            headingTarget = snapped.second
+            headingTarget = confirmSlow(snapped.second, speed)
         } else if (location.hasBearing() && speed > 3f &&
             (android.os.Build.VERSION.SDK_INT < 26 || !location.hasBearingAccuracy() || location.bearingAccuracyDegrees <= 30f)) {
             // under ~11 km/h GPS's direction swings 20-40° from one second to the next: the map
             // kept turning left and right; it keeps the last good direction until moving properly
-            headingTarget = location.bearing
+            headingTarget = confirmSlow(location.bearing, speed)
         }
-        if (speed > 3f) { moveBearing = headingTarget; hasMoved = true; drovenAt = System.currentTimeMillis() }
+        if (speed > 3f) {
+            moveBearing = headingTarget; hasMoved = true; drovenAt = System.currentTimeMillis()
+            // remembered across app restarts: where and which way the car was last driving
+            if (drovenAt - savedDriveAt > 10_000) {
+                savedDriveAt = drovenAt
+                MapState.prefsOrNull()?.edit()?.putString("lastDrive", "${p.lat},${p.lon},$moveBearing,$drovenAt")?.apply()
+            }
+        }
 
         val firstFix = toPos == null
+        if (firstFix && !hasMoved) parkedHeading(p)?.let { headingTarget = it; moveBearing = it; hasMoved = true; drovenAt = System.currentTimeMillis() }
         fromPos = if (firstFix) p else displayPosition()
         // The arrow glides to the new fix over the next second, so aim it where the car will be by
         // then (a fix is already a moment old): otherwise the arrow trails the car by 1-2 s.

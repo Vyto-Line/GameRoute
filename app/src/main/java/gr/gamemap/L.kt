@@ -90,6 +90,7 @@ object L {
     }
 
     private val patterns: List<Pair<Regex, String>> = listOf(
+        "Convoy started · invite sent to (.+)" to "Το κομβόι ξεκίνησε · η πρόσκληση στάλθηκε στον/στην $1",
         "(.+)'s convoy" to "Το κομβόι του/της $1", "To (.+)" to "Προς $1", "(\\d+) drivers" to "$1 οδηγοί",
         "Race to (.+)" to "Αγώνας προς $1", "Together to (.+)" to "Μαζί προς $1", "You're (\\d+)th" to "Είστε $1οι",
         "You finished (\\d+)th" to "Τερματίσατε $1οι", "(\\d+)th" to "$1ος",
@@ -551,6 +552,9 @@ object L {
         "Arrived " to "Έφτασε ", "Everyone's in." to "Έφτασαν όλοι.", "See the race" to "Δείτε τον αγώνα", "Winner: " to "Νικητής: ",
         "Stays open until everyone's in, then shows the final order." to "Μένει ανοιχτό μέχρι να φτάσουν όλοι και μετά δείχνει την τελική σειρά.",
         "1st" to "1ος", "2nd" to "2ος", "3rd" to "3ος",
+        "👥 Inviting a friend starts a convoy. Then you choose where you're going and how you drive." to "👥 Η πρόσκληση φίλου ξεκινά ένα κομβόι. Μετά διαλέγετε πού πηγαίνετε και πώς οδηγείτε.",
+        "👥 Convoy started: choose where you're going ›" to "👥 Το κομβόι ξεκίνησε: διαλέξτε πού πηγαίνετε ›",
+        "👥 Invite to your convoy" to "👥 Πρόσκληση στο κομβόι σας", "👥 Start a convoy and invite" to "👥 Νέο κομβόι και πρόσκληση",
         "Sent to the convoy" to "Στάλθηκε στο κομβόι", "Message the convoy" to "Μήνυμα στο κομβόι", "Message" to "Μήνυμα",
         "Need fuel, Stopping soon…" to "Χρειάζομαι καύσιμο, Σταματάω σε λίγο…", "Invites" to "Προσκλήσεις", "In your convoy" to "Στο κομβόι σας",
         "Invited" to "Προσκεκλημένοι", "Online now" to "Συνδεδεμένοι τώρα", "Not online" to "Εκτός σύνδεσης", "Again" to "Ξανά",

@@ -43,6 +43,7 @@ class Labels {
     private var nowShown = HashMap<String, Long>()
     private val flipped = HashMap<String, Boolean>()
     private val order = ArrayList<Cand>(256)
+    private val fresh = ArrayList<Pair<Cand, Double>>(256)
     private var frameNow = 0L
     private var lastFullPass = 0L
     /** Names that just lost their room: they fade out where they are instead of vanishing. */
@@ -141,7 +142,24 @@ class Labels {
         if (fullPass) lastFullPass = frameNow
         order.clear()
         for (cd in cands) if (shownAt.containsKey(cd.id)) order += cd
-        if (fullPass) for (cd in cands) if (!shownAt.containsKey(cd.id)) order += cd
+        if (fullPass) {
+            // New names: places first (by importance), then streets nearest the arrow first (big
+            // roads count as a bit nearer). Small streets far from the arrow aren't tried at all:
+            // they were the ones fighting for room and blinking, and placing them cost the most.
+            fresh.clear()
+            val far = reach * 0.45
+            for (cd in cands) {
+                if (shownAt.containsKey(cd.id)) continue
+                if (cd.place) { order += cd; continue }
+                val dist = hypot((cd.minX + cd.maxX) / 2 - cam.px, (cd.minY + cd.maxY) / 2 - cam.py) -
+                    maxOf(cd.maxX - cd.minX, cd.maxY - cd.minY) / 2
+                if (cd.rank >= 8 && dist > far) continue
+                val k = when (cd.rank) { 4 -> 0.5; 5 -> 0.65; 6 -> 0.8; 7 -> 0.9; 8 -> 1.0; else -> 1.15 }
+                fresh += cd to dist.coerceAtLeast(0.0) * k
+            }
+            fresh.sortBy { it.second }
+            for ((cd, _) in fresh) order += cd
+        }
         nowShown.clear()
 
         for (cd in order) {

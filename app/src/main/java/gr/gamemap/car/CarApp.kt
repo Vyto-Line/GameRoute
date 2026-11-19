@@ -76,6 +76,7 @@ class GameMapCarAppService : CarAppService() {
 
 class GameMapSession : Session() {
     override fun onCreateScreen(intent: Intent): Screen {
+        MapState.car.startDrive()
         gr.gamemap.CrashLog.note("Android Auto opened")
         gr.gamemap.CrashLog.watchMainThread() // a freeze in the car leaves a report too
         gr.gamemap.Parked.clear() // driving off: the old parking spot is history

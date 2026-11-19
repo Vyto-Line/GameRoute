@@ -173,7 +173,23 @@ object Sun {
  * Where one screen's map is looking: zoom, following or panned, rotation, route fitting.
  * The phone and the car each have their own, so moving one never moves the other.
  */
+/** The car's normal zoom (see [MapView.baseZoom]). */
+const val CAR_BASE_ZOOM = 17.4
+
 class MapView(private val zoomKey: String) {
+    /**
+     * The car's normal view: about a step closer than the phone's, like Google Maps in the car
+     * (16.5 showed a whole neighbourhood and left the automatic zoom too far out on big roads).
+     */
+    val isCar get() = zoomKey == "carZoom"
+    val baseZoom get() = if (isCar) CAR_BASE_ZOOM else 16.5
+
+    /** A new drive in the car (Android Auto connects): the normal view, whatever it was zoomed to last time. */
+    fun startDrive() {
+        if (!isCar) return
+        targetZoom = baseZoom; zoom = baseZoom; zoomedAway = false; saveZoom()
+        MapState.changed.fire()
+    }
     /** Zoom being shown right now (animates toward [targetZoom]). */
     var zoom = 16.5
         private set
@@ -343,7 +359,7 @@ class MapView(private val zoomKey: String) {
         fitRequest = null
         savedZoom?.let { targetZoom = it; savedZoom = null }
         // zoomed far out (looking around): back in to a driving / street view
-        val near = if (NavEngine.active) 16.0 else 15.5
+        val near = if (isCar) baseZoom else if (NavEngine.active) 16.0 else 15.5
         if (targetZoom < near - 0.5) targetZoom = near
         // zoomed by hand (in or out): back to the normal zoom
         if (zoomedAway) { targetZoom = near; saveZoom() }
@@ -443,7 +459,8 @@ object MapState {
             ?: Theme.OPEN_WORLD
         lightMode = LightMode.entries.getOrElse(p.getInt("lightMode", 0)) { LightMode.AUTO }
         phone.load(p.getFloat("zoom", 16.5f).toDouble())
-        car.load(p.getFloat("carZoom", p.getFloat("zoom", 16.5f)).toDouble())
+        // the car always starts at its normal view (a zoom-out from last time doesn't stick)
+        car.load(CAR_BASE_ZOOM)
         carTheme = p.getString("carTheme", null)?.let { n -> Theme.entries.firstOrNull { it.name == n } }
         imperial = p.getBoolean("imperial", false)
     }

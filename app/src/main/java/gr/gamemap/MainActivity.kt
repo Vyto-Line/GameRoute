@@ -4926,6 +4926,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         // friends: online first; Invite (or how far my invite to this convoy got)
         if (fr.isEmpty()) body.addView(label("No friends yet. Share your code, or add people you drove with in a convoy.", 14f).apply { setTextColor(dim()); setPadding(0, p, 0, 0) })
+        // what Invite does: it starts a convoy (said once, above the list, while there isn't one)
+        else if (!Convoy.active) body.addView(label("👥 Inviting a friend starts a convoy. Then you choose where you're going and how you drive.", 13.5f).apply {
+            setTextColor(dim()); setPadding(p / 4, p * 2 / 3, p / 4, 0)
+        })
+        // just started one by inviting: the next step, one tap away
+        else if (Convoy.host && Convoy.destination == null && !Convoy.meSharing) body.addView(label("👥 Convoy started: choose where you're going ›", 14f, bold = true).apply {
+            setTextColor(readable(accent)); setPadding(p / 4, p * 2 / 3, p / 4, 0)
+            setOnClickListener { openSheet("convoy") }
+        })
         val on = fr.filter { c.isOnline(it.fid) }; val off = fr - on.toSet()
         for ((title, list) in listOf("Online · ${on.size}" to on, "Offline" to off)) {
             if (list.isEmpty()) continue
@@ -5077,12 +5086,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Invites a friend to my convoy (starts one first if I'm not in one: going where I'm going). */
     private fun inviteFriend(f: FriendCore.Friend) {
         withConvoyName {
-            if (!Convoy.active) {
+            val started = !Convoy.active
+            if (started) {
                 val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
                 Convoy.create(dest)
             }
             Friends.invite(f)
-            Toast.makeText(this, L.t("Invite sent to ${f.name}"), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (started) L.t("Convoy started · invite sent to ${f.name}") else L.t("Invite sent to ${f.name}"), Toast.LENGTH_SHORT).show()
             friendsKey = ""; refreshChrome()
         }
     }
@@ -5107,7 +5117,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(f.since))
         val drives = Friends.core.drivesWith(f.fid)
         box.addView(label(L.t("Friends since") + " " + date + (if (drives > 0) " · " + L.t(if (drives == 1) "1 drive together" else "$drives drives together") else ""), 13.5f).apply { setTextColor(dim()); setPadding(0, p, 0, p) })
-        box.addView(pill("👥 Invite to a convoy") { dlg.dismiss(); inviteFriend(f) }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 16f) },
+        box.addView(pill(if (Convoy.active) "👥 Invite to your convoy" else "👥 Start a convoy and invite") { dlg.dismiss(); inviteFriend(f) }.apply { setTextColor(onAccent(accent)); background = bg(accent, radius = 16f) },
             LinearLayout.LayoutParams(MATCH_PARENT, (52 * d).toInt()))
         box.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; setPadding(0, p * 3 / 4, 0, 0)
