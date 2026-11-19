@@ -189,6 +189,7 @@ class MapRenderer(private val car: Boolean = false) {
         // names on top of the map, laid out on screen (never overlapping, always upright)
         tp0 = System.nanoTime()
         labels.draw(c, camera!!, z, area, d, theme)
+        if (labels.fading) animating = true
         prof("labels", tp0); tp0 = System.nanoTime()
         // places (fuel, parking, food…) at street level; while navigating only fuel and parking
         if (MapState.showPlaces && !NavEngine.planningOn(car)) {
@@ -521,7 +522,11 @@ class MapRenderer(private val car: Boolean = false) {
             val t = Traffic.tile(dz, ax, ay) ?: continue
             // rebuilt when new map data arrives too, so lanes can lock onto the roads
             val key = "$dz/$ax/$ay/$z/${t.fetchedAt}/$snapEpoch"
-            val tp = trafficCache[key] ?: if (busy) continue else buildTraffic(t, ax, ay, span, u, z).also { trafficCache[key] = it }
+            // laid onto the roads in the background (a few ms to a few tens per square): the
+            // frame never waits for it; until it's ready this square's traffic waits a moment
+            val tp = synchronized(trafficCache) { trafficCache[key] }
+                ?: run { if (!busy) buildTrafficLater(key, t, ax, ay, span, u, z); null }
+                ?: continue
             c.save()
             c.translate((tp.ox - px).toFloat(), (tp.oy - py).toFloat())
 
@@ -538,7 +543,21 @@ class MapRenderer(private val car: Boolean = false) {
             trafficPaint.pathEffect = null
             c.restore()
         }
-        while (trafficCache.size > 48) trafficCache.remove(trafficCache.keys.first())
+        synchronized(trafficCache) { while (trafficCache.size > 48) trafficCache.remove(trafficCache.keys.first()) }
+    }
+
+    private val trafficBuilding = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    private fun buildTrafficLater(key: String, t: Traffic.Tile, ax: Int, ay: Int, span: Double, u: Float, z: Int) {
+        if (!trafficBuilding.add(key)) return
+        trafficWorker.execute {
+            try {
+                val tp = buildTraffic(t, ax, ay, span, u, z)
+                synchronized(trafficCache) { trafficCache[key] = tp }
+                TileCache.loaded.fire() // draw it
+            } catch (_: Throwable) {
+            } finally { trafficBuilding.remove(key) }
+        }
     }
 
     internal fun buildTraffic(t: Traffic.Tile, ax: Int, ay: Int, span: Double, u: Float, z: Int): TrafficPaths {
@@ -685,6 +704,8 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     companion object {
+        /** Traffic lanes are laid onto the roads here, one square at a time, off the drawing thread. */
+        private val trafficWorker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "traffic-lanes").apply { priority = Thread.MIN_PRIORITY; isDaemon = true } }
         private val NAV_PLACES = setOf(PoiLayer.Kind.FUEL, PoiLayer.Kind.PARKING)
         /** Tests switch this on to see where frame time goes. */
         @JvmStatic var profile = false

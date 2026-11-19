@@ -6224,6 +6224,15 @@ class GameMapView(ctx: Context) : View(ctx) {
     var insetTop = 0
     var insetBottom = 0
     private var shownInsetBottom = -1f
+    private var lastTouchAt = android.os.SystemClock.uptimeMillis()
+
+    /**
+     * Rain and snow pause after two minutes of nobody touching the map with no route and the car
+     * standing still (the phone left on a table): they were redrawing the whole map 20-30 times a
+     * second for nobody. A touch, a route or moving off brings them straight back.
+     */
+    private fun effectsResting() = !NavEngine.active && LocationTracker.speedMps < 1f &&
+        android.os.SystemClock.uptimeMillis() - lastTouchAt > 120_000
     /** Called when a finger first touches the map (closes search). */
     var onTouchStart: (() -> Unit)? = null
     /** Where the middle of the map is right now. */
@@ -6290,6 +6299,7 @@ class GameMapView(ctx: Context) : View(ctx) {
     private var touching = false
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        lastTouchAt = android.os.SystemClock.uptimeMillis()
         touching = e.actionMasked != MotionEvent.ACTION_UP && e.actionMasked != MotionEvent.ACTION_CANCEL
         if (MapState.gesture != (touching && (dragging || scaling || rotating))) { MapState.gesture = touching && (dragging || scaling || rotating); if (!MapState.gesture) invalidate() }
         scaler.onTouchEvent(e)
@@ -6358,7 +6368,7 @@ class GameMapView(ctx: Context) : View(ctx) {
         if (renderer.animating) {
             if (MapState.gesture || renderer.interacting) postInvalidateOnAnimation()
             else postInvalidateDelayed(Perf.frameDelay(LocationTracker.speedMps > 1f))
-        } else if (renderer.effectsMoving) {
+        } else if (renderer.effectsMoving && !effectsResting()) {
             // standing still with only the rain or snow moving: steady enough to look like rain
             postInvalidateDelayed(Perf.effectsDelay())
         }

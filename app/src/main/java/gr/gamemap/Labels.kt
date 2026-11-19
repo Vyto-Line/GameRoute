@@ -127,6 +127,7 @@ class Labels {
         halo.strokeWidth = 3.5f * d
 
         placed.clear(); placedNames.clear(); boxUsed = 0
+        fadingNow = false
         val a = Math.toRadians(-cam.bearing.toDouble())
         val ca = cos(a); val sa = sin(a)
         // world-pixel box of the screen, for quick rejection
@@ -221,10 +222,17 @@ class Labels {
 
     /** New names fade in over a quarter second instead of popping. */
     private fun alphaFor(cd: Cand): Int {
-        if (fadeAlpha >= 0) return fadeAlpha
-        val since = frameNow - (shownAt[cd.id] ?: frameNow)
-        return if (shownAt.containsKey(cd.id)) (80 + since * 175 / 250).toInt().coerceAtMost(255) else 80
+        val a = if (fadeAlpha >= 0) fadeAlpha else {
+            val since = frameNow - (shownAt[cd.id] ?: frameNow)
+            if (shownAt.containsKey(cd.id)) (80 + since * 175 / 250).toInt().coerceAtMost(255) else 80
+        }
+        if (a < 255) fadingNow = true
+        return a
     }
+
+    private var fadingNow = false
+    /** A name is fading in or out: the map needs a few more frames to finish it. */
+    val fading get() = fadingNow
 
     private fun placePoint(c: Canvas, cd: Cand, area: Rect, d: Float): Boolean {
         val x = screen[0]; val y = screen[1]

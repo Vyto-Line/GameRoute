@@ -39,9 +39,24 @@ object L {
 
     val label get() = when (mode) { "en" -> "English"; "el" -> "Ελληνικά"; else -> if (greek) "Αυτόματα (Ελληνικά)" else "Auto (English)" }
 
+    /**
+     * Translations already worked out: the map's words ("to go", "1st", road chips…) are asked for
+     * on every frame, and a miss went through every pattern (dozens of regular expressions) each time.
+     */
+    private val memo = object : LinkedHashMap<String, String>(512, 0.75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, String>?) = size > 3000
+    }
+
     fun t(s: String): String {
         if (!greek || s.isEmpty()) return s
         words[s]?.let { return it }
+        synchronized(memo) { memo[s] }?.let { return it }
+        val r = work(s)
+        synchronized(memo) { memo[s] = r }
+        return r
+    }
+
+    private fun work(s: String): String {
         // a value with an arrow or spaces around it ("Kilometres  ›", "You  "): the words inside
         val core = s.trim().removeSuffix("›").removeSuffix("+").trim() // ("Work  +": not set yet)
         if (core.isNotEmpty() && core != s) { val tc = t(core); if (tc != core) return s.replace(core, tc) }
