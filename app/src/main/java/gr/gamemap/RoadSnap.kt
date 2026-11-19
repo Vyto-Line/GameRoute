@@ -196,7 +196,7 @@ object RoadSnap {
                     qx += -sy * off; qy += sx * off
                 }
                 // a jump (onto another road, or across a gap): start a new piece
-                if (cur.size >= 2 && hypot(qx - px0, qy - py0) > step * 3f + maxDist * 0.5f) flush()
+                if (cur.size >= 2 && hypot(qx - px0, qy - py0) > step * 2.2f) flush()
                 cur.add(qx, qy); px0 = qx; py0 = qy; prevSeg = best
             }
         }
