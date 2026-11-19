@@ -111,6 +111,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeSheet.translationY = off * (1f - f)
         homeHandle.alpha = (1f - f * 2.2f).coerceIn(0f, 1f)
         homeTitle.alpha = ((f - 0.25f) * 1.6f).coerceIn(0f, 1f)
+        // tucked away the cards' tops would peek under the bar: they fade with the slide
+        homeCards.alpha = (f * 1.8f).coerceIn(0f, 1f)
+        exploreCard?.alpha = homeCards.alpha
         homeHandle.visibility = if (homeHandle.alpha > 0f) View.VISIBLE else View.INVISIBLE
         updateMapInsets()
     }
