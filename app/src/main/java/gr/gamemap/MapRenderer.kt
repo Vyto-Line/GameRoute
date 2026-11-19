@@ -303,7 +303,7 @@ class MapRenderer(private val car: Boolean = false) {
             if (car) drawBanner(c, Rect(area.left, 0, area.right, area.bottom), d * 0.8f, theme, pad = 8 * d)
             else drawBanner(c, area, d, theme)
         }
-        convoyStrip.setEmpty(); carConvoyBottom = 0f
+        convoyStrip.setEmpty(); carConvoyBottom = 0f; carConvoyRect.setEmpty()
         // the convoy strip/box only on the convoy's own route (a route of my own looks like any other)
         if (hud && Convoy.active && Convoy.onConvoyRoute && !NavEngine.arrived && !NavEngine.planningOn(car)) {
             if (car) drawCarConvoy(c, area, d, theme) else drawConvoyStrip(c, area, d, theme)
@@ -2244,6 +2244,8 @@ class MapRenderer(private val car: Boolean = false) {
     /** Where the phone's convoy strip is (taps open the list). */
     val convoyStrip = RectF()
     private var carConvoyBottom = 0f
+    private val carConvoyRect = RectF()
+    internal fun carConvoyRectForTest() = RectF(carConvoyRect)
     private var carLobbyShown = false
 
     /** The others in the convoy: an arrow in their colour, name and speed. */
@@ -2371,7 +2373,7 @@ class MapRenderer(private val car: Boolean = false) {
         val w = minOf(400 * d, a.width() - 28f * d)
         val rowH = 26 * d
         val r = RectF(a.left + 12 * d, bannerBottom + 8 * d, a.left + 12 * d + w, bannerBottom + 8 * d + 46 * d + rows.size * rowH)
-        carConvoyBottom = r.bottom
+        carConvoyBottom = r.bottom; carConvoyRect.set(r)
         panel(c, r, d, t, outline = true)
         text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 11 * d
         text.color = Ui.onPanel(t, t.route, 3.0)

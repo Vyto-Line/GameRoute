@@ -283,17 +283,102 @@ object NavEngine {
     private val declined = mutableListOf<Pair<RouteOption, Long>>()
 
     private var secondsPerMeter = 0.08
+
+    // ---------------------------------------------------------------- time left (steady)
+    /**
+     * Time from each route point to the end, without traffic. Not "distance × the route's average
+     * speed": a stretch of motorway and a stretch of city streets take very different times, so the
+     * route's own time is spread over its stretches by their speed limits (where known), else evenly.
+     */
+    private var timeLeftOf: DoubleArray? = null
+    private var timeLeftFor: RouteOption? = null
+    private var timeLeftLimits: List<Stretch>? = null
+
+    private fun plainLeft(r: RouteOption, at: Double): Double {
+        if (timeLeftFor !== r || timeLeftLimits !== r.limits) {
+            timeLeftFor = r; timeLeftLimits = r.limits
+            val n = r.points.size
+            val w = DoubleArray(n)  // weight of the stretch ending at point i
+            var total = 0.0
+            for (i in 1 until n) {
+                val mid = (r.cum[i - 1] + r.cum[i]) / 2
+                val kmh = r.limits.firstOrNull { mid >= it.start && mid < it.end }?.value?.takeIf { it in 10..140 }
+                // typical driving is a bit under the limit, slower still on slow roads (lights, corners)
+                val speed = if (kmh != null) (kmh * (if (kmh <= 50) 0.62 else if (kmh <= 90) 0.78 else 0.88)) / 3.6 else 0.0
+                w[i] = if (speed > 0) (r.cum[i] - r.cum[i - 1]) / speed else -1.0
+            }
+            // stretches without a limit: the route's average for the rest
+            val known = (1 until n).filter { w[it] >= 0 }
+            val knownLen = known.sumOf { r.cum[it] - r.cum[it - 1] }
+            val knownT = known.sumOf { w[it] }
+            val unknownLen = (r.length - knownLen).coerceAtLeast(0.0)
+            val restSpm = if (unknownLen > 1) ((r.duration - knownT).coerceAtLeast(unknownLen * 0.03)) / unknownLen else 0.0
+            for (i in 1 until n) { if (w[i] < 0) w[i] = (r.cum[i] - r.cum[i - 1]) * restSpm; total += w[i] }
+            // scaled so the whole route still takes the router's time
+            val k = if (total > 1) r.duration / total else 1.0
+            val left = DoubleArray(n)
+            for (i in n - 2 downTo 0) left[i] = left[i + 1] + w[i + 1] * k
+            timeLeftOf = left
+        }
+        val left = timeLeftOf ?: return (r.length - at).coerceAtLeast(0.0) * secondsPerMeter
+        var i = java.util.Arrays.binarySearch(r.cum, at.coerceIn(0.0, r.length))
+        if (i < 0) i = (-i - 2).coerceAtLeast(0)
+        if (i >= r.points.size - 1) return 0.0
+        val seg = r.cum[i + 1] - r.cum[i]
+        val f = if (seg > 0) ((at - r.cum[i]) / seg).coerceIn(0.0, 1.0) else 0.0
+        return left[i] + (left[i + 1] - left[i]) * f
+    }
+
+    /** When the arrival shown on screen is (eased towards the real estimate, so it doesn't jump). */
+    private var shownArrival = 0L
+    private var etaAt = 0L
+
+    /**
+     * The arrival time on screen follows the estimate smoothly: small changes at once, big ones
+     * (a reroute, a traffic update, one odd GPS fix) eased in over ~15 s instead of a jump.
+     */
+    private fun setEta(raw: Double) {
+        val now = System.currentTimeMillis()
+        val target = now + (raw * 1000).toLong()
+        val dt = if (etaAt == 0L) 1.0 else ((now - etaAt) / 1000.0).coerceIn(0.0, 5.0)
+        etaAt = now
+        shownArrival = when {
+            shownArrival == 0L || raw < 60 -> target                    // first estimate, or nearly there
+            Math.abs(target - shownArrival) < 20_000 -> target          // under 20 s: just follow
+            else -> shownArrival + ((target - shownArrival) * (1 - Math.pow(0.86, dt))).toLong()
+        }
+        remainingSeconds = ((shownArrival - now) / 1000.0).coerceAtLeast(0.0)
+    }
     private var nearest = 0
     private var offRouteCount = 0
     private var parkingReady = false
-    /** Closes the arrival card after a minute, but not while its parking list is open. */
+    /**
+     * After arriving: the route ends by itself 30 s later, and the arrival card goes with it.
+     * A clock of its own (every 5 s), not the GPS: a parked phone may send no fixes at all.
+     * Waits while the car's parking list is open (up to 5 minutes) or a race is still on.
+     */
     private val closeArrival: Runnable = object : Runnable {
         override fun run() {
-            if (!arrived) return
-            if (CarParking.list != null || raceGoingOn()) { main.postDelayed(this, 30_000); return }
-            stop(); dismissTrip()
+            val now = System.currentTimeMillis()
+            if (arrived) {
+                val since = now - arrivedAtMs
+                val hold = raceGoingOn() || (CarParking.list != null && since < 300_000)
+                if (!hold && since >= ARRIVAL_CLOSE_MS) {
+                    CrashLog.note("route ended by itself after arriving")
+                    stop(); dismissTrip(); return
+                }
+                main.postDelayed(this, 5_000); return
+            }
+            // the route has ended but the card is still up (no GPS fixes to close it): close it here
+            if (lastTrip != null && !active) {
+                if (raceGoingOn()) { main.postDelayed(this, 5_000); return }
+                if (tripEndTime == 0L) tripEndTime = now
+                if (now - tripEndTime >= ARRIVAL_CLOSE_MS) { CrashLog.note("trip card closed by itself"); dismissTrip(); return }
+                main.postDelayed(this, 5_000)
+            }
         }
     }
+    const val ARRIVAL_CLOSE_MS = 30_000L
     private var lastRouteAt = 0L
     /** Routes (first route, reroutes, previews): never wait behind anything else. */
     private val io = Executors.newSingleThreadExecutor()
@@ -522,6 +607,7 @@ object NavEngine {
         stops.clear()
         Places.addRecent(place)
         lastTrip = null
+        shownArrival = 0L; etaAt = 0L   // a new trip: the first estimate shows as it is
         tripStart = System.currentTimeMillis(); tripMeters = 0.0; tripSaved = 0; tripBonus = 0; lastPos = null; tripPlanned = -1.0
         Xp.startTrip()
         Perf.driveStarted()
@@ -644,6 +730,8 @@ object NavEngine {
         current = null; nextStep = -1
         loading = false; arrived = false; error = null; offer = null
         main.removeCallbacks(routeWatchdog); routeSeq++
+        // a trip card left up (End tapped near the end): it closes by itself too
+        main.removeCallbacks(closeArrival); if (lastTrip != null) main.postDelayed(closeArrival, 5_000)
         Voice.stop()
         if (::appContext.isInitialized) {
             NavService.update(appContext) // (still in a convoy: keeps sharing, with its own notice)
@@ -967,7 +1055,7 @@ object NavEngine {
             speedAtFix = if (l.hasSpeed()) l.speed else speedAtFix
         }
         remainingDistance = (r.length - along).coerceAtLeast(0.0)
-        remainingSeconds = remainingDistance * secondsPerMeter * trafficRatio
+        setEta(plainLeft(r, along) * trafficRatio)
         maybeRefreshTraffic(pos)
         checkStops(pos)
         LiveShare.tick()
@@ -989,8 +1077,8 @@ object NavEngine {
                 LiveShare.stop("arrived")
                 Convoy.arrived()
                 Voice.say(Phrases.instruction(r.steps.lastOrNull() ?: NavStep("arrive", "arrive", "", 0, dest, null), Voice.lang))
-                // the arrival card stays a minute (Parking / Done), then the trip closes by itself
-                main.postDelayed(closeArrival, 60_000)
+                // the arrival card stays 30 s (Parking / Done), then the route ends by itself
+                main.removeCallbacks(closeArrival); main.postDelayed(closeArrival, 5_000)
             }
             changed.fire()
             return
@@ -1079,7 +1167,7 @@ object NavEngine {
         val r = current ?: return
         trafficAt = System.currentTimeMillis()
         val from = along
-        val plain = remainingDistance * secondsPerMeter
+        val plain = plainLeft(r, along)
         val declinedNow = declined.toList()
         val nearEnd = remainingDistance < 1500
         val hasOffer = offer != null
@@ -1091,7 +1179,7 @@ object NavEngine {
                 trafficDelaySeconds = res.delay
                 r.traffic = res.traffic
                 if (res.limits.isNotEmpty()) r.limits = res.limits
-                remainingSeconds = remainingDistance * secondsPerMeter * trafficRatio
+                setEta(plainLeft(r, along) * trafficRatio)
                 changed.fire()
             }
             if (res == null || hasOffer || nearEnd) return@execute

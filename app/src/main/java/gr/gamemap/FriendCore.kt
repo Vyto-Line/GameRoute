@@ -203,12 +203,17 @@ class FriendCore(private val store: Store, private val wire: Wire, private val c
     /** How many convoys I was in with [fid] (counted on this phone only). */
     fun drivesWith(fid: String): Int = try { JSONObject(store.get("drives") ?: "{}").optInt(fid, 0) } catch (e: Exception) { 0 }
 
+    /** My nicknames, read once (looked up on every frame for the convoy's names). */
+    @Volatile private var nicks: Map<String, String>? = null
     /** My own name for a friend (only on my phone): blank = the name they chose. */
-    fun nickname(fid: String): String = try { JSONObject(store.get("nicks") ?: "{}").optString(fid) } catch (e: Exception) { "" }
+    fun nickname(fid: String): String = (nicks ?: try {
+        val o = JSONObject(store.get("nicks") ?: "{}"); o.keys().asSequence().associateWith { o.optString(it) }
+    } catch (e: Exception) { emptyMap() }.also { nicks = it })[fid].orEmpty()
     fun setNickname(fid: String, nick: String) {
         val o = try { JSONObject(store.get("nicks") ?: "{}") } catch (e: Exception) { JSONObject() }
         if (nick.isBlank()) o.remove(fid) else o.put(fid, nick.trim().take(30))
         store.put("nicks", o.toString())
+        nicks = null
     }
     /** What I call a friend: my nickname, or their name. */
     fun shownName(f: Friend): String = nickname(f.fid).ifBlank { f.name }

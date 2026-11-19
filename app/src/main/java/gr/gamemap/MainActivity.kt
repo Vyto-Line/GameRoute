@@ -2052,13 +2052,22 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
         tripCard.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(pill("🅿 Parking nearby") {
+            // both the same height, one line each (a two-line Parking button broke its outline)
+            val h = (52 * d).toInt()
+            addView(pill("🅿  " + L.t("Parking")) {
+                if (NavEngine.arrived) NavEngine.stop()
                 NavEngine.dismissTrip(); showNearby("PARKING NEARBY", listOf("parking"))
-            }.apply { setTextColor(ink); textSize = 15f; background = bg(Color.TRANSPARENT, dim(160), 1.5f, 14f) },
-                LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.2f).apply { marginEnd = (10 * d).toInt() })
-            addView(pill("Done") { NavEngine.dismissTrip() }.apply {
+            }.apply {
+                setTextColor(ink); textSize = 15f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER
+                setPadding((8 * d).toInt(), 0, (8 * d).toInt(), 0); minHeight = 0; minimumHeight = 0
+                background = bg(Color.TRANSPARENT, dim(160), 1.5f, 14f)
+                contentDescription = L.t("Parking nearby")
+            }, LinearLayout.LayoutParams(0, h, 1f).apply { marginEnd = (10 * d).toInt() })
+            // Done: the route is over too (no "Mission complete" bar left behind)
+            addView(pill("Done") { if (NavEngine.arrived) NavEngine.stop(); NavEngine.dismissTrip() }.apply {
                 setTextColor(onAccent(accent)); typeface = t.typeface; background = bg(accent, radius = 14f)
-            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                maxLines = 1; gravity = Gravity.CENTER; setPadding((8 * d).toInt(), 0, (8 * d).toInt(), 0); minHeight = 0; minimumHeight = 0
+            }, LinearLayout.LayoutParams(0, h, 1f))
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (18 * d).toInt() })
     }
 

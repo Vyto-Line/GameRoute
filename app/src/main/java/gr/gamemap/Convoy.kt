@@ -22,7 +22,8 @@ import java.util.concurrent.ConcurrentHashMap
 object Convoy {
     class Member(
         val id: String,
-        var name: String,
+        /** The name they gave themselves. */
+        var theirName: String,
         var pos: LatLng? = null,
         var heading: Float = 0f,
         var kmh: Int = 0,
@@ -36,6 +37,10 @@ object Convoy {
         /** Their friend id and code (to add them as a friend from the convoy); blank on old versions. */
         @Volatile var fid = ""
         @Volatile var fc = ""
+        /** What I call them: my nickname for this friend if I gave one, else their own name. */
+        var name: String
+            get() = (if (fid.isNotBlank() && Friends.ready) Friends.core.nickname(fid) else "").ifBlank { theirName }
+            set(v) { theirName = v }
         /** On a route of their own: where to (so the others can join them). */
         @Volatile var ownDest: Place? = null
         /** Pressed "I'm ready" at the start (and when: the race starts 4 s after the last one). */
@@ -543,7 +548,7 @@ object Convoy {
         if (fc.isNotBlank() && fc != m.fc) {
             m.fid = o.optString("fid"); m.fc = fc
             // remembered for "Drove with you" (Add a friend), once per person
-            if (Friends.ready) Friends.core.droveWith(m.fid, m.name, fc, destination?.name.orEmpty())
+            if (Friends.ready) Friends.core.droveWith(m.fid, m.theirName, fc, destination?.name.orEmpty())
             main.post { changed.fire() }
         }
         if (o.has("lat")) {
