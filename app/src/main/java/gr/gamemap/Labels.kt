@@ -162,12 +162,15 @@ class Labels {
             wasShown = !legacy && shownAt.containsKey(cd.id)
             // back within a moment of leaving: carries on from how faded it was (no blink)
             val back = leaving.remove(cd.id)?.let { (_, at) -> val left = (255 - (frameNow - at) * 255 / FADE_OUT).coerceIn(0, 255); frameNow - (left - 80).coerceAtLeast(0) * 250 / 175 }
+            why = ""
             val ok = if (cd.place) placePoint(c, cd, area, d) else placeStreet(c, cd, n, area, d)
+            if (!ok && wasShownBefore(cd.id)) lostWhy[cd.id] = why
             if (ok) { count++; nowShown[cd.id] = shownAt[cd.id] ?: back ?: frameNow }
         }
         // (tests: how often names come and go)
-        for (id in nowShown.keys) if (!shownAt.containsKey(id)) { appeared++; goneAt[id]?.let { if (frameNow - it < 600) blinks++ } }
-        for (id in shownAt.keys) if (!nowShown.containsKey(id)) { vanished++; goneAt[id] = frameNow }
+        for (id in nowShown.keys) if (!shownAt.containsKey(id)) { appeared++; goneAt[id]?.let { if (frameNow - it < 600) { blinks++; if (blinkLog.length < 2000) blinkLog.append(id).append(" (").append(goneWhy[id]).append(")\n") } } }
+        for (id in shownAt.keys) if (!nowShown.containsKey(id)) { vanished++; goneAt[id] = frameNow; goneWhy[id] = lostWhy[id] ?: "not tried (cap or off screen)" }
+        lostWhy.clear()
         if (goneAt.size > 400) goneAt.clear()
         // names shown last frame that didn't fit now: fade out over a fifth of a second
         if (!legacy) for ((id, _) in shownAt) if (!nowShown.containsKey(id)) cands.firstOrNull { it.id == id }?.let { leaving[id] = it to frameNow }
@@ -205,7 +208,13 @@ class Labels {
         /** A name gone and back within 0.6 s: what reads as blinking. */
         @JvmStatic var blinks = 0
         private val goneAt = HashMap<String, Long>()
+        private val goneWhy = HashMap<String, String>()
+        @JvmStatic val blinkLog = StringBuilder()
     }
+
+    private var why = ""
+    private val lostWhy = HashMap<String, String>()
+    private fun wasShownBefore(id: String) = shownAt.containsKey(id)
 
     private var fadeAlpha = -1
     private val FADE_OUT = 200L
@@ -222,7 +231,8 @@ class Labels {
         text.textAlign = Paint.Align.CENTER; halo.textAlign = Paint.Align.CENTER
         val w = text.measureText(cd.name) / 2 + 4 * d
         val box = box(x - w, y - text.textSize, x + w, y + text.textSize * 0.35f)
-        if (!forced && (!inside(box, area) || !free(box))) return false
+        if (!forced && !inside(box, area)) { why = "edge"; return false }
+        if (!forced && !free(box)) { why = "overlap"; return false }
         val img = image(cd.name)
         bmpPaint.alpha = alphaFor(cd)
         c.drawBitmap(img, x - img.width / 2f, y - img.height / 2f - text.textSize * 0.3f, bmpPaint)
@@ -235,7 +245,7 @@ class Labels {
         var i = 2
         while (i < n) { len += hypot(screen[i] - screen[i - 2], screen[i + 1] - screen[i - 1]); i += 2 }
         val tw = text.measureText(cd.name)
-        if (len < tw * (if (wasShown || forced) 1.0f else 1.15f)) return false
+        if (len < tw * (if (wasShown || forced) 1.0f else 1.15f)) { why = "short"; return false }
         // the middle of the street and its direction there (no Path objects: this runs every frame)
         var walked = 0f
         var mx = screen[0]; var my = screen[1]; var tx = 1f; var ty = 0f
@@ -258,11 +268,12 @@ class Labels {
         flipped[cd.id] = flip
         if (flip) { tx = -tx; ty = -ty }
         // same street already named close by?
-        if (!forced) for ((nm, at) in placedNames) if (nm == cd.name && hypot(at[0] - mx, at[1] - my) < 260 * d) return false
+        if (!forced) for ((nm, at) in placedNames) if (nm == cd.name && hypot(at[0] - mx, at[1] - my) < 260 * d) { why = "same name near"; return false }
         val hw = tw / 2; val h = text.textSize * 0.7f
         val ex = kotlin.math.abs(tx * hw) + kotlin.math.abs(ty * h); val ey = kotlin.math.abs(ty * hw) + kotlin.math.abs(tx * h)
         val box = box(mx - ex, my - ey, mx + ex, my + ey)
-        if (!forced && (!inside(box, area) || !free(box))) return false
+        if (!forced && !inside(box, area)) { why = "edge"; return false }
+        if (!forced && !free(box)) { why = "overlap"; return false }
         if (!forced) placedNames += cd.name to floatArrayOf(mx, my)
         val img = image(cd.name)
         bmpPaint.alpha = alphaFor(cd)

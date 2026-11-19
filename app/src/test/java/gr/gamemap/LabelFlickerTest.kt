@@ -40,7 +40,7 @@ class LabelFlickerTest {
             val c = Canvas(frame)
             // settle
             repeat(20) { mr.draw(c, 1080, 2000, Rect(0, 0, 1080, 2000), 2.75f, hud = false); org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(30)) }
-            Labels.appeared = 0; Labels.vanished = 0; Labels.blinks = 0
+            Labels.appeared = 0; Labels.vanished = 0; Labels.blinks = 0; Labels.blinkLog.append("-- ${if (legacy) "old" else "new"}\n")
             // turn 60 degrees in small steps, a frame each (~ a slow two-finger twist)
             repeat(120) {
                 MapState.phone.rotateBy(0.5f, 0f)
@@ -62,7 +62,7 @@ class LabelFlickerTest {
             File(out, "labels_${if (legacy) "old" else "new"}.png").outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 90, it) }
         }
         Labels.legacy = false
-        File(out, "labelflicker.txt").writeText(log.toString())
+        File(out, "labelflicker.txt").writeText(log.toString() + "blinks:\n" + Labels.blinkLog)
         val old = counts[true]!!.let { it.first + it.second }; val new = counts[false]!!.let { it.first + it.second }
         assertTrue("names still blink: $new times (old $old)", new <= old / 3 + 1)
     }
