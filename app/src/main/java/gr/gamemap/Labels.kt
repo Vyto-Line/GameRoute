@@ -160,8 +160,9 @@ class Labels {
             if (ok) { count++; nowShown[cd.id] = shownAt[cd.id] ?: back ?: frameNow }
         }
         // (tests: how often names come and go)
-        for (id in nowShown.keys) if (!shownAt.containsKey(id)) appeared++
-        for (id in shownAt.keys) if (!nowShown.containsKey(id)) vanished++
+        for (id in nowShown.keys) if (!shownAt.containsKey(id)) { appeared++; goneAt[id]?.let { if (frameNow - it < 600) blinks++ } }
+        for (id in shownAt.keys) if (!nowShown.containsKey(id)) { vanished++; goneAt[id] = frameNow }
+        if (goneAt.size > 400) goneAt.clear()
         // names shown last frame that didn't fit now: fade out over a fifth of a second
         if (!legacy) for ((id, _) in shownAt) if (!nowShown.containsKey(id)) cands.firstOrNull { it.id == id }?.let { leaving[id] = it to frameNow }
         if (leaving.isNotEmpty()) {
@@ -195,6 +196,9 @@ class Labels {
         @JvmStatic var legacy = false
         @JvmStatic var appeared = 0
         @JvmStatic var vanished = 0
+        /** A name gone and back within 0.6 s: what reads as blinking. */
+        @JvmStatic var blinks = 0
+        private val goneAt = HashMap<String, Long>()
     }
 
     private var fadeAlpha = -1
