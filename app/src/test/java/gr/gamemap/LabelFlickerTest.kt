@@ -49,6 +49,7 @@ class LabelFlickerTest {
                 Thread.sleep(16)
             }
             counts[legacy] = Labels.appeared to Labels.vanished
+            log.append("bearing now ${MapState.phone.userBearing} following=${MapState.phone.following}\n")
             log.append("${if (legacy) "old" else "new"}: names appeared ${Labels.appeared} times, vanished ${Labels.vanished} times over 120 frames\n")
             File(out, "labels_${if (legacy) "old" else "new"}.png").outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 90, it) }
         }
