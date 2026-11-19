@@ -39,14 +39,15 @@ class LabelFlickerTest {
             val frame = Bitmap.createBitmap(1080, 2000, Bitmap.Config.ARGB_8888)
             val c = Canvas(frame)
             // settle
-            repeat(10) { mr.draw(c, 1080, 2000, Rect(0, 0, 1080, 2000), 2.75f, hud = false); Thread.sleep(30) }
+            repeat(20) { mr.draw(c, 1080, 2000, Rect(0, 0, 1080, 2000), 2.75f, hud = false); org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(30)) }
             Labels.appeared = 0; Labels.vanished = 0
             // turn 60 degrees in small steps, a frame each (~ a slow two-finger twist)
             repeat(120) {
                 MapState.phone.rotateBy(0.5f, 0f)
                 MapState.tick()
                 mr.draw(c, 1080, 2000, Rect(0, 0, 1080, 2000), 2.75f, hud = false)
-                Thread.sleep(16)
+                // the app's clock (names are re-placed 8 times a second, fades run on it)
+                org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(16))
             }
             counts[legacy] = Labels.appeared to Labels.vanished
             log.append("bearing now ${MapState.phone.userBearing} following=${MapState.phone.following}\n")
