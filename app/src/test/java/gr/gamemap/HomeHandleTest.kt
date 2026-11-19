@@ -73,7 +73,7 @@ class HomeHandleTest {
         // swipe up on the sheet
         val sheet = find({ it.contentDescription?.toString() == "Saved & recent" }) as ViewGroup
         val loc = IntArray(2); sheet.getLocationOnScreen(loc)
-        val x = loc[0] + sheet.width / 2f; val y = loc[1] + sheet.height / 2f
+        val x = loc[0] + sheet.width / 2f; val y = loc[1] + 90f // on the bar (the rest is slid off the screen)
         val t0 = SystemClock.uptimeMillis()
         fun ev(a: Int, yy: Float, dt: Long) = MotionEvent.obtain(t0, t0 + dt, a, x, yy, 0)
         val h0 = sheet.height - sheet.translationY.toInt()
