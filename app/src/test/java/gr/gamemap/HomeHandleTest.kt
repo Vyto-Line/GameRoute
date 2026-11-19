@@ -75,10 +75,22 @@ class HomeHandleTest {
         val x = loc[0] + sheet.width / 2f; val y = loc[1] + sheet.height / 2f
         val t0 = SystemClock.uptimeMillis()
         fun ev(a: Int, yy: Float, dt: Long) = MotionEvent.obtain(t0, t0 + dt, a, x, yy, 0)
+        val h0 = sheet.height
         root.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, y, 0))
-        root.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, y - 150, 80))
-        root.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, y - 300, 160))
+        root.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, y - 20, 16))
+        root.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, y - 70, 48))
         looper.idle()
+        val hMid = sheet.height
+        shot("home_46b_dragging")
+        log.append("sheet height: closed $h0, mid-drag $hMid\n")
+        assertTrue("the sheet follows the finger ($h0 → $hMid)", hMid > h0)
+        root.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, y - 110, 64))
+        root.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, y - 120, 80))
+        // the glide: part-way, then done
+        looper.idleFor(java.time.Duration.ofMillis(100))
+        val hGlide = sheet.height
+        looper.idleFor(java.time.Duration.ofMillis(500))
+        log.append("gliding $hGlide, open ${sheet.height}\n")
         shot("home_46b_open")
         log.append("after swipe up: ${texts().filter { it.contains("Syntagma") || it.startsWith("Saved") || it.startsWith("Recent") }}\n")
         assertTrue("swipe up opens it", texts().any { it.contains("Syntagma") })

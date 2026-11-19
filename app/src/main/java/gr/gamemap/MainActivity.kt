@@ -89,7 +89,81 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Saved & recent pulled up (remembered); tucks itself away after you pick a place. */
     private var homeOpen: Boolean
         get() = prefs().getBoolean("homeOpen", false)
-        set(v) { if (v != homeOpen) { prefs().edit().putBoolean("homeOpen", v).apply(); lastHomeKey = ""; refreshChrome() } }
+        set(v) { setHomeOpen(v) }
+
+    private var homeAnim: android.animation.ValueAnimator? = null
+
+    /** The cards' row (inside its sideways scroll). */
+    private val homeContent get() = homeCards.parent as View
+
+    /**
+     * Opens or tucks away Saved & recent with the sheet's height gliding from where it is now
+     * (the closed bar, the open strip, or wherever the finger let go) to where it ends up.
+     */
+    private fun setHomeOpen(v: Boolean) {
+        val from = homeSheet.height
+        // where each part's fade starts: hidden ones from nothing, ones mid-drag from where they are
+        val startAlpha = listOf(homeTitle, homeContent, homeHandle).associateWith { if (it.visibility == View.VISIBLE) it.alpha else 0f }
+        val changed = v != prefs().getBoolean("homeOpen", false)
+        if (changed) prefs().edit().putBoolean("homeOpen", v).apply()
+        lastHomeKey = ""; refreshChrome()   // the end state's views
+        if (homeSheet.visibility != View.VISIBLE || from <= 0) return
+        homeAnim?.cancel()
+        homeSheet.measure(View.MeasureSpec.makeMeasureSpec(homeSheet.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val to = homeSheet.measuredHeight
+        val incoming = if (v) listOf(homeTitle, homeContent) else listOf(homeHandle)
+        if (from == to) { homeSheet.layoutParams = homeSheet.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }; incoming.forEach { it.alpha = 1f }; return }
+        // the incoming part fades in as the sheet grows / shrinks
+        incoming.forEach { it.alpha = startAlpha[it] ?: 0f }
+        val a0 = incoming.associateWith { it.alpha }
+        homeAnim = android.animation.ValueAnimator.ofInt(from, to).apply {
+            duration = animMs(if (Math.abs(to - from) > 60 * d) 280L else 180L)
+            interpolator = android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f)
+            addUpdateListener { a ->
+                homeSheet.layoutParams = homeSheet.layoutParams.apply { height = a.animatedValue as Int }
+                val f = (a.animatedFraction * 1.4f - 0.3f).coerceIn(0f, 1f)
+                incoming.forEach { val s0 = a0[it] ?: 0f; it.alpha = s0 + (1f - s0) * f }
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    homeSheet.layoutParams = homeSheet.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
+                    incoming.forEach { it.alpha = 1f }
+                }
+            })
+            start()
+        }
+    }
+
+    // the finger dragging the sheet: it follows, between the closed bar and the open strip
+    private var homeDragFrom = 0
+    private var homeDragMin = 0
+    private var homeDragMax = 0
+
+    private fun homeDragStart() {
+        homeAnim?.cancel()
+        val open = prefs().getBoolean("homeOpen", false)
+        homeDragFrom = homeSheet.height
+        val spec = View.MeasureSpec.makeMeasureSpec(homeSheet.width, View.MeasureSpec.EXACTLY)
+        val any = homeCards.childCount > 0
+        // both sizes: the bar alone, and the strip
+        homeTitle.visibility = View.GONE; homeContent.visibility = View.GONE; homeHandle.visibility = View.VISIBLE
+        homeSheet.measure(spec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); homeDragMin = homeSheet.measuredHeight
+        homeHandle.visibility = View.GONE
+        if (any) { homeTitle.visibility = View.VISIBLE; homeContent.visibility = View.VISIBLE }
+        homeSheet.measure(spec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); homeDragMax = homeSheet.measuredHeight
+        // while dragging the strip is laid out (clipped by the sheet's height); the bar's words fade
+        homeHandle.visibility = View.VISIBLE
+        homeHandle.alpha = if (open) 0f else 1f
+        homeSheet.layoutParams = homeSheet.layoutParams.apply { height = homeDragFrom }
+    }
+
+    private fun homeDragTo(dy: Float) {
+        val h = (homeDragFrom - dy).toInt().coerceIn(homeDragMin, maxOf(homeDragMin, homeDragMax))
+        val f = if (homeDragMax > homeDragMin) (h - homeDragMin).toFloat() / (homeDragMax - homeDragMin) else 0f
+        homeHandle.alpha = (1f - f * 2f).coerceIn(0f, 1f)
+        homeTitle.alpha = ((f - 0.3f) * 1.6f).coerceIn(0f, 1f); homeContent.alpha = homeTitle.alpha
+        homeSheet.layoutParams = homeSheet.layoutParams.apply { height = h }
+    }
     private lateinit var navCard: LinearLayout
     private lateinit var etaBig: TextView
     private lateinit var etaTraffic: TextView
@@ -1082,15 +1156,32 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         homeSheet = object : LinearLayout(this) {
             // a swipe up opens it, a swipe down tucks it away (taps and the cards' sideways scroll still work)
             private var downX = 0f; private var downY = 0f
+            private var dragging = false
+            private var lastY = 0f; private var lastT = 0L; private var vy = 0f
             override fun dispatchTouchEvent(e: android.view.MotionEvent): Boolean {
                 when (e.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY }
-                    android.view.MotionEvent.ACTION_UP -> {
+                    android.view.MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; dragging = false; lastY = e.rawY; lastT = e.eventTime; vy = 0f }
+                    android.view.MotionEvent.ACTION_MOVE -> {
                         val dy = e.rawY - downY; val dx = e.rawX - downX
-                        if (Math.abs(dy) > 40 * d && Math.abs(dy) > Math.abs(dx) * 1.5f) {
-                            homeOpen = dy < 0
-                            e.action = android.view.MotionEvent.ACTION_CANCEL
+                        if (!dragging && Math.abs(dy) > 10 * d && Math.abs(dy) > Math.abs(dx) * 1.5f) {
+                            dragging = true; homeDragStart()
+                            // the cards don't also get this touch (no tap, no sideways scroll)
+                            val c = android.view.MotionEvent.obtain(e).apply { action = android.view.MotionEvent.ACTION_CANCEL }
+                            super.dispatchTouchEvent(c); c.recycle()
                         }
+                        if (dragging) {
+                            val dt = (e.eventTime - lastT).coerceAtLeast(1)
+                            vy = vy * 0.5f + (e.rawY - lastY) / dt * 0.5f; lastY = e.rawY; lastT = e.eventTime
+                            homeDragTo(dy); return true
+                        }
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> if (dragging) {
+                        dragging = false
+                        val dy = e.rawY - downY
+                        // a flick decides; otherwise past halfway
+                        val mid = (homeDragMin + homeDragMax) / 2
+                        homeOpen = when { vy < -0.5f -> true; vy > 0.5f -> false; else -> (homeDragFrom - dy) > mid }
+                        return true
                     }
                 }
                 return super.dispatchTouchEvent(e)
