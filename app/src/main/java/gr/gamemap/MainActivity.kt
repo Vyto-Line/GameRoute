@@ -89,7 +89,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Saved & recent pulled up (remembered); tucks itself away after you pick a place. */
     private var homeOpen: Boolean
         get() = prefs().getBoolean("homeOpen", false)
-        set(v) { setHomeOpen(v) }
+        set(v) { glideHome(v) }
 
     private var homeAnim: android.animation.ValueAnimator? = null
 
@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
      * Opens or tucks away Saved & recent with the sheet's height gliding from where it is now
      * (the closed bar, the open strip, or wherever the finger let go) to where it ends up.
      */
-    private fun setHomeOpen(v: Boolean) {
+    private fun glideHome(v: Boolean) {
         val from = homeSheet.height
         // where each part's fade starts: hidden ones from nothing, ones mid-drag from where they are
         val startAlpha = listOf(homeTitle, homeContent, homeHandle).associateWith { if (it.visibility == View.VISIBLE) it.alpha else 0f }
