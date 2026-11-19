@@ -133,7 +133,7 @@ class ConvoyFlowTest {
         shot("flow_44a_button")
         // the car in a race with the map turned (the compass shows): the compass must sit clear of the race box
         val carR = MapRenderer(car = true)
-        MapState.car.userBearing = 35f
+        MapState.car.rotateBy(35f, 0f)
         for ((w, h, dd) in listOf(Triple(1920, 720, 1.6f), Triple(800, 480, 1.0f), Triple(1280, 720, 1.3f))) {
             val cb = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             repeat(3) { carR.draw(Canvas(cb), w, h, android.graphics.Rect(0, 0, w, h), dd, true) }
@@ -142,7 +142,7 @@ class ConvoyFlowTest {
             log.append("car ${w}x$h: race box $box compass ${carR.compassBounds}\n")
             assertTrue("compass overlaps the race box at ${w}x$h", !android.graphics.RectF.intersects(box, carR.compassBounds) || carR.compassBounds.isEmpty)
         }
-        MapState.car.userBearing = null
+        MapState.car.clearRotation()
         activity.openSheetForTest("convoy"); shot("flow_44b_panel")
         log.append("44b: ${texts().filter { it.contains("Race to") || it.contains("See all") || it.contains("km/h") }}\n")
         assertTrue(texts().any { it.contains("Race to") })
