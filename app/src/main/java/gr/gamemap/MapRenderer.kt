@@ -567,26 +567,23 @@ class MapRenderer(private val car: Boolean = false) {
             }
         }
 
-        // Lock lanes onto the map's roads (within ~25 m, same direction only).
-        val maxSnap = maxOf(25f / mpp, 12f * u)
+        // Lanes go on the map's own roads, walked every ~3 m so they follow each bend
+        // (TomTom's own lines are simplified and cut across the blocks). No map data yet:
+        // nothing drawn (it comes a moment later) rather than lines through the buildings.
+        val maxSnap = maxOf(20f / mpp, 10f * u)
         val roads = RoadSnap.index(z, ax * span, ay * span, span, maxSnap)
-        fun lane(raw: FloatArray, side: Float): FloatArray? {
-            val fallback = raw.copyOf().also { offsetLine(it, side * lane) }
-            return if (roads == null) fallback else RoadSnap.snapLane(roads, raw, fallback, maxSnap, side, 1.8f * u)
-        }
+            ?: return TrafficPaths(paths, arrows, ax * span, ay * span)
+        val step = maxOf(3f / mpp, 1.5f * u)
+        fun lane(raw: FloatArray, side: Float) =
+            RoadSnap.snapLanePieces(roads, raw, maxSnap, side, 1.8f * u, step)
         for (sg in t.segs) {
             val base = FloatArray(sg.pts.size)
             for (i in base.indices) base[i] = sg.pts[i] * k
             val side = if (sg.leftHand) -1f else 1f
-            if (sg.oneWay) {
-                // data for one direction: points run the way the traffic goes
-                lane(base, side)?.let { add(it, sg.state) }
-            } else {
-                // data for both directions: one lane each way, each pointing its own way
-                // (a lane against a one-way street is dropped)
-                lane(base, side)?.let { add(it, sg.state) }
-                lane(reversedLine(base), side)?.let { add(it, sg.state) }
-            }
+            // one lane per direction the data covers, each on its own half of the road
+            // (a lane against a one-way street is dropped)
+            lane(base, side)?.forEach { add(it, sg.state) }
+            if (!sg.oneWay) lane(reversedLine(base), side)?.forEach { add(it, sg.state) }
         }
         return TrafficPaths(paths, arrows, ax * span, ay * span)
     }

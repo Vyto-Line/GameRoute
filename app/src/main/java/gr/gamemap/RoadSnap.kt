@@ -130,4 +130,87 @@ object RoadSnap {
         // mostly along a one-way street the other way: there is no traffic in this direction
         return if (wrongWay * 2 > n) null else out
     }
+
+    /**
+     * Puts one lane on the map's roads as it really runs. TomTom's line is simplified (its
+     * corners are tens of metres apart), so snapping only its corners still cut across the
+     * blocks between them. Here the line is walked every [step] pixels and each point goes
+     * onto the road under it, so the lane follows the road's own bends. Where no road runs
+     * the same way nearby, the lane breaks (nothing is drawn there) instead of crossing
+     * buildings; it also breaks if it would jump to another road.
+     * Returns the pieces (each at least two points), or null for a lane against a one-way street.
+     */
+    fun snapLanePieces(idx: Index, raw: FloatArray, maxDist: Float, side: Float, minHalfLane: Float, step: Float): List<FloatArray>? {
+        val n = raw.size / 2
+        if (n < 2) return emptyList()
+        val pieces = ArrayList<FloatArray>()
+        var cur = FloatArrayBuilder()
+        val cand = HashSet<Int>()
+        var wrongWay = 0; var samples = 0
+        var prevSeg = -1; var px0 = 0f; var py0 = 0f
+        fun flush() { if (cur.size >= 4) pieces += cur.toArray(); cur = FloatArrayBuilder(); prevSeg = -1 }
+        for (i in 0 until n - 1) {
+            val ax = raw[i * 2]; val ay = raw[i * 2 + 1]; val bx = raw[i * 2 + 2]; val by = raw[i * 2 + 3]
+            val len = hypot(bx - ax, by - ay)
+            if (len == 0f) continue
+            val dx = (bx - ax) / len; val dy = (by - ay) / len
+            val k = maxOf(1, (len / step).toInt())
+            for (j in 0..k) {
+                if (j == k && i < n - 2) break // the next stretch starts here
+                val t = j.toFloat() / k
+                val x = ax + (bx - ax) * t; val y = ay + (by - ay) * t
+                samples++
+                idx.near(x, y, cand)
+                var best = -1; var bestScore = Float.MAX_VALUE; var qx = 0f; var qy = 0f
+                var againstD = Float.MAX_VALUE
+                for (si in cand) {
+                    val sg = idx.segs[si]
+                    var sx = sg[2] - sg[0]; var sy = sg[3] - sg[1]
+                    val sl = hypot(sx, sy)
+                    if (sl == 0f) continue
+                    sx /= sl; sy /= sl
+                    val dot = sx * dx + sy * dy
+                    if (abs(dot) < 0.7f) continue // a cross street
+                    val tt = (((x - sg[0]) * sx + (y - sg[1]) * sy) / sl).coerceIn(0f, 1f)
+                    val cx = sg[0] + (sg[2] - sg[0]) * tt; val cy = sg[1] + (sg[3] - sg[1]) * tt
+                    val dd = hypot(x - cx, y - cy)
+                    if (dd > maxDist) continue
+                    if (sg[4] != 0f && dot * sg[4] < 0) { if (dd < againstD) againstD = dd; continue }
+                    // stay on the road we're on: another one must be clearly closer to win
+                    val score = dd + (if (prevSeg >= 0 && si != prevSeg && !touches(idx.segs[prevSeg], sg)) maxDist * 0.35f else 0f)
+                    if (score < bestScore) { bestScore = score; best = si; qx = cx; qy = cy }
+                }
+                if (best < 0) { if (againstD <= maxDist) wrongWay++; flush(); continue }
+                val sg = idx.segs[best]
+                if (sg[4] == 0f) {
+                    // a two-way road: the middle of our half
+                    var sx = sg[2] - sg[0]; var sy = sg[3] - sg[1]
+                    val sl = hypot(sx, sy); sx /= sl; sy /= sl
+                    if (sx * dx + sy * dy < 0) { sx = -sx; sy = -sy }
+                    val off = maxOf(sg[5] / 2, minHalfLane) * side
+                    qx += -sy * off; qy += sx * off
+                }
+                // a jump (onto another road, or across a gap): start a new piece
+                if (cur.size >= 2 && hypot(qx - px0, qy - py0) > step * 3f + maxDist * 0.5f) flush()
+                cur.add(qx, qy); px0 = qx; py0 = qy; prevSeg = best
+            }
+        }
+        flush()
+        return if (samples > 0 && wrongWay * 2 > samples) null else pieces
+    }
+
+    /** Two road segments that share an end (the same road continuing, or a junction). */
+    private fun touches(a: FloatArray, b: FloatArray): Boolean {
+        fun same(x0: Float, y0: Float, x1: Float, y1: Float) = abs(x0 - x1) < 0.5f && abs(y0 - y1) < 0.5f
+        return same(a[2], a[3], b[0], b[1]) || same(a[0], a[1], b[2], b[3]) || same(a[0], a[1], b[0], b[1]) || same(a[2], a[3], b[2], b[3])
+    }
+
+    private class FloatArrayBuilder {
+        private var a = FloatArray(32); var size = 0
+        fun add(x: Float, y: Float) {
+            if (size + 2 > a.size) a = a.copyOf(a.size * 2)
+            a[size++] = x; a[size++] = y
+        }
+        fun toArray() = a.copyOf(size)
+    }
 }
