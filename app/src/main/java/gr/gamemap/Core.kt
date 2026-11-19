@@ -149,6 +149,9 @@ object Geo {
 
     /** Signed smallest difference b - a, in -180..180. */
     fun angleDiff(a: Float, b: Float): Float = ((b - a + 540f) % 360f) - 180f
+
+    /** Halfway between two directions, the short way round. */
+    fun meanBearing(a: Float, b: Float): Float = (a + angleDiff(a, b) / 2 + 360f) % 360f
 }
 
 /** Sunrise and sunset, to switch themes between light and dark automatically. */

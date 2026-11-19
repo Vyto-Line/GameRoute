@@ -219,6 +219,9 @@ object LocationTracker : LocationListener {
      * street or the right street facing the wrong way for one fix, and the map swung there and back.
      */
     private var slowPending: Float? = null
+    private var travelFrom: LatLng? = null
+    private var travelBearing = 0f
+    private var travelAt = 0L
     private var savedDriveAt = 0L
 
     /**
@@ -250,7 +253,7 @@ object LocationTracker : LocationListener {
         // the arrow slid sideways ("moonwalking"). Small glides keep the road's heading.
         val from = fromPos; val to = toPos
         // (only at a proper speed: pulling away, the glide between two wobbly fixes swung the map)
-        val gliding = from != null && to != null && now - fixAt < 1000 && glideMeters > 3.0 && speed > 5f
+        val gliding = from != null && to != null && now - fixAt < 1000 && glideMeters > 3.0 && speed > 8f
         // the phone's compass, standing still: only on foot. In the car (Android Auto, or just
         // driven) it points anywhere (metal, the phone mount), and the map swung from it to the
         // road and back as you pulled away; there the way you were driving is kept instead.
@@ -269,7 +272,7 @@ object LocationTracker : LocationListener {
         var step = diff * (1 - exp(-dt / (if (gliding) 70.0 else 260.0))).toFloat()
         // slow (pulling away, creeping in traffic): the map turns at most 40° a second, so one odd
         // reading can't swing it; at speed, turns follow the road as before
-        if (speed < 5f && !gliding) step = step.coerceIn(-0.04f * dt, 0.04f * dt)
+        if (speed < 8f && !gliding) step = step.coerceIn(-0.04f * dt, 0.04f * dt)
         heading = if (turning) (heading + step + 360f) % 360f else target
         // standing still, a new fix a few cm away isn't worth 30 frames a second
         val moving = toPos != null && ((now - fixAt < 1000 && glideMeters > 0.8) || speed >= 2f)
@@ -392,7 +395,17 @@ object LocationTracker : LocationListener {
             (android.os.Build.VERSION.SDK_INT < 26 || !location.hasBearingAccuracy() || location.bearingAccuracyDegrees <= 30f)) {
             // under ~11 km/h GPS's direction swings 20-40° from one second to the next: the map
             // kept turning left and right; it keeps the last good direction until moving properly
-            headingTarget = confirmSlow(location.bearing, speed)
+            // under ~30 km/h GPS's own direction still wobbles 20-30°: averaged with the way the
+            // car has actually moved over the last dozen metres
+            val travel = travelBearing.takeIf { System.currentTimeMillis() - travelAt < 4000 }
+            val dir = if (speed < 8f && travel != null) Geo.meanBearing(location.bearing, travel) else location.bearing
+            headingTarget = confirmSlow(dir, speed)
+        }
+        // the way the car has really moved: every 12 m or more
+        val anchor = travelFrom
+        if (held == null && speed > 1f && real) {
+            if (anchor == null || Geo.distance(anchor, p) > 60) travelFrom = p
+            else if (Geo.distance(anchor, p) >= 12) { travelBearing = Geo.bearing(anchor, p); travelAt = System.currentTimeMillis(); travelFrom = p }
         }
         if (speed > 3f) {
             moveBearing = headingTarget; hasMoved = true; drovenAt = System.currentTimeMillis()
