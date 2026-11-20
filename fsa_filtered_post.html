@@ -1,0 +1,107 @@
+
+<style>
+    .card {
+        transition: .3s;
+    }
+
+        .card:hover {
+            box-shadow: 8px 8px 5px grey;
+            transform: scale(1.02);
+        }
+
+        /* Animation for the selected card when it is targeted */
+        .card:target {
+            scroll-margin: 10rem;
+            animation: target 1s ease-in-out 0.5s;
+            background-color: ghostwhite;
+        }
+
+    @keyframes target {
+
+        50% {
+            outline: 5px double #35C88A;
+            background-color: #35C88A;
+            outline-offset: 5px;
+            transform: scale(1.02);
+            opacity: 0.1;
+        }
+    }
+
+    .text-small {
+        font-size: 0.8rem;
+    }
+
+    #map {
+        height: 400px;
+        width: 100%;
+    }
+
+    img.position-huechange {
+        filter: hue-rotate(90deg);
+    }
+
+    img.open-huechange {
+        filter: hue-rotate(-50deg);
+    }
+
+    img.closed-huechange {
+        filter: hue-rotate(160deg);
+    }
+</style>
+
+<div id="map-container" class="mb-5 ">
+    
+<div id="map" class=""></div>
+
+<script>
+    // Map style URL
+    var mapTilerStyle = "https://api.maptiler.com/maps/bright/style.json?key=TTHdhT01ZJ3Aj8SM3F80";
+
+    // Center coordinates for Athens, Greece (default)
+    var defaultCenter = [37.9838, 23.7275];
+
+    // Retrieve map center from sessionStorage if available
+    var userPosition = JSON.parse(sessionStorage.getItem('userPositionCenter')) || defaultCenter;
+    var center = JSON.parse(sessionStorage.getItem('mapCenter')) || defaultCenter;
+    var zoomLevel = parseInt(sessionStorage.getItem('zoomLevel')) || 13;
+    // Initialize the map with the center coordinates
+    var map = L.map('map').setView(center, zoomLevel);
+
+    var positionMarker = L.marker(userPosition, { zIndexOffset: 1100 }).addTo(map);
+    positionMarker._icon.classList.add("position-huechange");
+    // Load the map style
+    // var gl = L.mapboxGL({
+    //     attribution: `<a href="https://www.iteq.gr/" target="_blank">ITeQ A.E.</a> © <a href="https://www.mapbox.com/about/maps/" target="_blank">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>`,
+    //     style: mapTilerStyle
+    // }).addTo(map);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    minZoom:7,
+    maxZoom: 17,
+    attribution: '<a href="https://www.iteq.gr/" target="_blank">ITeQ A.E.</a> &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    //     var Stadia_Outdoors = L.tileLayer('https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.{ext}', {
+    //     minZoom: 0,
+    //     maxZoom: 20,
+    //     attribution: '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    //     ext: 'png'
+    // });
+    // Stadia_Outdoors.addTo(map);
+    map.on('zoomend', function (ev) {
+    sessionStorage.setItem("zoomLevel", map.getZoom());
+    });
+
+
+    // Optional: Save the center of the map in sessionStorage whenever the map is moved
+    map.on('moveend', function () {
+    let currentCenter = map.getCenter();
+    sessionStorage.setItem('mapCenter', JSON.stringify([currentCenter.lat, currentCenter.lng]));
+    });
+
+
+    //Add a marker for each duty in DutyCardsViewModel.Duties
+</script>
+</div>
+<div class="container bg-white pt-5">
+    <div class="row card-deck">
+    </div>
+</div>
