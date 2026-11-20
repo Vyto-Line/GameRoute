@@ -1073,7 +1073,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
             if (faded) alpha = 0.6f
             isClickable = true
-            setOnClickListener { choose(pl) }
+            setOnClickListener { openPharmacy(pl) }
             addView(label("✚", 18f, bold = true).apply {
                 gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = bg(Color.rgb(47, 158, 68), radius = 19f)
             }, LinearLayout.LayoutParams((38 * d).toInt(), (38 * d).toInt()))
@@ -1093,13 +1093,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(label("➤", 18f, bold = true).apply {
                 gravity = Gravity.CENTER; setTextColor(onAccent(accent)); background = bg(if (faded) dim(60) else accent, radius = 12f)
                 contentDescription = L.t("Go"); isClickable = true
-                setOnClickListener {
-                    search.setText(""); search.clearFocus(); hideKeyboard(); suggestScroll.visibility = View.GONE
-                    if (NavEngine.active && !NavEngine.arrived) NavEngine.addStop(pl) else NavEngine.start(this@MainActivity, pl)
-                    MapState.recenter(); refreshChrome()
-                }
+                setOnClickListener { openPharmacy(pl) }
             }, LinearLayout.LayoutParams(sq, sq))
         }.also { it.layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { setMargins(p / 2, p / 6, p / 2, p / 6) } }
+    }
+
+    /** From the list: the pharmacy on the map with its card (Go, Call), not straight into a route. */
+    private fun openPharmacy(pl: Place) {
+        closeSearch(); search.setText(""); hideKeyboard()
+        showPlace(pl, dropped = false)
+        MapState.phone.showOverview(listOfNotNull(LocationTracker.position, pl.pos))
+        refreshChrome()
     }
 
     private fun dial(phone: String) {
@@ -1917,6 +1921,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 })
             }
         }
+        // tap: every pharmacy on duty now
+        text.addView(label(L.t("All on duty now") + " ›", 13.5f, bold = true).apply { setTextColor(moon); setPadding(0, (4 * d).toInt(), 0, 0) })
+        box.isClickable = true
+        box.setOnClickListener { closePlace(); showPharmacies() }
         box.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         return box
     }

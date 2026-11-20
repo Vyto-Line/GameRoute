@@ -118,6 +118,24 @@ class PharmacyDutyTest {
         assertTrue("source line", t.any { it.startsWith("Duty list: Pharmacists' Association of Attica") })
         assertTrue("not the far one", t.none { it.contains("ΜΑΚΡΙΑ") })
 
+        // ➤ in the list: the card first (Go / Call), no route yet
+        fun find(pred: (View) -> Boolean, v: View = root): View? {
+            if (v.visibility != View.VISIBLE) return null
+            if (pred(v)) return v
+            if (v is ViewGroup) for (i in 0 until v.childCount) find(pred, v.getChildAt(i))?.let { return it }
+            return null
+        }
+        find({ it is TextView && it.text == "➤" })!!.performClick()
+        looper.idleFor(java.time.Duration.ofMillis(400))
+        shot("pharm_list_go_card")
+        log.append("after ➤: nav active ${NavEngine.active}, card: ${texts().filter { it.contains("On duty tonight") || it.contains("Call") }}\n")
+        assertTrue("➤ shows the card, no route yet", !NavEngine.active && texts().any { it.contains("On duty tonight") })
+        // tapping the duty box: all on duty now
+        find({ it is TextView && it.text.startsWith("All on duty now") })!!.let { v -> (v.parent.parent as View).performClick() }
+        looper.idleFor(java.time.Duration.ofMillis(400))
+        log.append("after the duty box: ${texts().filter { it.contains("ON DUTY NOW") }}\n")
+        assertTrue("duty box opens the list", texts().any { it.contains("ON DUTY NOW") })
+
         val showPlace = MainActivity::class.java.getDeclaredMethod("showPlace", Place::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
         showPlace.invoke(activity, Duties.place(Duties.onDutyNear(start)[0]), false)
         shot("pharm_51c_card")
