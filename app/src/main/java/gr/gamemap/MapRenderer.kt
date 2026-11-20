@@ -1232,7 +1232,8 @@ class MapRenderer(private val car: Boolean = false) {
     /** Where each car button is on screen, for the car's tap callback. */
     private val carHits = ArrayList<Pair<RectF, String>>()
     /** The buttons of the last finished frame (taps are read on another thread than drawing). */
-    @Volatile private var hitsShown: List<Pair<RectF, String>> = emptyList()
+    @Volatile internal var hitsShown: List<Pair<RectF, String>> = emptyList()
+        private set
 
     /** The car's stable area top: Android Auto's own ☰ lives above it. 0 = not known. */
     @Volatile var stableTop = 0
@@ -3018,6 +3019,17 @@ class MapRenderer(private val car: Boolean = false) {
         var y = maxOf(a.top + 14 * d, bannerBottom + 12 * d, carConvoyRect.bottom + 12 * d, convoyStrip.bottom + 12 * d) + r
         // a tall race box on a short car screen: beside the box rather than down into the speed box
         if (!carConvoyRect.isEmpty && y + r > a.bottom - 130 * d) { x = carConvoyRect.right + 12 * d + r; y = carConvoyRect.top + r }
+        // the car: below anything drawn in its corner this frame (Where to? and the Home / Work /
+        // label chips, a place's card, the lobby): it was only kept clear of the turn and race boxes
+        if (car) {
+            var moved = true; var guard = 0
+            while (moved && guard++ < 8) {
+                moved = false
+                for ((hr, _) in carHits) if (hr.left < x + r && hr.right > x - r && hr.top < y + r + 6 * d && hr.bottom > y - r - 6 * d) {
+                    y = hr.bottom + 12 * d + r; moved = true
+                }
+            }
+        }
         compassBounds.set(x - r, y - r, x + r, y + r)
         fill.color = Ui.panel(t); c.drawCircle(x, y, r, fill)
         stroke.color = t.route; stroke.strokeWidth = 2 * d; c.drawCircle(x, y, r, stroke)
