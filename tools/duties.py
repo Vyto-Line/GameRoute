@@ -85,9 +85,17 @@ def attica(day):
 
 # ---- vrisko.gr: "Παρασκευή 17:00- 08:00" ----
 DAYS = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
+BLOCKED = {"n": 0}
 def vrisko_area(slug, prefecture):
-    s = fetch(f"https://www.vrisko.gr/efimeries-farmakeion/{slug}/")
-    if not s: return []
+    s = None
+    for attempt in range(3):
+        s = fetch(f"https://www.vrisko.gr/efimeries-farmakeion/{slug}/")
+        if s and "dutiesfilterddl" in s: break
+        # turned away (too many requests): wait and try again
+        BLOCKED["n"] += 1
+        print("  no list:", slug, len(s or ""), re.sub(r"\s+", " ", (s or "")[:160]))
+        time.sleep(45 * (attempt + 1))
+    if not s or "dutiesfilterddl" not in s: return []
     s = html.unescape(s)
     dm = re.search(r'data-selector="Today">\s*<span>(\d+)/(\d+)/(\d{4})', s)
     if not dm: return []
@@ -97,7 +105,7 @@ def vrisko_area(slug, prefecture):
         if "Εφημερεύον" not in b: continue          # on duty only (not just "extended hours")
         did = re.match(r'data-id="(\d+)"', b)
         ll = re.search(r"daddr=([0-9.]+),([0-9.]+)", b)
-        if not ll: continue
+        if not ll or float(ll.group(1)) < 34 or float(ll.group(2)) < 19: continue   # no position (0,0)
         hours = re.search(r'duty-container-hours-text">(.*?)</div>', b, re.S)
         hours = text(hours.group(1)) if hours else ""
         day, sh = today, []
@@ -153,9 +161,9 @@ def main():
     n0 = len(duties)
     for i, (slug, pref) in enumerate(areas):
         duties += vrisko_area(slug, pref)
-        time.sleep(0.4)
+        time.sleep(1.5)
         if i % 50 == 0: print(f"  {i}/{len(areas)} areas, {len(duties) - n0} duties")
-    print("vrisko duties:", len(duties) - n0)
+    print("vrisko duties:", len(duties) - n0, "· turned away", BLOCKED["n"], "times")
     # keep shifts from the last file that haven't ended (overnight duty after midnight)
     try:
         old = json.load(open(os.path.join(OUT, "duties.json")))["d"]
@@ -163,6 +171,7 @@ def main():
         old = []
     merged = {}
     for d in old + duties:
+        if d["la"] < 34 or d["lo"] < 19: continue
         key = (round(d["la"], 4), round(d["lo"], 4))
         cur = merged.setdefault(key, {k: v for k, v in d.items() if k != "s"} | {"s": []})
         if d in duties: cur.update({k: v for k, v in d.items() if k != "s"})
