@@ -1030,10 +1030,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (Duties.covers(near)) {
             head("🌙 " + L.t("ON DUTY NOW"), moon)
             if (duties.isEmpty()) suggestList.addView(label(L.t("None on duty right now within 15 km"), 14f).apply { setTextColor(dim()); setPadding(p + p / 2, 0, p, p / 2) })
-            duties.forEachIndexed { i, dt -> suggestList.addView(pharmacyRow(Duties.place(dt, now), "🌙 " + L.t("On duty") + " · " + Duties.till(dt, now), moon, dt.phone, first = i == 0)) }
+            duties.forEachIndexed { i, dt -> suggestList.addView(pharmacyRow(Duties.place(dt, now), "🌙 " + Duties.till(dt, now), moon, dt.phone, first = i == 0)) }
         } else if (Duties.all.isEmpty()) suggestList.addView(label(L.t(if (Duties.updated == 0L) "Getting the duty list…" else "No duty list for this area yet"), 14f).apply { setTextColor(dim()); setPadding(p + p / 2, 0, p, p / 2) })
         val others = pharmShown.orEmpty().filter { o -> duties.none { Geo.distance(it.pos, o.pos) < 60 } }
-            .sortedBy { Geo.distance(near, it.pos) }.take(8)
+            .sortedBy { Geo.distance(near, it.pos) }
+            .fold(ArrayList<Place>()) { acc, o -> if (acc.none { Geo.distance(it.pos, o.pos) < 40 }) acc += o; acc }.take(8)
         if (others.isNotEmpty()) {
             head(L.t(if (closed) "CLOSED NOW" else "OTHER PHARMACIES"), dim(170))
             for (o in others) {
@@ -1080,7 +1081,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 orientation = LinearLayout.VERTICAL; setPadding(p, 0, p / 2, 0)
                 addView(label(pl.name, 16f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
                 if (status.isNotBlank()) addView(label(status, 13.5f, bold = true).apply { setTextColor(statusColor); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
-                val where = listOfNotNull(near?.let { NavEngine.formatDistance(Geo.distance(it, pl.pos)) }, pl.address.substringAfterLast(", ").takeIf { it.isNotBlank() }).joinToString(" · ")
+                val where = listOfNotNull(near?.let { NavEngine.formatDistance(Geo.distance(it, pl.pos)) }, pl.address.substringAfterLast(", ").takeIf { it.isNotBlank() && it != "Pharmacy" && it != pl.name }).joinToString(" · ")
                 addView(label(where, 13f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             val sq = (42 * d).toInt()
@@ -1850,7 +1851,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setAutoSizeTextTypeUniformWithConfiguration(11, 16, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         placeCard.addView(row)
-        if (pharmacy) placeCard.addView(label(Duties.sourceLine(duty) + " · " + L.t("call ahead if it's urgent"), 11.5f).apply {
+        if (pharmacy) placeCard.addView(label(Duties.sourceLine(duty ?: Duties.onDutyNear(pl.pos, 15_000.0, Duties.now()).firstOrNull() ?: Duties.at(pl.pos, 25_000.0)) + " · " + L.t("call ahead if it's urgent"), 11.5f).apply {
             setTextColor(dim()); setPadding(p / 3, p / 2, 0, 0)
         })
         // one row of labelled icons for everything else
@@ -2765,7 +2766,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             if (on.isNotEmpty()) {
                 val moon = readable(PoiLayer.MOON)
                 suggestList.addView(label("🌙 " + L.t("ON DUTY NOW"), 12f, bold = true).apply { setTextColor(moon); letterSpacing = 0.1f; setPadding(p + p / 2, p, p, p / 3) })
-                for (dt in on) suggestList.addView(pharmacyRow(Duties.place(dt, now), "🌙 " + L.t("On duty") + " · " + Duties.till(dt, now), moon, dt.phone))
+                for (dt in on) suggestList.addView(pharmacyRow(Duties.place(dt, now), "🌙 " + Duties.till(dt, now), moon, dt.phone))
                 suggestList.addView(label(L.t("All pharmacies nearby") + " ›", 15f, bold = true).apply {
                     setTextColor(moon); setPadding(p + p / 2, p / 2, p, p / 2); isClickable = true
                     setOnClickListener { hideKeyboard(); showPharmacies() }
