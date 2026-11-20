@@ -382,6 +382,92 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         show(gr.gamemap.CarPanel("menu", "GameRoute", rows = rows), acts)
     }
 
+    // ---------------------------------------------------------------- the convoy, step by step (47b-47d)
+
+    private fun steps(k: Int) = listOf("Where", "How", "Who").mapIndexed { i, t -> (if (i < k) "●" else "○") + " " + (i + 1) + " · " + T(t) }.joinToString("   ")
+
+    /** Step 1: where are you going together? Big tiles; Search uses the car's keyboard, then comes back. */
+    private fun openConvoyWhere() {
+        val C = gr.gamemap.Convoy
+        val acts = HashMap<String, () -> Unit>()
+        val tiles = ArrayList<gr.gamemap.CarRow>()
+        val here = LocationTracker.position
+        fun dist(p: Place) = here?.let { NavEngine.formatDistance(gr.gamemap.Geo.distance(it, p.pos)) }
+        val now = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
+        fun pick(p: Place) { C.setDestination(p); openConvoyHow() }
+        if (now != null) { tiles += gr.gamemap.CarRow("➤", now.name, T("Where you're going now"), id = "now"); acts["now"] = { pick(now) } }
+        for ((k, ic) in listOf("home" to "🏠", "work" to "💼")) Places.saved(k)?.let { pl ->
+            tiles += gr.gamemap.CarRow(ic, T(if (k == "home") "Home" else "Work"), dist(pl), id = k); acts[k] = { pick(pl) }
+        }
+        tiles += gr.gamemap.CarRow("🔍", T("Search"), T("A place or an address"), id = "search")
+        acts["search"] = { screenManager.push(SearchScreen(carContext) { p -> main.post { pick(p) } }) }
+        tiles += gr.gamemap.CarRow("📍", T("No shared place"), T("Just see each other on the map"), id = "share")
+        acts["share"] = { C.setSharing(true); closePanel(); surface.openFriends("list"); backFriends.isEnabled = true }
+        show(gr.gamemap.CarPanel("cwhere", T("Where are you going together?"), tiles = tiles, note = steps(1)), acts)
+    }
+
+    /** Step 2: how do you want to drive? The chosen one marked; Next opens Friends to invite. */
+    private fun openConvoyHow(chosen: String? = null) {
+        val C = gr.gamemap.Convoy
+        val cur = chosen ?: when { C.meSharing -> "share"; C.meAlong -> "along"; else -> "race" }
+        val acts = HashMap<String, () -> Unit>()
+        fun row(id: String, icon: String, title: String, sub: String) =
+            gr.gamemap.CarRow(icon, T(title), T(sub), if (cur == id) "◉" else "○", id, highlight = cur == id).also { acts[id] = { openConvoyHow(id) } }
+        val rows = listOf(
+            row("race", "🏁", "Race", "3-2-1 together, fastest wins"),
+            row("along", "🚗", "Drive together", "Same route, no race"),
+            row("share", "📍", "Just share where I am", "Going somewhere else, still on the map"),
+            gr.gamemap.CarRow("👥", T(if (C.host) "Next: invite people" else "Join"), null, "›", "next"))
+        acts["next"] = {
+            when (cur) { "race" -> { C.setSharing(false); C.setAlong(false) }; "along" -> C.setAlong(true); else -> C.setSharing(true) }
+            closePanel()
+            if (C.host && C.members.isEmpty()) { surface.openFriends("list"); backFriends.isEnabled = true }
+        }
+        show(gr.gamemap.CarPanel("chow", T("How do you want to drive?") + (C.destination?.let { " · " + it.name } ?: ""), rows = rows, note = steps(2)), acts)
+    }
+
+    /**
+     * After you finish a race: your place, the gap to the winner, who's still driving (distance,
+     * arrival, speed). It stays and keeps itself up to date until everyone's in (47a).
+     */
+    fun openRaceBoard() {
+        val C = gr.gamemap.Convoy
+        val (mine, total) = C.myPlace() ?: return
+        val rows = C.rows(0).filter { !it.along }
+        val arrived = rows.filter { it.state == "arrived" }.sortedBy { it.arrivedAt }
+        val driving = rows.filter { it.state != "arrived" }
+        val first = arrived.firstOrNull(); val me = arrived.firstOrNull { it.me }
+        val medal = when (mine) { 1 -> "🥇"; 2 -> "🥈"; 3 -> "🥉"; else -> "🏁" }
+        val title = medal + " " + T(when (mine) { 1 -> "You won!"; 2 -> "You finished 2nd"; 3 -> "You finished 3rd"; else -> "You finished ${mine}th" })
+        fun gap(s: Long) = if (s < 60) "$s s" else "${s / 60} min ${s % 60} s"
+        val list = ArrayList<gr.gamemap.CarRow>()
+        arrived.forEachIndexed { i, r ->
+            list += gr.gamemap.CarRow("${i + 1}", if (r.me) T("You") else r.name,
+                T("Arrived ") + NavEngine.clock(r.arrivedAt) + (if (i > 0 && first != null) " · +" + gap((r.arrivedAt - first.arrivedAt) / 1000) else ""), "🏁", "none", highlight = r.me)
+        }
+        for (r in driving) list += gr.gamemap.CarRow("·", r.name, if (r.stale) T("no signal") else NavEngine.formatDistance(r.left.coerceAtLeast(0.0)) + " " + T("to go") +
+            (if (r.eta > 0) " · ~" + NavEngine.clock(r.eta) else ""), "${r.kmh} km/h", "none")
+        list += gr.gamemap.CarRow("✓", T("Done"), null, null, "done")
+        val sub = listOfNotNull(if (me != null && first != null && !first.me) "+" + gap((me.arrivedAt - first.arrivedAt) / 1000) + " · " + T("Winner: ") + first.name else null,
+            if (driving.isEmpty()) T("FINAL ORDER · $total RACERS") else T("LIVE · ${driving.size} STILL DRIVING")).joinToString(" · ")
+        raceBoardSeen = C.code
+        show(gr.gamemap.CarPanel("race", title, rows = list, note = sub), mapOf("done" to { closePanel() }, "none" to {}))
+    }
+    private var raceBoardSeen: String? = null
+    private var raceBoardAt = 0L
+
+    /** I've finished a race: the board opens once by itself, and stays up to date while it's open. */
+    private val onRace: () -> Unit = {
+        main.post {
+            val C = gr.gamemap.Convoy
+            if (C.active && C.myPlace() != null) {
+                val now = System.currentTimeMillis()
+                if (surface.panelKey == "race") { if (now - raceBoardAt > 1000) { raceBoardAt = now; openRaceBoard() } }
+                else if (raceBoardSeen != C.code && surface.panelKey == null) { raceBoardAt = now; openRaceBoard() }
+            }
+        }
+    }
+
     /** Quick messages to the convoy: four big tiles. */
     private fun openQuickPanel() {
         val C = gr.gamemap.Convoy
@@ -580,6 +666,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 MapState.changed += onMapState
                 NavEngine.changed += surface.redraw
                 gr.gamemap.Convoy.changed += surface.redraw
+                gr.gamemap.Convoy.changed += onRace
                 gr.gamemap.InvitePop.changed += surface.redraw
                 gr.gamemap.LocationStatus.changed += surface.redraw
                 gr.gamemap.Convoy.proposed += onProposal
@@ -603,6 +690,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             override fun onDestroy(owner: LifecycleOwner) {
                 surface.release()
                 gr.gamemap.Convoy.changed -= surface.redraw
+                gr.gamemap.Convoy.changed -= onRace
                 gr.gamemap.InvitePop.changed -= surface.redraw
                 gr.gamemap.LocationStatus.changed -= surface.redraw
                 gr.gamemap.Convoy.proposed -= onProposal
@@ -764,7 +852,8 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 if (C.myName.isBlank()) C.myName = "Driver"
                 val dest = if (NavEngine.active && !NavEngine.arrived) NavEngine.destination?.let { Place(NavEngine.destinationName, "", it) } else NavEngine.planPlace
                 C.create(dest)
-                CarToast.makeText(carContext, L.t("Convoy started: invite friends below"), CarToast.LENGTH_SHORT).show()
+                surface.openFriends(null)
+                if (dest == null) openConvoyWhere() else openConvoyHow()
             }
             what.startsWith("inv:") -> {
                 val f = if (F.ready && F.core.started) F.core.friends.firstOrNull { it.fid == what.removePrefix("inv:") } else null
@@ -805,6 +894,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         // the invite card: Join (straight in, then Drive to on the convoy's page) or Not now
         if (id == "inv:no") { gr.gamemap.InvitePop.notNow(); surface.redraw(); return }
         if (id == "inv:join") { gr.gamemap.InvitePop.take()?.let { carJoinConvoy(carContext, it.convoy) }; surface.redraw(); return }
+        if (id == "convoy:how") { openConvoyHow(); return }
         if (id == "convoy:go") {
             // the lobby's big button: START (host, or nobody else at the start), READY UP, or take ready back
             val C = gr.gamemap.Convoy
@@ -1117,7 +1207,7 @@ private fun carStart(): List<Place> {
 /** Car searches run here: several at once, so a new search never waits behind an old one. */
 private val carWork = Executors.newCachedThreadPool(gr.gamemap.Bg.factory("car"))
 
-class SearchScreen(carContext: CarContext) : Screen(carContext) {
+class SearchScreen(carContext: CarContext, private val onPick: ((Place) -> Unit)? = null) : Screen(carContext) {
     private var results: List<Place> = carStart()
     /** [results] are the saved/recent places shown before typing (not search results). */
     private var showingStart = true
@@ -1169,7 +1259,7 @@ class SearchScreen(carContext: CarContext) : Screen(carContext) {
             results.take(if (notHere != null) 5 else 6).forEach { p ->
                 val row = Row.Builder().setTitle(p.name.ifBlank { p.address.ifBlank { "📍" } }).setOnClickListener {
                     screenManager.pop()
-                    NavEngine.plan(carContext, p)
+                    onPick?.invoke(p) ?: NavEngine.plan(carContext, p)
                 }
                 val dist = near?.let { NavEngine.formatDistance(gr.gamemap.Geo.distance(it, p.pos)) }
                 val line = listOfNotNull(dist, p.address.takeIf { it.isNotBlank() && it != p.name }?.take(70)).joinToString(" · ")

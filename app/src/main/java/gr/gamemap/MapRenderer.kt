@@ -1990,24 +1990,37 @@ class MapRenderer(private val car: Boolean = false) {
         panel(c, r, d, t, outline = true)
         val ink = Ui.ink(t); val accentInk = Ui.onPanel(t, t.route, 3.0)
         text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD
+        // the steps (3 · Who lit), then where and how with Change (back to step 2)
         text.textSize = 12 * d; text.color = accentInk
-        c.drawText(gr.gamemap.L.t("CONVOY") + " · " + (Convoy.pretty() ?: ""), r.left + 16 * d, r.top + 24 * d, text)
+        c.drawText("1 · " + gr.gamemap.L.t("WHERE") + "   2 · " + gr.gamemap.L.t("HOW") + "   3 · " + gr.gamemap.L.t("WHO") + "  ·  " + (Convoy.pretty() ?: ""), r.left + 16 * d, r.top + 24 * d, text)
+        val racing = !Convoy.meAlong
         text.textSize = 18 * d; text.color = ink
-        c.drawText(ellipsize(gr.gamemap.L.t("To ${dest.name}"), w - 32 * d), r.left + 16 * d, r.top + 50 * d, text)
+        val change = gr.gamemap.L.t("Change")
+        text.textSize = 15 * d; val cw = text.measureText(change)
+        text.textSize = 18 * d
+        c.drawText(ellipsize((if (racing) "🏁 " + gr.gamemap.L.t("Race to ${dest.name}") else "🚗 " + gr.gamemap.L.t("Together to ${dest.name}")), w - 48 * d - cw), r.left + 16 * d, r.top + 50 * d, text)
+        if (!Convoy.counting) {
+            text.textAlign = Paint.Align.RIGHT; text.textSize = 15 * d; text.color = accentInk
+            c.drawText(change, r.right - 16 * d, r.top + 50 * d, text)
+            carHits += RectF(r.right - 28 * d - cw, r.top + 28 * d, r.right - 4 * d, r.top + 62 * d) to "convoy:how"
+            text.textAlign = Paint.Align.LEFT
+        }
         val ok = Color.rgb(64, 200, 120); val wait = Color.rgb(255, 176, 60)
-        fun row(i: Int, name: String, state: String, col: Int) {
+        fun row(i: Int, name: String, state: String, col: Int, mode: String = "") {
             val y = r.top + 64 * d + i * rowH + rowH / 2
             fill.color = col; c.drawCircle(r.left + 22 * d, y, 6 * d, fill)
             text.textAlign = Paint.Align.LEFT; text.textSize = 16 * d; text.color = ink
-            c.drawText(ellipsize(name, w * 0.55f), r.left + 38 * d, y + 5.5f * d, text)
+            c.drawText(ellipsize(name, w * 0.34f), r.left + 38 * d, y + 5.5f * d, text)
+            // how each one drives
+            if (mode.isNotEmpty()) { text.textSize = 13.5f * d; text.color = Ui.dim(t, 200); c.drawText(gr.gamemap.L.t(mode), r.left + 38 * d + w * 0.36f, y + 5 * d, text) }
             text.textAlign = Paint.Align.RIGHT; text.textSize = 14 * d; text.color = col
             c.drawText(gr.gamemap.L.t(state), r.right - 16 * d, y + 5 * d, text)
         }
         val meState = if (Convoy.meReady) "READY ✓" else if (Convoy.host) "host" else "not ready"
-        row(0, gr.gamemap.L.t(if (Convoy.host) "You (host)" else "You"), meState, if (Convoy.meReady) ok else wait)
+        row(0, gr.gamemap.L.t(if (Convoy.host) "You (host)" else "You"), meState, if (Convoy.meReady) ok else wait, if (Convoy.meAlong) "🚗 Together" else "🏁 Racing")
         others.forEachIndexed { i, m ->
             val st = when { m.stale -> "no signal"; m.ready -> "READY ✓"; m.state == "ready" && m in lobby -> "not ready"; m.state == "driving" -> "driving"; else -> "joining…" }
-            row(i + 1, m.name, st, if (m.ready) ok else if (m.stale) Color.GRAY else wait)
+            row(i + 1, m.name, st, if (m.ready) ok else if (m.stale) Color.GRAY else wait, if (m.along) "🚗 Together" else "🏁 Racing")
         }
         // buttons
         val by = r.bottom - 58 * d

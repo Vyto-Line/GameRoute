@@ -3011,6 +3011,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun animMs(ms: Long): Long = when (Perf.anim) { Perf.FULL -> ms; Perf.REDUCED -> ms / 2; else -> 0L }
     internal fun openReportForTest() = openSheet("report")
     internal fun openSheetForTest(kind: String) = openSheet(kind)
+    /** Tests: the settings pages (null = the main list) and their keys. */
+    internal fun settingsPageForTest(page: String?) { settingsPage = page; refreshChrome() }
+    internal fun settingsKeysForTest(): List<String> = settingsGroups().map { it.key }
     internal fun refreshForTest() { lastHomeKey = ""; refreshChrome() }
 
     /** Which settings page is open: null = the list of groups. */
@@ -4109,10 +4112,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(label(L.t(sub), 13.5f).apply { setTextColor(dim()) })
             if (extra != null) addView(label(L.t(extra), 12.5f, bold = true).apply { setTextColor(readable(accent)); setPadding(0, (4 * d).toInt(), 0, 0) })
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        // round marks, whatever the style's corners: a ring, and a dot in it for the chosen one
+        // ("pick one"; the theme's cut squares read as checkboxes)
         if (selected != null) addView(View(context).apply {
-            background = if (selected) android.graphics.drawable.LayerDrawable(arrayOf(bg(Color.TRANSPARENT, accent, 2f, 11f), bg(accent, radius = 6f).also { })).apply {
-                setLayerInset(1, (5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt())
-            } else bg(Color.TRANSPARENT, dim(), 2f, 11f)
+            fun oval(fillC: Int, strokeC: Int, w: Float) = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(fillC); if (w > 0) setStroke((w * d).toInt(), strokeC)
+            }
+            background = if (selected) android.graphics.drawable.LayerDrawable(arrayOf(oval(Color.TRANSPARENT, accent, 2.2f), oval(accent, 0, 0f))).apply {
+                setLayerInset(1, (5.5f * d).toInt(), (5.5f * d).toInt(), (5.5f * d).toInt(), (5.5f * d).toInt())
+            } else oval(Color.TRANSPARENT, dim(), 2f)
         }, LinearLayout.LayoutParams((22 * d).toInt(), (22 * d).toInt()))
         else addView(label("›", 22f).apply { setTextColor(dim()) })
     }
