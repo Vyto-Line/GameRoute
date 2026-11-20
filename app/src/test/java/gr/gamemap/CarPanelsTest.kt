@@ -79,6 +79,12 @@ class CarPanelsTest {
         Convoy.debugMember("Nikos", LatLng(37.65, 24.02), 0, 0, -1.0, -1.0, "arrived")
         Convoy.members.values.first().arrivedAt = t - 95_000
         Convoy.debugMember("Maria", LatLng(37.70, 23.95), 64, t + 180_000, 1200.0, 30_000.0, "driving")
+        // on the convoy's route and arrived
+        val data = File(System.getProperty("previewData") ?: "../previewdata")
+        val route = Osrm.parseAll(File(data, "route.json").readText())[0]
+        val end = Place("Sounio", "", route.points.last())
+        Convoy.debugSet(end, true)
+        NavEngine.debugDrive(end, route, 0)
         NavEngine.debugArrive(t)
         Thread.sleep(600)
         gr.gamemap.car.MapScreen::class.java.getDeclaredMethod("openRaceBoard").apply { isAccessible = true }.invoke(screen)
