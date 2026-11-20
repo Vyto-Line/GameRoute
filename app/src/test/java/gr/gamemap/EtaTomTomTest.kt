@@ -32,7 +32,9 @@ class EtaTomTomTest {
         var last: Double? = null; var worst = 0.0; var got = 0
         for (k in 0..6) {
             val from = r.length * k / 8
-            val res = TomTomTime.evaluate(r, from) ?: run { log.append("from ${from.toInt()} m: no answer\n"); null } ?: continue
+            Thread.sleep(1500) // (TomTom's free key: a few requests a second at most)
+            val res = (try { TomTomTime.evaluate(r, from) } catch (e: Exception) { Thread.sleep(4000); try { TomTomTime.evaluate(r, from) } catch (e2: Exception) { log.append("from ${from.toInt()} m: ${e2.message}\n"); null } })
+                ?: run { log.append("from ${from.toInt()} m: no answer\n"); null } ?: continue
             got++
             val left = r.length - from
             // per metre, so points along the way compare
