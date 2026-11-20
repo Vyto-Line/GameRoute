@@ -418,13 +418,13 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             row("along", "🚗", "Drive together", "Same route, no race"),
             row("share", "📍", "Just share where I am", "Going somewhere else, still on the map"))
         // Next: the button top right (three choices fit on any car screen without a second page)
-        val next = gr.gamemap.CarRow("", T(if (C.host) "Next: invite people" else "Join") + " ›", id = "next")
+        val next = gr.gamemap.CarRow("", T(if (C.host) "Next" else "Join") + " ›", id = "next")
         acts["next"] = {
             when (cur) { "race" -> { C.setSharing(false); C.setAlong(false) }; "along" -> C.setAlong(true); else -> C.setSharing(true) }
             closePanel()
             if (C.host && C.members.isEmpty()) { surface.openFriends("list"); backFriends.isEnabled = true }
         }
-        show(gr.gamemap.CarPanel("chow", T("How do you want to drive?") + (C.destination?.let { " · " + it.name } ?: ""), rows = rows, head = next, note = steps(2)), acts)
+        show(gr.gamemap.CarPanel("chow", T("How do you want to drive?"), rows = rows, head = next, note = steps(2) + (C.destination?.let { "  ·  " + T("To ${it.name}") } ?: "")), acts)
     }
 
     /**

@@ -294,7 +294,8 @@ class MapRenderer(private val car: Boolean = false) {
         val carTrip = car && carButtons && trip != null && selectedPlace == null && System.currentTimeMillis() - tripSeenAt < 30_000
         // the convoy lobby takes the top-left corner (instead of Where to? and the saved places)
         carLobbyShown = car && hud && carButtons && carFriends == null && Convoy.active && Convoy.destination != null && !NavEngine.active && !NavEngine.planningOn(car) &&
-            selectedPlace == null && Convoy.proposal == null && !Convoy.meSharing && !Convoy.underway && !carTrip
+            selectedPlace == null && Convoy.proposal == null && !Convoy.meSharing && !Convoy.underway && !carTrip &&
+            carPanel == null // a convoy step (or any panel) open: the lobby waits behind it
         if (car && hud && carButtons && !NavEngine.planningOn(car) && !carTrip) {
             // Some Android Auto versions report a much narrower free area for a moment (after the
             // knob/touchpad focus or pan mode) and don't always widen it again: the buttons then
