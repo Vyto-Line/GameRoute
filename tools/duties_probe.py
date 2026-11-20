@@ -1,11 +1,11 @@
 """Probe: fetch the pharmacy duty sites and save the raw pages, to learn their formats."""
 import os, urllib.request, urllib.parse, ssl, json, sys
 os.makedirs("probe", exist_ok=True)
-H = {"User-Agent": "GameRoute duty list (github.com/Vyto-Line/GameRoute)", "Accept-Language": "el-GR,el;q=0.9"}
+H = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36", "Accept": "text/html,*/*", "Accept-Language": "el-GR,el;q=0.9"}
 def get(name, url, data=None, extra=None):
     try:
         req = urllib.request.Request(url, data=data, headers={**H, **(extra or {})})
-        with urllib.request.urlopen(req, timeout=25) as r:
+        with urllib.request.urlopen(req, timeout=60) as r:
             b = r.read()
             open(f"probe/{name}", "wb").write(b)
             print(name, r.status, len(b), r.headers.get("content-type"))
