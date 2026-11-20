@@ -187,7 +187,11 @@ class WholeAppCheckTest {
         File(out, "wholecheck.txt").writeText(sb.toString())
     }
 
-    private fun isAncestor(a: View, b: View): Boolean { var p = b.parent; while (p is View) { if (p === a) return true; p = p.parent }; return false }
+    private fun isAncestor(a: View, b: View): Boolean {
+        var p: android.view.ViewParent? = b.parent
+        while (p != null) { if (p === a) return true; p = p.parent }
+        return false
+    }
     private fun label(v: View): String {
         (v as? TextView)?.let { return "\"" + it.text.toString().take(20) + "\"" }
         v.contentDescription?.let { return "\"" + it.toString().take(20) + "\"" }
