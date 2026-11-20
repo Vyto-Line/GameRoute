@@ -86,6 +86,7 @@ class WholeAppCheckTest {
             val rr = Rect()
             for (tv in texts) {
                 if (!tv.getGlobalVisibleRect(rr) || rr.width() < 4 || rr.height() < 4) continue
+                if (covered(tv, root)) continue // behind a sheet or a pop-up: not what you see
                 val txt = tv.text.toString().replace('\n', ' ').trim()
                 val lay = tv.layout
                 // cut off: a short label with "…", or a single line wider than its box
@@ -96,7 +97,7 @@ class WholeAppCheckTest {
                 }
                 // off the screen
                 val loc = IntArray(2); tv.getLocationOnScreen(loc)
-                if (loc[0] < -2 || loc[0] + tv.width > root.width + 2) local += "past the screen edge: \"${txt.take(30)}\""
+                if ((loc[0] < -2 || loc[0] + tv.width > root.width + 2) && !inSideScroll(tv)) local += "past the screen edge: \"${txt.take(30)}\""
                 // English left in Greek
                 if (greek) {
                     val stripped = allowed.replace(txt, "")
@@ -118,10 +119,12 @@ class WholeAppCheckTest {
             }
             // buttons on top of each other
             val cl = ArrayList<View>(); clickables(root, cl)
-            val rects = cl.mapNotNull { v -> Rect().takeIf { v.getGlobalVisibleRect(it) }?.let { v to it } }
+            val rects = cl.filter { !covered(it, root) && !(it.width >= root.width * 0.9 && it.height >= root.height * 0.5) }
+                .mapNotNull { v -> Rect().takeIf { v.getGlobalVisibleRect(it) }?.let { v to it } }
             for (i in rects.indices) for (j in i + 1 until rects.size) {
                 val (a, ra) = rects[i]; val (b, rb) = rects[j]
                 if (isAncestor(a, b) || isAncestor(b, a)) continue
+                if (ra.contains(rb) || rb.contains(ra)) continue // a small button inside a bigger one (meant)
                 val ix = Rect(); if (!ix.setIntersect(ra, rb)) continue
                 val small = minOf(ra.width() * ra.height(), rb.width() * rb.height())
                 if (small > 0 && ix.width() * ix.height() > small * 0.25) local += "buttons overlap: ${label(a)} / ${label(b)}"
@@ -185,6 +188,32 @@ class WholeAppCheckTest {
             sb.append("${wh.size}× $k   [$pic]   e.g. ${wh.take(3).joinToString(" / ")}\n")
         }
         File(out, "wholecheck.txt").writeText(sb.toString())
+    }
+
+    /** Something drawn later (a sheet, its dimmed backdrop, a pop-up) covers the middle of [v]. */
+    private fun covered(v: View, root: View): Boolean {
+        val r = Rect(); if (!v.getGlobalVisibleRect(r)) return true
+        val cx = r.centerX(); val cy = r.centerY()
+        var child: View = v
+        var p = v.parent
+        while (p is ViewGroup) {
+            val idx = p.indexOfChild(child)
+            for (i in idx + 1 until p.childCount) {
+                val s = p.getChildAt(i)
+                if (s.visibility != View.VISIBLE || s.alpha < 0.3f) continue
+                val sr = Rect(); if (!s.getGlobalVisibleRect(sr) || !sr.contains(cx, cy)) continue
+                if (s.background != null || s.hasOnClickListeners()) return true
+            }
+            if (p === root) break
+            child = p; p = p.parent
+        }
+        return false
+    }
+
+    private fun inSideScroll(v: View): Boolean {
+        var p = v.parent
+        while (p != null) { if (p is android.widget.HorizontalScrollView) return true; p = p.parent }
+        return false
     }
 
     private fun isAncestor(a: View, b: View): Boolean {
