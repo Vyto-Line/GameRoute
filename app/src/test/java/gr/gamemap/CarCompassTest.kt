@@ -37,7 +37,7 @@ class CarCompassTest {
         val log = StringBuilder()
         var bad = 0
         for ((w, h, d) in listOf(Triple(1920, 720, 1.6f), Triple(1280, 720, 1.3f), Triple(800, 480, 1.0f), Triple(1280, 480, 1.0f))) {
-            val r = MapRenderer(car = true)
+            val r = MapRenderer(car = true).apply { carButtons = true } // (a touch car screen, as in the photo)
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             repeat(3) { r.draw(Canvas(bmp), w, h, Rect(0, 0, w, h), d, true) }
             val hits = r.hitsShown.filter { RectF.intersects(it.first, r.compassBounds) }
