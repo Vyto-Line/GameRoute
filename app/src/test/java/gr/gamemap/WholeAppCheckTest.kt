@@ -52,6 +52,8 @@ class WholeAppCheckTest {
 
         val findings = LinkedHashMap<String, MutableList<String>>() // what → where
         var shots = 0
+        var looked = 0; var hidden = 0
+        val perScreen = LinkedHashMap<String, Int>()
         fun draw(): Bitmap {
             repeat(4) { looper.idleFor(java.time.Duration.ofMillis(60)) }
             val bmp = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
@@ -86,7 +88,8 @@ class WholeAppCheckTest {
             val rr = Rect()
             for (tv in texts) {
                 if (!tv.getGlobalVisibleRect(rr) || rr.width() < 4 || rr.height() < 4) continue
-                if (covered(tv, root)) continue // behind a sheet or a pop-up: not what you see
+                if (covered(tv, root)) { hidden++; continue } // behind a sheet or a pop-up: not what you see
+                looked++
                 val txt = tv.text.toString().replace('\n', ' ').trim()
                 val lay = tv.layout
                 // cut off: a short label with "…", or a single line wider than its box
@@ -129,6 +132,7 @@ class WholeAppCheckTest {
                 val small = minOf(ra.width() * ra.height(), rb.width() * rb.height())
                 if (small > 0 && ix.width() * ix.height() > small * 0.25) local += "buttons overlap: ${label(a)} / ${label(b)}"
             }
+            if (theme == Theme.values()[0] && !dark && !greek) perScreen[screen] = texts.size
             for (f in local.distinct()) {
                 val k = "$screen | $f"
                 val list = findings.getOrPut(k) { ArrayList() }
@@ -181,7 +185,8 @@ class WholeAppCheckTest {
                 File(pics, "car_${t.name.lowercase()}_${if (dark) "dark" else "light"}.png").outputStream().use { cb.compress(Bitmap.CompressFormat.PNG, 80, it) }
             }
         }
-        val sb = StringBuilder("Checked $n screens (12 screens + settings pages + driving, 14 styles, light/dark, English/Greek)\n\n")
+        val sb = StringBuilder("Checked $n screens (12 screens + settings pages + driving, 14 styles, light/dark, English/Greek)\n")
+        sb.append("Texts looked at: $looked (behind a sheet, skipped: $hidden). Texts per screen: $perScreen\n\n")
         for ((k, v) in findings.entries.sortedByDescending { it.value.size }) {
             val pic = v.firstOrNull { it.startsWith("picture") }
             val wh = v.filter { !it.startsWith("picture") }
