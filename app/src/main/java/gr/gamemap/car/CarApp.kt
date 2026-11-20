@@ -516,8 +516,9 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         D.refresh()
         val near = LocationTracker.position
         var others: List<Place>? = null
+        var first = true
         fun render() {
-            if (surface.panelKey != "pharmacy" && surface.panelKey != null) return
+            if (!first && surface.panelKey != "pharmacy") return
             val now = gr.gamemap.Duties.now()
             val acts = HashMap<String, () -> Unit>()
             val rows = ArrayList<gr.gamemap.CarRow>()
@@ -536,6 +537,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                         near?.let { NavEngine.formatDistance(gr.gamemap.Geo.distance(it, p.pos)) }, "o:$i", faded = closed)
                     acts["o:$i"] = { go(p) }
                 }
+            first = false
             val note = if (near != null && D.covers(near)) D.sourceLine(duties.firstOrNull()) else null
             if (rows.isEmpty() && others == null && near != null) { show(gr.gamemap.CarPanel("pharmacy", T("Pharmacies"), loading = true), acts); return }
             show(gr.gamemap.CarPanel("pharmacy", T("Pharmacies"), rows = rows, note = note,

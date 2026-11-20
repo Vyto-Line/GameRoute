@@ -1402,7 +1402,7 @@ object Places {
                 val pos = LatLng(Geo.lat((ty + part[1] / f.extent.toDouble()) / n, 1.0), Geo.lon((tx + part[0] / f.extent.toDouble()) / n, 1.0))
                 val d = Geo.distance(near, pos)
                 if (d > 2500) continue
-                val kind = when (cls) { "parking" -> "Car park"; "fuel" -> "Fuel"; "cafe" -> "Café"; else -> "Food" }
+                val kind = when (cls) { "parking" -> "Car park"; "fuel" -> "Fuel"; "cafe" -> "Café"; "pharmacy" -> "Pharmacy"; else -> "Food" }
                 val name = f["name"]?.takeIf { it.isNotBlank() } ?: kind
                 out += Place(name, kind, pos, icon("amenity", if (cls == "parking") "parking" else sub ?: cls)) to d
             }
@@ -1416,7 +1416,7 @@ object Places {
         val cats = amenities.mapNotNull {
             when (it) {
                 "fuel" -> "7311"; "charging_station" -> "7309"; "restaurant", "fast_food" -> "7315"
-                "cafe" -> "9376"; "parking" -> "7313,7369"; else -> null
+                "cafe" -> "9376"; "parking" -> "7313,7369"; "pharmacy" -> "9326"; else -> null
             }
         }.distinct().joinToString(",")
         if (tomtomOk() && cats.isNotEmpty()) {
@@ -1441,7 +1441,7 @@ object Places {
                     // unnamed: say what it is, not the house number Nominatim starts the address with
                     val name = named ?: when (a) {
                         "fuel" -> "Fuel"; "charging_station" -> "Charging"; "parking" -> "Car park"
-                        "cafe" -> "Café"; else -> "Food"
+                        "cafe" -> "Café"; "pharmacy" -> "Pharmacy"; else -> "Food"
                     }
                     out += Place(
                         name, (if (named != null) display.removePrefix(named) else display).trimStart(',', ' ').split(", ").take(2).joinToString(", "),
