@@ -3,6 +3,7 @@ import os, urllib.request, urllib.parse, ssl, json, sys
 os.makedirs("probe", exist_ok=True)
 H = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36", "Accept": "text/html,*/*", "Accept-Language": "el-GR,el;q=0.9"}
 def get(name, url, data=None, extra=None):
+    if data is not None: extra = {"Content-Type": "application/x-www-form-urlencoded", **(extra or {})}
     try:
         req = urllib.request.Request(url, data=data, headers={**H, **(extra or {})})
         with urllib.request.urlopen(req, timeout=60) as r:
@@ -12,7 +13,7 @@ def get(name, url, data=None, extra=None):
     except Exception as e:
         print(name, "ERROR", e)
 urls = json.loads(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].strip() else None
-for n, u in (urls or [
+for item in (urls or [
     ("fsa_home.html", "https://fsa-efimeries.gr/"),
     ("fsa_filtered_get.html", "https://fsa-efimeries.gr/Home/FilteredHomeResults"),
     ("efh_root.html", "https://efhmeries.gr/"),
@@ -25,5 +26,6 @@ for n, u in (urls or [
     ("pst.html", "https://www.pst.gr/"),
     ("syfa.html", "https://www.syfa.gr/"),
 ]):
-    get(n, u)
+    n, u = item[0], item[1]
+    get(n, u, item[2].encode() if len(item) > 2 and item[2] else None, item[3] if len(item) > 3 else None)
 get("fsa_filtered_post.html", "https://fsa-efimeries.gr/Home/FilteredHomeResults", data=b"", extra={"HX-Request": "true"})
