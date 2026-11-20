@@ -559,7 +559,8 @@ object NavEngine {
             main.post {
                 if (seq != planSeq) return@post
                 if (r == null) { o.timingFailed = true; changed.fire(); return@post }
-                o.trafficSeconds = r.seconds; o.delaySeconds = r.delay
+                // our own time × how congested TomTom says it is (not TomTom's own, much slower, time)
+                o.trafficSeconds = (o.duration * r.congestion).toInt(); o.delaySeconds = (o.duration * (r.congestion - 1)).toInt()
                 o.traffic = r.traffic; o.limits = r.limits
                 if (!userPicked) selected = fastestIndex()
                 changed.fire()
@@ -637,7 +638,7 @@ object NavEngine {
         arrived = false
         error = null
         offer = null; declined.clear(); lastOfferAt = 0L
-        trafficRatio = 1.0; trafficDelaySeconds = 0; trafficAt = 0
+        trafficRatio = 1.0; trafficDelaySeconds = 0; trafficAt = 0; pendingRatio = null
         current = null; nextStep = -1
         MapState.recenter()
         Voice.reset()
@@ -1186,6 +1187,7 @@ object NavEngine {
         val r = current ?: return
         trafficAt = System.currentTimeMillis()
         val from = along
+        val oursNow = plainLeft(r, from) // (worked out here: not thread-safe)
         val declinedNow = declined.toList()
         val nearEnd = remainingDistance < 1500
         val hasOffer = offer != null
@@ -1198,8 +1200,7 @@ object NavEngine {
                 if (res.limits.isNotEmpty()) r.limits = res.limits
                 // the factor against our own time for the same stretch, worked out with the limits
                 // just put in (before, it was worked out with the old ones and applied to the new)
-                val ours = plainLeft(r, from)
-                if (ours > 30) acceptRatio((res.seconds / ours).coerceIn(0.6, 4.0), "TomTom traffic")
+                acceptRatio(res.congestion, "TomTom traffic")
                 setEta(plainLeft(r, along) * trafficRatio)
                 changed.fire()
             }
@@ -1212,12 +1213,14 @@ object NavEngine {
                 if (r.similarTo(a) || breaksAvoid(a)) continue
                 if (declinedNow.any { now - it.second < 15 * 60_000 && it.first.similarTo(a) }) continue
                 val e = try { TomTomTime.evaluate(a, 0.0) } catch (ex: Exception) { null } ?: continue
-                a.trafficSeconds = e.seconds; a.delaySeconds = e.delay; a.traffic = e.traffic; a.limits = e.limits
-                if (bestAlt == null || e.seconds < bestAlt.seconds) bestAlt = a
+                a.trafficSeconds = (a.duration * e.congestion).toInt(); a.delaySeconds = (a.duration * (e.congestion - 1)).toInt(); a.traffic = e.traffic; a.limits = e.limits
+                if (bestAlt == null || a.seconds < bestAlt.seconds) bestAlt = a
             }
             val alt = bestAlt ?: return@execute
-            val saving = (res.seconds - alt.seconds).toInt()
-            if (saving >= 180 && saving >= res.seconds * 0.08) main.post {
+            // both on our own times, each with its own congestion from TomTom
+            val nowSecs = oursNow * res.congestion
+            val saving = (nowSecs - alt.seconds).toInt()
+            if (saving >= 180 && saving >= nowSecs * 0.08) main.post {
                 if (current === r && offer == null && active) showOffer(Offer(alt, saving, System.currentTimeMillis()))
             }
         }

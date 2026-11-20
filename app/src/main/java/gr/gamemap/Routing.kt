@@ -397,7 +397,17 @@ object TomTomRoute {
  * it takes in traffic, where the jams are and the speed limits. Geometry and turns stay OSRM's.
  */
 object TomTomTime {
-    class Result(val seconds: Int, val delay: Int, val traffic: List<Stretch>, val limits: List<Stretch>, val meters: Int = 0)
+    class Result(val seconds: Int, val delay: Int, val traffic: List<Stretch>, val limits: List<Stretch>, val meters: Int = 0,
+                 /** TomTom's own time for the same roads with no traffic. */
+                 val freeFlow: Int = 0) {
+        /**
+         * How much slower than free-flowing traffic it is now: TomTom's time ÷ its own no-traffic
+         * time. This is what goes onto our own times. TomTom's whole time was used before, and
+         * TomTom's base speeds in town are much slower than real driving (a 2.8 km trip in Athens:
+         * 8 min with no traffic by TomTom, under 5 by OSRM): the arrival said 15 min for a 6 min drive.
+         */
+        val congestion: Double get() = if (freeFlow > 0) (seconds.toDouble() / freeFlow).coerceIn(1.0, 4.0) else 1.0
+    }
 
     /**
      * TomTom's answer only counts if it followed our route: its length close to what's left of
@@ -428,7 +438,7 @@ object TomTomTime {
         })
         val a = pts.first(); val b = pts.last()
         var url = "https://api.tomtom.com/routing/1/calculateRoute/${a.lat},${a.lon}:${b.lat},${b.lon}/json" +
-            "?key=${Traffic.key}&traffic=true&travelMode=car&routeRepresentation=polyline" +
+            "?key=${Traffic.key}&traffic=true&travelMode=car&routeRepresentation=polyline&computeTravelTimeFor=all" +
             "&sectionType=traffic&sectionType=speedLimit"
         if (departAt != null) {
             url += "&departAt=" + SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date(departAt))
@@ -472,7 +482,8 @@ object TomTomTime {
             CrashLog.note("TomTom time ignored: ${meters} m against ${remaining.toInt()} m left (it went another way)")
             return null
         }
-        return Result(sum.getInt("travelTimeInSeconds"), sum.optInt("trafficDelayInSeconds", 0), traffic, limits, meters)
+        return Result(sum.getInt("travelTimeInSeconds"), sum.optInt("trafficDelayInSeconds", 0), traffic, limits, meters,
+            sum.optInt("noTrafficTravelTimeInSeconds", 0))
     }
 }
 

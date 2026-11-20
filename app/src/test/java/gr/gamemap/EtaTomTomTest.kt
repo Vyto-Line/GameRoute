@@ -39,7 +39,7 @@ class EtaTomTomTest {
             val left = r.length - from
             // per metre, so points along the way compare
             val spm = res.seconds / left
-            log.append("from ${from.toInt()} m: TomTom ${res.seconds} s for ${res.meters} m (our ${left.toInt()} m left) · ${"%.3f".format(spm)} s/m\n")
+            log.append("from ${from.toInt()} m: TomTom ${res.seconds} s (no traffic ${res.freeFlow} s, ×${"%.2f".format(res.congestion)}) for ${res.meters} m (our ${left.toInt()} m left) · ${"%.3f".format(spm)} s/m\n")
             last?.let { worst = maxOf(worst, Math.abs(spm / it - 1)) }
             last = spm
         }
@@ -54,6 +54,11 @@ class EtaTomTomTest {
                 log.append("TomTom's own route, traffic=$traffic: ${sum.optInt("travelTimeInSeconds")} s for ${sum.optInt("lengthInMeters")} m (no traffic ${sum.optInt("noTrafficTravelTimeInSeconds")} s, historic ${sum.optInt("historicTrafficTravelTimeInSeconds")} s, live ${sum.optInt("liveTrafficIncidentsTravelTimeInSeconds")} s)\n")
             } catch (e: Exception) { log.append("own route: ${e.message}\n") }
         }
+        // what the app now shows at the start: our own time × TomTom's congestion
+        NavEngine.debugDrive(Place("End", "", r.points.last()), r, 0)
+        Thread.sleep(1500)
+        TomTomTime.evaluate(r, 0.0)?.let { log.append("arrival shown at the start: ${(r.duration * it.congestion / 60).toInt()} min (before: ${(it.seconds / 60.0).toInt()} min, TomTom's whole time)\n") }
+        NavEngine.stop()
         File(out, "etatomtom.txt").writeText(log.toString())
         assertTrue("TomTom answered", got >= 4)
         assertTrue("TomTom's time per metre jumped ${"%.0f".format(worst * 100)}% between neighbouring points", worst < 0.5)
