@@ -114,7 +114,7 @@ class PharmacyDutyTest {
         val iOn = t.indexOfFirst { it.contains("ON DUTY NOW") }
         val iA = t.indexOfFirst { it.contains("ΠΑΠΑΔΟΠΟΥΛΟΥ") }
         assertTrue("on duty first, nearest first", iOn in 0 until iA && t.indexOfFirst { it.contains("ΚΩΣΤΟΠΟΥΛΟΣ") } > iA)
-        assertTrue("closing times", t.any { it.contains("till 08:00 tomorrow") } && t.any { it.contains("till 23:00") })
+        assertTrue("closing times", t.any { it.contains("🌙 till 08:00 tomorrow") } && t.any { it.contains("🌙 till 23:00") })
         assertTrue("source line", t.any { it.startsWith("Duty list: Pharmacists' Association of Attica") })
         assertTrue("not the far one", t.none { it.contains("ΜΑΚΡΙΑ") })
 
@@ -143,7 +143,7 @@ class PharmacyDutyTest {
         activity.showPharmaciesForTest(); looper.idleFor(java.time.Duration.ofMillis(800))
         shot("pharm_51b_list_el")
         log.append("51b el: ${texts().filter { it.isNotBlank() }.take(12)}\n")
-        assertTrue("Greek list", texts().any { it.contains("ΕΦΗΜΕΡΕΥΟΥΝ ΤΩΡΑ") } && texts().any { it.contains("Εφημερεύει · έως 08:00 αύριο") })
+        assertTrue("Greek list", texts().any { it.contains("ΕΦΗΜΕΡΕΥΟΥΝ ΤΩΡΑ") } && texts().any { it.contains("έως 08:00 αύριο") })
         L.setMode("en")
     }
 
