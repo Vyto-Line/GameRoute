@@ -282,6 +282,7 @@ class MapRenderer(private val car: Boolean = false) {
                 }
             }
         }
+        lastPlayerAt = playerAt
 
         if (!locOff) drawSpeed(c, area, d, theme) else speedRect.setEmpty() // no live speed without location
         if (car && hud) drawCarEta(c, area, d, theme)
@@ -930,6 +931,9 @@ class MapRenderer(private val car: Boolean = false) {
         text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface
     }
 
+    /** Where the arrow was drawn last frame (tests). */
+    internal var lastPlayerAt: android.graphics.PointF? = null
+
     private fun drawPlayer(c: Canvas, x: Float, y: Float, rotation: Float, d: Float, t: Theme) {
         val s = 15 * d
         c.save()
@@ -953,15 +957,18 @@ class MapRenderer(private val car: Boolean = false) {
         path.close()
         fill.isAntiAlias = t.pixel == 1
         fill.color = Xp.routeGlow(t.look); c.drawCircle(x, y, s * 1.5f, fill)
-        // an arrow too close to the map's own colours (8-Bit: dark green on dark green roads) gets a
-        // disc of its outline colour behind it, so it never gets lost (whole-app check, Nov 20)
+        // no disc behind the arrow (it's see-through in every style). An arrow too close to the map's own
+        // colours (8-Bit: green on green roads; Neon: pink on pink) gets a thick outline in its outline
+        // colour instead, so it never gets lost
         val body = if (kind.color != 0) kind.color else t.player
+        val edge = if (kind.color != 0) Color.rgb(40, 28, 0) else t.playerOutline
         val st = t.style
-        if (minOf(Ui.contrast(body, st.land), Ui.contrast(body, st.major), Ui.contrast(body, st.minor)) < 2.2) {
-            fill.color = if (kind.color != 0) Color.rgb(40, 28, 0) else t.playerOutline; c.drawCircle(x, y, s * 1.25f, fill)
-        }
+        val faint = minOf(Ui.contrast(body, st.land), Ui.contrast(body, st.major), Ui.contrast(body, st.minor)) < 2.2
+        stroke.strokeJoin = Paint.Join.ROUND
+        if (faint) { stroke.color = edge; stroke.strokeWidth = 7f * d; c.drawPath(path, stroke) }
         fill.color = body; c.drawPath(path, fill)
-        stroke.color = if (kind.color != 0) Color.rgb(40, 28, 0) else t.playerOutline; stroke.strokeWidth = 2.5f * d; c.drawPath(path, stroke)
+        stroke.color = edge; stroke.strokeWidth = 2.5f * d; c.drawPath(path, stroke)
+        stroke.strokeJoin = Paint.Join.MITER
         if (kind.id == "arrow_comet") { // the shield's arrow mark
             stroke.color = t.playerOutline; stroke.strokeWidth = 2.2f * d
             c.drawLine(x, y + s * 0.45f, x, y - s * 0.5f, stroke); c.drawLine(x - s * 0.32f, y - s * 0.18f, x, y - s * 0.5f, stroke); c.drawLine(x + s * 0.32f, y - s * 0.18f, x, y - s * 0.5f, stroke)
