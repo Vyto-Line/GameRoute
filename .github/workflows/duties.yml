@@ -1,0 +1,29 @@
+name: Pharmacy duties
+on:
+  schedule:
+    - cron: "17 */3 * * *"   # every 3 hours
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "probe or build"
+        default: "build"
+      urls:
+        description: "probe: JSON list of [name, url]"
+        default: ""
+permissions:
+  contents: write
+concurrency: duties
+jobs:
+  duties:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe
+        if: inputs.mode == 'probe'
+        env:
+          URLS: ${{ inputs.urls }}
+        run: |
+          python3 tools/duties_probe.py "$URLS" || true
+          cd probe && git init -q && git checkout -q -b duties-probe && git add -A && git -c user.name=ci -c user.email=ci@example.com commit -qm probe
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" duties-probe
