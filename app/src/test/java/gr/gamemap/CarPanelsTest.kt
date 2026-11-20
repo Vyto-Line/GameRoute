@@ -59,6 +59,35 @@ class CarPanelsTest {
             else assertTrue("$name: back", "cp:back" in hits)
             (p.rows + p.tiles).filter { !p.dialog }.forEach { r -> assertTrue("$name: ${r.title} tappable", "cp:" + r.id in hits || p.rows.size > 6) }
         }
+        // the convoy step by step in the car (47b-47d), and the race board after finishing (47a)
+        Convoy.leave(quiet = true)
+        Convoy.debugStart(Place("x", "", LatLng(37.98, 23.73)), "k7p2qx"); Convoy.debugSet(null, true)
+        gr.gamemap.car.MapScreen::class.java.getDeclaredMethod("openConvoyWhere").apply { isAccessible = true }.invoke(screen)
+        var p = rend.carPanel!!
+        log.append("where: ${p.title} · ${p.tiles.map { it.title }} · ${p.note}\n")
+        assertTrue("step 1 opens", p.key == "cwhere" && p.tiles.any { it.id == "search" } && p.tiles.any { it.id == "share" })
+        var h = render("convoy_where", p); assertTrue("step 1 tiles tappable", "cp:search" in h && "cp:share" in h)
+        Convoy.debugSet(Place("Sounio", "", LatLng(37.65, 24.02)), true)
+        gr.gamemap.car.MapScreen::class.java.getDeclaredMethod("openConvoyHow", String::class.java).apply { isAccessible = true }.invoke(screen, "along")
+        p = rend.carPanel!!
+        log.append("how: ${p.title} · ${p.rows.map { it.title + (it.right ?: "") }}\n")
+        assertTrue("step 2: Drive together picked", p.key == "chow" && p.rows.first { it.id == "along" }.highlight)
+        h = render("convoy_how", p); assertTrue("step 2 tappable", "cp:race" in h && "cp:next" in h)
+        // the race board: I'm 2nd, one still driving
+        val t = System.currentTimeMillis()
+        Convoy.members.clear()
+        Convoy.debugMember("Nikos", LatLng(37.65, 24.02), 0, 0, -1.0, -1.0, "arrived")
+        Convoy.members.values.first().arrivedAt = t - 95_000
+        Convoy.debugMember("Maria", LatLng(37.70, 23.95), 64, t + 180_000, 1200.0, 30_000.0, "driving")
+        NavEngine.debugArrive(t)
+        Thread.sleep(600)
+        gr.gamemap.car.MapScreen::class.java.getDeclaredMethod("openRaceBoard").apply { isAccessible = true }.invoke(screen)
+        p = rend.carPanel!!
+        log.append("race: ${p.title} · ${p.rows.map { it.title + " " + (it.sub ?: "") }} · ${p.note}\n")
+        assertTrue("the race board", p.key == "race" && p.title.contains("2nd") && p.rows.any { it.title == "Maria" })
+        h = render("race_board", p); assertTrue("Done tappable", "cp:done" in h)
+        NavEngine.stop(); Convoy.leave(quiet = true)
+        Convoy.debugStart(Place("Nafplio", "", LatLng(37.567, 22.805)))
         // a long list pages
         val many = CarPanel("fuel", "Fuel · Diesel", rows = (1..11).map { CarRow("⛽", "Station $it", "${it * 200} m", "€1.7$it", "p:$it") },
             head = CarRow("", "Cheapest ▾", id = "sort"))
