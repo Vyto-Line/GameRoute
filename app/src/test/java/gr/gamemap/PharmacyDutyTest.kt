@@ -32,7 +32,15 @@ class PharmacyDutyTest {
     private val out = File(System.getProperty("previewOut") ?: "build/previews").apply { mkdirs() }
     private val log = StringBuilder()
 
-    @After fun done() { Duties.testNow = null; File(out, "pharmacy_duty.txt").writeText(log.toString()) }
+    @After fun done() { Duties.testNow = null; File(out, "pharmacy_duty_${name.methodName}.txt").writeText(log.toString()) }
+    @get:org.junit.Rule val name = org.junit.rules.TestName()
+
+    /** You are at [p] (forgetting the last fix, so the jump filter doesn't drop it). */
+    private fun youAt(p: LatLng) {
+        for (f in listOf("last", "lastReal")) try { LocationTracker::class.java.getDeclaredField(f).apply { isAccessible = true }.set(null, null) } catch (_: Exception) {}
+        LocationTracker.onLocationChanged(Location("gps").apply { latitude = p.lat; longitude = p.lon; accuracy = 5f; time = System.currentTimeMillis() })
+        log.append("you at $p: ${LocationTracker.position}\n")
+    }
 
     /** 22:30 tonight in Athens, and a duty list around [at]. */
     private fun setUp(at: LatLng) {
@@ -72,7 +80,7 @@ class PharmacyDutyTest {
         val root = activity.window.decorView
         val looper = shadowOf(Looper.getMainLooper())
         MapState.setLightMode(MapState.LightMode.DARK); MapState.setTheme(Theme.NEON_NOIR)
-        LocationTracker.onLocationChanged(Location("gps").apply { latitude = start.lat; longitude = start.lon; accuracy = 5f; time = System.currentTimeMillis() })
+        youAt(start)
         MapState.zoomBy(15.0 - MapState.targetZoom)
         fun shot(name: String) {
             val tmp = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
@@ -143,7 +151,7 @@ class PharmacyDutyTest {
     fun car() {
         val at = LatLng(37.9680, 23.7460)
         setUp(at)
-        LocationTracker.onLocationChanged(Location("gps").apply { latitude = at.lat; longitude = at.lon; accuracy = 5f; time = System.currentTimeMillis() })
+        youAt(at)
         val ctx = TestCarContext.createCarContext(RuntimeEnvironment.getApplication())
         androidx.car.app.CarContext::class.java.getDeclaredMethod("updateHandshakeInfo", androidx.car.app.HandshakeInfo::class.java)
             .apply { isAccessible = true }.invoke(ctx, androidx.car.app.HandshakeInfo("com.google.android.projection.gearhead", 7))
