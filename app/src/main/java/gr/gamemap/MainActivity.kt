@@ -4320,7 +4320,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(label(title, 17f, bold = true).apply { setTextColor(fg); typeface = theme.typeface })
-                addView(label(sub, 13.5f).apply { setTextColor(if (primary) Color.argb(210, Color.red(fg), Color.green(fg), Color.blue(fg)) else dim()) })
+                addView(label(sub, 13.5f).apply { setTextColor(if (primary) fg else dim()) }) // (faded, it was too faint on bright accents)
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(label("›", 22f).apply { setTextColor(fg) })
         }

@@ -952,7 +952,14 @@ class MapRenderer(private val car: Boolean = false) {
         path.close()
         fill.isAntiAlias = t.pixel == 1
         fill.color = Xp.routeGlow(t.look); c.drawCircle(x, y, s * 1.5f, fill)
-        fill.color = if (kind.color != 0) kind.color else t.player; c.drawPath(path, fill)
+        // an arrow too close to the map's own colours (8-Bit: dark green on dark green roads) gets a
+        // disc of its outline colour behind it, so it never gets lost (whole-app check, Nov 20)
+        val body = if (kind.color != 0) kind.color else t.player
+        val st = t.style
+        if (minOf(Ui.contrast(body, st.land), Ui.contrast(body, st.major), Ui.contrast(body, st.minor)) < 2.2) {
+            fill.color = if (kind.color != 0) Color.rgb(40, 28, 0) else t.playerOutline; c.drawCircle(x, y, s * 1.25f, fill)
+        }
+        fill.color = body; c.drawPath(path, fill)
         stroke.color = if (kind.color != 0) Color.rgb(40, 28, 0) else t.playerOutline; stroke.strokeWidth = 2.5f * d; c.drawPath(path, stroke)
         if (kind.id == "arrow_comet") { // the shield's arrow mark
             stroke.color = t.playerOutline; stroke.strokeWidth = 2.2f * d
