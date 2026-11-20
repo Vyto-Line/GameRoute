@@ -956,7 +956,7 @@ class MapRenderer(private val car: Boolean = false) {
         }
         path.close()
         fill.isAntiAlias = t.pixel == 1
-        fill.color = Xp.routeGlow(t.look); c.drawCircle(x, y, s * 1.5f, fill)
+        // (no coloured circle behind it either: just the arrow on the map)
         // no disc behind the arrow (it's see-through in every style). An arrow too close to the map's own
         // colours (8-Bit: green on green roads; Neon: pink on pink) gets a thick outline in its outline
         // colour instead, so it never gets lost
