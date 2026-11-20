@@ -87,7 +87,7 @@ class PharmacyDutyTest {
         }
         activity.refreshForTest()
         shot("pharm_51a_map")
-        val shownDuties = activity.rendererForTest.pois.shownNow().filter { it.duty != null }.map { it.name }
+        val shownDuties = activity.poisShownForTest().filter { it.duty != null }.map { it.name }
         log.append("51a map: duty pins $shownDuties; bar: ${activity.dutyCardForTest()?.let { texts(it) }}\n")
         assertTrue("the evening bar shows", activity.dutyCardForTest() != null && texts(activity.dutyCardForTest()!!).any { it.contains("2 pharmacies on duty") })
         assertTrue("on-duty pins on the map", shownDuties.isNotEmpty())

@@ -447,6 +447,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }, LinearLayout.LayoutParams((40 * d).toInt(), (40 * d).toInt()))
         dutyCard.visibility = View.VISIBLE
     }
+    internal fun poisShownForTest(): List<PoiLayer.Poi> = map.rendererForTest.pois.shownNow()
     internal fun dutyCardForTest(): View? = if (::dutyCard.isInitialized && dutyCard.visibility == View.VISIBLE) dutyCard else null
 
     private fun fixLocation(off: Boolean) {
