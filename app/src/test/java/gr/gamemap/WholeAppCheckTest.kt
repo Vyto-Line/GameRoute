@@ -151,7 +151,7 @@ class WholeAppCheckTest {
         val themes = Theme.values().toList()
         var n = 0
         for (greek in listOf(false, true)) for (dark in listOf(false, true)) for (t in themes) {
-            L.greek = greek
+            L.setMode(if (greek) "el" else "en")
             MapState.setLightMode(if (dark) MapState.LightMode.DARK else MapState.LightMode.LIGHT); MapState.setTheme(t)
             for ((name, open) in screens) {
                 repeat(2) { activity.onBackPressedDispatcher.onBackPressed(); looper.idle() }
@@ -166,7 +166,7 @@ class WholeAppCheckTest {
             looper.idle(); check("Driving", t, dark, greek); n++
             NavEngine.stop(); NavEngine.dismissTrip(); looper.idle()
         }
-        L.greek = false
+        L.setMode("en")
         // the car: drawn for a look by eye (one picture per style, light and dark)
         val car = MapRenderer(car = true).apply { carButtons = true }
         for (dark in listOf(false, true)) {
@@ -188,7 +188,10 @@ class WholeAppCheckTest {
     }
 
     private fun isAncestor(a: View, b: View): Boolean { var p = b.parent; while (p is View) { if (p === a) return true; p = p.parent }; return false }
-    private fun label(v: View): String = (v as? TextView)?.text?.toString()?.take(20)?.let { "\"$it\"" }
-        ?: v.contentDescription?.toString()?.take(20)?.let { "\"$it\"" }
-        ?: ((v as? ViewGroup)?.let { g -> (0 until g.childCount).map { g.getChildAt(it) }.filterIsInstance<TextView>().firstOrNull()?.text?.toString()?.take(20) }?.let { "\"$it\"" } ?: v.javaClass.simpleName)
+    private fun label(v: View): String {
+        (v as? TextView)?.let { return "\"" + it.text.toString().take(20) + "\"" }
+        v.contentDescription?.let { return "\"" + it.toString().take(20) + "\"" }
+        if (v is ViewGroup) for (i in 0 until v.childCount) { val c = v.getChildAt(i); if (c is TextView) return "\"" + c.text.toString().take(20) + "\"" }
+        return v.javaClass.simpleName
+    }
 }
