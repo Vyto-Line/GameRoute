@@ -1,7 +1,7 @@
 name: Pharmacy duties
 on:
   schedule:
-    - cron: "17 3,9,15,19 * * *"   # 4 times a day (Athens 05/06, 11/12, 17/18, 21/22)
+    - cron: "17 * * * *"   # every hour: Attica in full, a third of the other areas each time
   workflow_dispatch:
     inputs:
       mode:
@@ -16,7 +16,7 @@ concurrency: duties
 jobs:
   duties:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Probe

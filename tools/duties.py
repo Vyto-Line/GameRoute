@@ -19,6 +19,7 @@ ATH = ZoneInfo("Europe/Athens")
 UA = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36",
       "Accept": "text/html,*/*", "Accept-Language": "el-GR,el;q=0.9"}
 OUT = "out"
+PER_RUN = 110
 PIRAEUS = ("peiraias", "pireas", "nikaia", "korydallos", "keratsini", "perama", "drapetsona", "salamina",
            "agios-ioannis-renti", "renti")
 
@@ -87,15 +88,12 @@ def attica(day):
 DAYS = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
 BLOCKED = {"n": 0}
 def vrisko_area(slug, prefecture):
-    s = None
-    for attempt in range(3):
-        s = fetch(f"https://www.vrisko.gr/efimeries-farmakeion/{slug}/")
-        if s and "dutiesfilterddl" in s: break
-        # turned away (too many requests): wait and try again
+    """None when turned away (too many requests)."""
+    s = fetch(f"https://www.vrisko.gr/efimeries-farmakeion/{slug}/")
+    if not s or "dutiesfilterddl" not in s:
         BLOCKED["n"] += 1
         print("  no list:", slug, len(s or ""), re.sub(r"\s+", " ", (s or "")[:160]))
-        time.sleep(45 * (attempt + 1))
-    if not s or "dutiesfilterddl" not in s: return []
+        return None
     s = html.unescape(s)
     dm = re.search(r'data-selector="Today">\s*<span>(\d+)/(\d+)/(\d{4})', s)
     if not dm: return []
@@ -129,6 +127,18 @@ def vrisko_area(slug, prefecture):
     return res
 
 def vrisko_areas():
+    """All areas, kept for a day (listing them is 43 requests)."""
+    path = os.path.join(OUT, "areas.json")
+    try:
+        c = json.load(open(path))
+        if time.time() - c["at"] < 86400 and len(c["areas"]) > 100: return [tuple(x) for x in c["areas"]]
+    except Exception:
+        pass
+    areas = list_areas()
+    if len(areas) > 100: json.dump({"at": int(time.time()), "areas": areas}, open(path, "w"), ensure_ascii=False)
+    return areas
+
+def list_areas():
     s = fetch("https://www.vrisko.gr/efimeries-farmakeion/")
     if not s: return []
     s = html.unescape(s)
@@ -158,11 +168,22 @@ def main():
     for day in (today, today + timedelta(days=1)):
         got = attica(day); print(f"Attica {day}: {len(got)}"); duties += got
     areas = vrisko_areas(); print("vrisko areas:", len(areas))
-    n0 = len(duties)
-    for i, (slug, pref) in enumerate(areas):
-        duties += vrisko_area(slug, pref)
-        time.sleep(1.5)
-        if i % 50 == 0: print(f"  {i}/{len(areas)} areas, {len(duties) - n0} duties")
+    # a slice of the areas each run (vrisko turns us away after ~150 pages), going round: with a run
+    # every hour each area is read every 3-4 hours, and a day's list (with tonight's duty) is known by morning
+    st_path = os.path.join(OUT, "state.json")
+    try: cursor = json.load(open(st_path))["cursor"]
+    except Exception: cursor = 0
+    n0 = len(duties); done = 0; refused = 0
+    while done < min(PER_RUN, len(areas)) and refused < 2:
+        slug, pref = areas[(cursor + done) % len(areas)]
+        got = vrisko_area(slug, pref)
+        if got is None: refused += 1; time.sleep(20); continue
+        refused = 0; duties += got; done += 1
+        time.sleep(1.2)
+        if done % 25 == 0: print(f"  {done} areas, {len(duties) - n0} duties")
+    cursor = (cursor + done) % max(1, len(areas))
+    json.dump({"cursor": cursor}, open(st_path, "w"))
+    print(f"vrisko: read {done} areas (next starts at {cursor})")
     print("vrisko duties:", len(duties) - n0, "· turned away", BLOCKED["n"], "times")
     # keep shifts from the last file that haven't ended (overnight duty after midnight)
     try:
@@ -183,7 +204,7 @@ def main():
         d.pop("id", None)
         if d["s"]: out.append(d)
     out.sort(key=lambda d: (d["la"], d["lo"]))
-    if len(out) < 50:
+    if len(out) < 30:
         print("Too few duties, keeping the old file"); sys.exit(1)
     json.dump({"updated": now, "d": out}, open(os.path.join(OUT, "duties.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     print("written", len(out), os.path.getsize(os.path.join(OUT, "duties.json")), "bytes")
