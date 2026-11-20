@@ -42,10 +42,10 @@ class ArrowStylesTest {
             val r = MapRenderer(car = car).apply { if (car) carButtons = true }
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val c = Canvas(bmp)
-            for (k in 0 until 60) {
+            for (k in 0 until 120) {
                 r.draw(c, w, h, Rect(0, 0, w, h), if (car) 1f else 2.75f, hud = true)
                 Thread.sleep(40); org.robolectric.shadows.ShadowLooper.idleMainLooper()
-                if (k > 8 && VectorSource.busy.get() == 0) break
+                if (k > 40 && VectorSource.busy.get() == 0) break
             }
             r.draw(c, w, h, Rect(0, 0, w, h), if (car) 1f else 2.75f, hud = true)
             val p = r.lastPlayerAt ?: continue

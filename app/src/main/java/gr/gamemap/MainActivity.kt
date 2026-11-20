@@ -1102,7 +1102,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private fun openPharmacy(pl: Place) {
         closeSearch(); search.setText(""); hideKeyboard()
         showPlace(pl, dropped = false)
-        MapState.phone.showOverview(listOfNotNull(LocationTracker.position, pl.pos))
+        // the pharmacy in the middle of the map, above its card (not at the edge)
+        MapState.phone.pan(pl.pos, MapState.phone.userBearing ?: 0f)
         refreshChrome()
     }
 
