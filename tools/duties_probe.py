@@ -11,7 +11,7 @@ def get(name, url, data=None, extra=None):
             print(name, r.status, len(b), r.headers.get("content-type"))
     except Exception as e:
         print(name, "ERROR", e)
-urls = json.loads(sys.argv[1]) if len(sys.argv) > 1 else None
+urls = json.loads(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].strip() else None
 for n, u in (urls or [
     ("fsa_home.html", "https://fsa-efimeries.gr/"),
     ("fsa_filtered_get.html", "https://fsa-efimeries.gr/Home/FilteredHomeResults"),
