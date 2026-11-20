@@ -44,6 +44,16 @@ class EtaTomTomTest {
             last = spm
         }
         log.append("biggest change between neighbouring points: ${"%.0f".format(worst * 100)}%\n")
+        // TomTom's own route A → B (no points to follow), with and without traffic, to compare
+        for (traffic in listOf(true, false)) {
+            Thread.sleep(1500)
+            try {
+                val a = r.points.first(); val b = r.points.last()
+                val o = org.json.JSONObject(Http.get("https://api.tomtom.com/routing/1/calculateRoute/${a.lat},${a.lon}:${b.lat},${b.lon}/json?key=${Traffic.key}&traffic=$traffic&travelMode=car&computeTravelTimeFor=all"))
+                val sum = o.getJSONArray("routes").getJSONObject(0).getJSONObject("summary")
+                log.append("TomTom's own route, traffic=$traffic: ${sum.optInt("travelTimeInSeconds")} s for ${sum.optInt("lengthInMeters")} m (no traffic ${sum.optInt("noTrafficTravelTimeInSeconds")} s, historic ${sum.optInt("historicTrafficTravelTimeInSeconds")} s, live ${sum.optInt("liveTrafficIncidentsTravelTimeInSeconds")} s)\n")
+            } catch (e: Exception) { log.append("own route: ${e.message}\n") }
+        }
         File(out, "etatomtom.txt").writeText(log.toString())
         assertTrue("TomTom answered", got >= 4)
         assertTrue("TomTom's time per metre jumped ${"%.0f".format(worst * 100)}% between neighbouring points", worst < 0.5)

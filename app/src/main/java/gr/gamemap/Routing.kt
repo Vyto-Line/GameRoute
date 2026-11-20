@@ -405,7 +405,7 @@ object TomTomTime {
      * added minutes the driver never drives: the arrival time jumped 6 → 15 → 6 (drive, 20 Nov).
      */
     fun followsRoute(remainingMeters: Double, ttMeters: Int): Boolean =
-        ttMeters <= 0 || ttMeters <= remainingMeters * 1.12 + 250
+        ttMeters <= 0 || ttMeters <= remainingMeters * 1.05 + 120
 
     /** Evaluates [r] from [fromAlong] metres to its end. [departAt] (ms) asks for predicted traffic. */
     fun evaluate(r: RouteOption, fromAlong: Double, start: LatLng? = null, departAt: Long? = null): Result? {
