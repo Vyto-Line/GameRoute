@@ -77,6 +77,7 @@ class GameMapCarAppService : CarAppService() {
 class GameMapSession : Session() {
     override fun onCreateScreen(intent: Intent): Screen {
         MapState.car.startDrive()
+        gr.gamemap.Duties.refresh()
         gr.gamemap.CrashLog.note("Android Auto opened")
         gr.gamemap.CrashLog.watchMainThread() // a freeze in the car leaves a report too
         gr.gamemap.Parked.clear() // driving off: the old parking spot is history
@@ -362,6 +363,10 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 if (!C.counting) row("along", "🚗", T("Drive along"), T("Same route, no race")) { closePanel(); C.setAlong(true); NavEngine.start(carContext, cd) }
             } else if (C.active && !NavEngine.active && cd != null) row("go", "🏁", T("Convoy: go"), cd.name) { closePanel(); NavEngine.start(carContext, cd) }
             else row("fuel", "⛽", T("Fuel nearby"), if (NavEngine.active) T("Add a fuel stop") else T("Prices and ratings")) { openNearbyPanel(true) }
+            val onDuty = LocationTracker.position?.let { gr.gamemap.Duties.onDutyNear(it, 5000.0).size } ?: 0
+            rows += gr.gamemap.CarRow("💊", T("Pharmacies"), if (onDuty > 0) "🌙 " + T(if (onDuty == 1) "1 on duty now" else "$onDuty on duty now") else null,
+                id = "pharmacy", moon = onDuty > 0)
+            acts["pharmacy"] = { openPharmacyPanel() }
         }
         if (F.ready && F.core.started) {
             val inv = F.core.invites.firstOrNull { it.convoy != C.code }
@@ -503,6 +508,46 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             message = T("The others carry on without you. You can join again from an invite."),
             rows = listOf(gr.gamemap.CarRow("", T("Stay"), id = "stay"), gr.gamemap.CarRow("", T("Leave"), id = "go", red = true))),
             mapOf("stay" to { closePanel() }, "go" to { gr.gamemap.Convoy.leave(); closePanel(); surface.flash(T("You left the convoy")) }))
+    }
+
+    /** Pharmacies: the ones on duty now first (🌙, till when), then the others (greyed when closed). */
+    private fun openPharmacyPanel() {
+        val D = gr.gamemap.Duties
+        D.refresh()
+        val near = LocationTracker.position
+        var others: List<Place>? = null
+        fun render() {
+            if (surface.panelKey != "pharmacy" && surface.panelKey != null) return
+            val now = gr.gamemap.Duties.now()
+            val acts = HashMap<String, () -> Unit>()
+            val rows = ArrayList<gr.gamemap.CarRow>()
+            fun go(p: Place) { closePanel(); if (NavEngine.active && !NavEngine.arrived) NavEngine.addStop(p) else NavEngine.plan(carContext, p) }
+            val duties = near?.let { D.onDutyNear(it, 15_000.0, now).take(6) }.orEmpty()
+            duties.forEachIndexed { i, dt ->
+                val p = D.place(dt, now)
+                rows += gr.gamemap.CarRow("💊", p.name, "🌙 " + D.till(dt, now) + (dt.area.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                    NavEngine.formatDistance(gr.gamemap.Geo.distance(near!!, dt.pos)), "d:$i", moon = true)
+                acts["d:$i"] = { go(p) }
+            }
+            val closed = D.usuallyClosed(now)
+            others.orEmpty().filter { o -> duties.none { gr.gamemap.Geo.distance(it.pos, o.pos) < 60 } }
+                .sortedBy { gr.gamemap.Geo.distance(near!!, it.pos) }.take(6).forEachIndexed { i, p ->
+                    rows += gr.gamemap.CarRow("💊", p.name, if (closed) T("Closed") + " · " + D.opensLine(now) else p.address.takeIf { it.isNotBlank() },
+                        near?.let { NavEngine.formatDistance(gr.gamemap.Geo.distance(it, p.pos)) }, "o:$i", faded = closed)
+                    acts["o:$i"] = { go(p) }
+                }
+            val note = if (near != null && D.covers(near)) D.sourceLine(duties.firstOrNull()) else null
+            if (rows.isEmpty() && others == null && near != null) { show(gr.gamemap.CarPanel("pharmacy", T("Pharmacies"), loading = true), acts); return }
+            show(gr.gamemap.CarPanel("pharmacy", T("Pharmacies"), rows = rows, note = note,
+                empty = if (near == null) T("Couldn't search: no location or internet") else T("Nothing found nearby")), acts)
+        }
+        render()
+        if (near != null) carWork.execute {
+            val local = try { Places.nearbyLocal(listOf("pharmacy"), near) } catch (e: Exception) { emptyList() }
+            if (local.isNotEmpty()) main.post { others = local; render() }
+            val r = try { Places.nearbyFull(listOf("pharmacy"), near, local) } catch (e: Exception) { null }
+            main.post { others = r ?: local; render() }
+        }
     }
 
     /** Fuel (or parking) nearby: the phone's map data at once, the online prices after. */

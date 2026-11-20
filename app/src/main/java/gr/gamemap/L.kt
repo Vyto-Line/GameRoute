@@ -200,6 +200,10 @@ object L {
         "Via (.+)" to "Μέσω $1",
         "(\\d+) toll stations" to "$1 σταθμοί διοδίων",
         "(\\d+) friends online" to "$1 φίλοι συνδεδεμένοι",
+        "(\\d+) on duty" to "$1 εφημερεύουν",
+        "(\\d+) on duty now" to "$1 εφημερεύουν τώρα",
+        "(\\d+) pharmacies on duty near you" to "$1 φαρμακεία εφημερεύουν κοντά σου",
+        "One of (\\d+) on duty near you" to "Ένα από τα $1 που εφημερεύουν κοντά σου",
         "(.+) invites you" to "$1 σε προσκαλεί",
         "(\\d+) invites" to "$1 προσκλήσεις",
         "convoy to (.+)" to "κομβόι προς $1",
@@ -301,6 +305,20 @@ object L {
     ).map { Regex(it.first) to it.second }
 
     private val words: Map<String, String> = mapOf(
+        // pharmacies on duty
+        "1 on duty" to "1 εφημερεύει", "1 on duty now" to "1 εφημερεύει τώρα", "Pharmacies" to "Φαρμακεία",
+        "PHARMACIES NEARBY" to "ΦΑΡΜΑΚΕΙΑ ΚΟΝΤΑ", "ON DUTY NOW" to "ΕΦΗΜΕΡΕΥΟΥΝ ΤΩΡΑ", "On duty" to "Εφημερεύει",
+        "till " to "έως ", " tomorrow" to " αύριο", "from " to "από ", "opens " to "ανοίγει ", "updated " to "ενημέρωση ",
+        "Duty list: " to "Εφημερίες: ", "On duty nearby: " to "Εφημερεύει κοντά: ", "Nearest " to "Πιο κοντά ",
+        "On duty tonight" to "Εφημερεύει απόψε", "On duty today" to "Εφημερεύει σήμερα", "On duty tomorrow" to "Εφημερεύει αύριο",
+        "Pharmacists' Association of Attica" to "Φαρμακευτικός Σύλλογος Αττικής",
+        "the local pharmacists' associations (via vrisko.gr)" to "οι κατά τόπους φαρμακευτικοί σύλλογοι (μέσω vrisko.gr)",
+        "Mon" to "Δευ", "None on duty right now within 15 km" to "Κανένα δεν εφημερεύει τώρα σε 15 χλμ.",
+        "Getting the duty list…" to "Φόρτωση εφημεριών…", "No duty list for this area yet" to "Δεν υπάρχουν ακόμα εφημερίες για αυτή την περιοχή",
+        "CLOSED NOW" to "ΚΛΕΙΣΤΑ ΤΩΡΑ", "OTHER PHARMACIES" to "ΑΛΛΑ ΦΑΡΜΑΚΕΙΑ", "Closed" to "Κλειστό", "Closed now" to "Κλειστό τώρα",
+        "Not on duty now" to "Δεν εφημερεύει τώρα", "Call" to "Κλήση", "All pharmacies nearby" to "Όλα τα φαρμακεία κοντά", "PLACES" to "ΜΕΡΗ",
+        "call ahead if it's urgent" to "αν είναι επείγον, τηλεφώνησε πρώτα", "A pharmacy on duty near you" to "Ένα φαρμακείο εφημερεύει κοντά σου",
+        "Show" to "Δείξε", "Hide till tomorrow" to "Απόκρυψη ως αύριο",
         // home and search
         "Where to?" to "Πού πάμε;",
         "Type a destination" to "Γράψτε προορισμό",

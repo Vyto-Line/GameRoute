@@ -26,13 +26,16 @@ class PoiLayer {
         SHOP(Color.rgb(112, 72, 232), "Supermarket", "supermarket", "🛒"),
     }
 
-    class Poi(val name: String, val kind: Kind, val pos: LatLng, val rank: Int) {
+    class Poi(val name: String, val kind: Kind, val pos: LatLng, val rank: Int, val duty: Duties.Duty? = null) {
         /** As a destination. */
-        fun place() = Place(name.ifBlank { kind.label }, kind.label, pos, kind.icon)
+        fun place() = duty?.let { Duties.place(it) } ?: Place(name.ifBlank { kind.label }, kind.label, pos, kind.icon)
     }
 
     companion object {
         const val MIN_ZOOM = 15.5
+        /** Pharmacies on duty show from further out: there are only a few. */
+        const val DUTY_ZOOM = 13.5
+        val MOON = Color.rgb(177, 151, 252)
         private const val MAX = 28
         /** At most this many car parks at once (unnamed street parking is everywhere in a city). */
         private const val MAX_PARKING = 6
@@ -172,7 +175,10 @@ class PoiLayer {
     fun draw(c: Canvas, cam: MapRenderer.Camera, zoom: Double, w: Int, h: Int, d: Float, only: Set<Kind>?, selected: LatLng?) {
         val out = building
         out.n = 0
-        if (zoom < MIN_ZOOM) { lastShown.clear(); publish(); return }
+        // pharmacies on duty now (not while driving a route: then it's fuel and parking only)
+        val now = Duties.now()
+        val duties = if (only == null && zoom >= DUTY_ZOOM && Duties.all.isNotEmpty()) dutiesOnScreen(cam, w, h, now) else emptyList()
+        if (zoom < MIN_ZOOM && duties.isEmpty()) { lastShown.clear(); publish(); return }
         val size = (30 * d).toInt()
         val half = size / 2f
         hitRadius = 26 * d
@@ -191,13 +197,21 @@ class PoiLayer {
         val chargers = Fuel.showChargers
         val dest = if (NavEngine.active) NavEngine.destination else null
         cands.clear()
-        for (ty in t0y..t1y) for (tx in t0x..t1x) {
+        for ((duty, sx, sy) in duties) {
+            val poi = Poi(duty.name, Kind.PHARMACY, duty.pos, 0, duty)
+            cands += Cand(poi, sx, sy, keyOf(duty.pos), -1)
+        }
+        // at night the pharmacies that aren't on duty are closed: faded (only where we have the list)
+        val fadeShut = Duties.usuallyClosed(now) && duties.isNotEmpty()
+        if (zoom >= MIN_ZOOM) for (ty in t0y..t1y) for (tx in t0x..t1x) {
             val vt = VectorSource.peek(dz, tx.mod(nz), ty) ?: continue
             for (poi in of(dz, tx.mod(nz), ty, vt)) {
                 if (only != null && poi.kind !in only) continue
                 when (poi.kind) {
                     // busy kinds only up close (a city centre has a café and a pharmacy on every corner)
-                    Kind.FOOD, Kind.CAFE, Kind.SHOP, Kind.PHARMACY -> if (zoom < 17.0) continue
+                    Kind.FOOD, Kind.CAFE, Kind.SHOP -> if (zoom < 17.0) continue
+                    // (the one on duty is drawn from the duty list instead)
+                    Kind.PHARMACY -> if (zoom < 17.0 || duties.any { Geo.distance(it.first.pos, poi.pos) < 60 }) continue
                     // car parks: up close, or near where you're going (the centre has one on every block)
                     Kind.PARKING -> if (dest != null) { if (Geo.distance(dest, poi.pos) > 800) continue } else if (zoom < 17.0) continue
                     Kind.CHARGER -> if (!chargers || zoom < 16.5) continue
@@ -229,7 +243,12 @@ class PoiLayer {
                 if (dx * dx + dy * dy < minD2) { free = false; break }
             }
             if (!free) continue
-            c.drawBitmap(icon(cd.poi.kind, size), cd.sx - half, cd.sy - half, icon)
+            if (cd.poi.duty != null) drawDuty(c, cd.poi.duty, cd.sx, cd.sy, size, d, now)
+            else {
+                icon.alpha = if (fadeShut && cd.poi.kind == Kind.PHARMACY) 110 else 255
+                c.drawBitmap(icon(cd.poi.kind, size), cd.sx - half, cd.sy - half, icon)
+                icon.alpha = 255
+            }
             out.x[out.n] = cd.sx; out.y[out.n] = cd.sy; out.poi[out.n] = cd.poi; out.n++
             nowShown += cd.key
             if (cd.poi.kind == Kind.PARKING) parking++
@@ -241,6 +260,50 @@ class PoiLayer {
             c.drawCircle(ringX, ringY, half + 6 * d, p)
         }
         publish()
+    }
+
+    /** On-duty pharmacies inside the screen, with their screen positions. */
+    private fun dutiesOnScreen(cam: MapRenderer.Camera, w: Int, h: Int, now: Long): List<Triple<Duties.Duty, Float, Float>> {
+        val a = Math.toRadians(-cam.bearing.toDouble())
+        val ca = cos(a); val sa = sin(a)
+        val out = ArrayList<Triple<Duties.Duty, Float, Float>>()
+        for (dt in Duties.all) {
+            if (!dt.onDuty(now)) continue
+            val wx = (Geo.x(dt.pos.lon, cam.world) - cam.px) * cam.scale
+            val wy = (Geo.y(dt.pos.lat, cam.world) - cam.py) * cam.scale
+            if (kotlin.math.abs(wx) > w * 1.5 + h || kotlin.math.abs(wy) > w * 1.5 + h) continue
+            val sx = (cam.cx + wx * ca - wy * sa).toFloat()
+            val sy = (cam.cy + wx * sa + wy * ca).toFloat()
+            if (sx < -40 || sy < -40 || sx > w + 40 || sy > h + 40) continue
+            out += Triple(dt, sx, sy)
+        }
+        return out
+    }
+
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = android.graphics.Typeface.DEFAULT_BOLD }
+
+    /** A pharmacy on duty: the green cross with a violet glow ring, a 🌙 badge and when it closes. */
+    private fun drawDuty(c: Canvas, dt: Duties.Duty, x: Float, y: Float, size: Int, d: Float, now: Long) {
+        val half = size / 2f
+        p.style = Paint.Style.FILL; p.color = Color.argb(70, Color.red(MOON), Color.green(MOON), Color.blue(MOON))
+        c.drawCircle(x, y, half + 7 * d, p)
+        c.drawBitmap(icon(Kind.PHARMACY, size), x - half, y - half, icon)
+        p.style = Paint.Style.STROKE; p.strokeWidth = 3 * d; p.color = MOON
+        c.drawCircle(x, y, half + 3 * d, p)
+        // badge
+        val bx = x + half * 0.8f; val by = y - half * 0.8f; val br = 9 * d
+        p.style = Paint.Style.FILL; p.color = Color.rgb(20, 12, 34); c.drawCircle(bx, by, br + 2 * d, p)
+        p.color = MOON; c.drawCircle(bx, by, br, p)
+        p.color = Color.rgb(20, 12, 34); c.drawCircle(bx + br * 0.35f, by - br * 0.3f, br * 0.62f, p) // crescent
+        // when it closes
+        val t = Duties.till(dt, now) ?: return
+        text.textSize = 12 * d
+        val tw = text.measureText(t)
+        val lx = x + half + 8 * d; val ly = y - 9 * d
+        p.style = Paint.Style.FILL; p.color = Color.argb(225, 20, 12, 34)
+        c.drawRoundRect(lx, ly, lx + tw + 10 * d, ly + 18 * d, 5 * d, 5 * d, p)
+        text.color = MOON
+        c.drawText(t, lx + 5 * d, ly + 13.5f * d, text)
     }
 
     /** What's on screen now (tests). */

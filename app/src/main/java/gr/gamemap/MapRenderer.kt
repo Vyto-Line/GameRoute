@@ -1840,7 +1840,8 @@ class MapRenderer(private val car: Boolean = false) {
             for (row in shown) {
                 val rr = RectF(r.left + pad, y, r.right - pad, y + rowH - 8 * d)
                 fill.color = withAlpha(ink, 22); c.drawRoundRect(rr, 10 * d, 10 * d, fill)
-                if (row.highlight) { stroke.color = t.route; stroke.strokeWidth = 2 * d; c.drawRoundRect(rr, 10 * d, 10 * d, stroke) }
+                if (row.moon) { fill.color = withAlpha(PoiLayer.MOON, 40); c.drawRoundRect(rr, 10 * d, 10 * d, fill) }
+                if (row.highlight || row.moon) { stroke.color = if (row.moon) PoiLayer.MOON else t.route; stroke.strokeWidth = 2 * d; c.drawRoundRect(rr, 10 * d, 10 * d, stroke) }
                 carHits += rr to "cp:" + row.id
                 text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT; text.textSize = 22 * d; text.color = ink
                 c.drawText(row.icon, rr.left + 26 * d, rr.centerY() + 8 * d, text)
@@ -1851,9 +1852,13 @@ class MapRenderer(private val car: Boolean = false) {
                 c.drawText(rightText, rr.right - 14 * d, rr.centerY() + 7 * d, text)
                 val rw = text.measureText(rightText) + 24 * d
                 val tx = rr.left + 52 * d; val tw = rr.right - tx - rw
-                text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = if (row.red) Color.rgb(255, 99, 99) else ink
+                text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = if (row.red) Color.rgb(255, 99, 99) else if (row.faded) dimInk else ink
                 c.drawText(ellipsize(row.title, tw), tx, if (row.sub != null) rr.centerY() - 2 * d else rr.centerY() + 6 * d, text)
-                row.sub?.let { s -> text.typeface = Typeface.DEFAULT; text.textSize = 14 * d; text.color = dimInk; c.drawText(ellipsize(s, tw), tx, rr.centerY() + 17 * d, text) }
+                row.sub?.let { s ->
+                    text.typeface = if (row.moon) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; text.textSize = 14 * d
+                    text.color = if (row.moon) (if (Ui.contrast(PoiLayer.MOON, Ui.panel(t)) >= 3) PoiLayer.MOON else accentInk) else dimInk
+                    c.drawText(ellipsize(s, tw), tx, rr.centerY() + 17 * d, text)
+                }
                 y += rowH
             }
             if (many) {

@@ -29,4 +29,8 @@ class CarRow(
     val id: String,
     val highlight: Boolean = false,
     val red: Boolean = false,
+    /** A pharmacy on duty: violet outline and line under. */
+    val moon: Boolean = false,
+    /** Closed now: greyed. */
+    val faded: Boolean = false,
 )

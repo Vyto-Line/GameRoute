@@ -380,6 +380,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private lateinit var locCard: LinearLayout
     private val locListener: () -> Unit = { runOnUiThread { syncLocCard() } }
+    private val dutyListener: () -> Unit = { runOnUiThread { dutyKey = "?"; moreKey = ""; refreshChrome(); map.invalidate() } }
 
     /** The card under Where to? when location is off or GameRoute isn't allowed to use it. */
     private fun syncLocCard() {
@@ -405,6 +406,48 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }, LinearLayout.LayoutParams(WRAP_CONTENT, (42 * d).toInt()))
         locCard.visibility = View.VISIBLE
     }
+
+    private lateinit var dutyCard: LinearLayout
+    private var dutyKey = ""
+
+    /**
+     * In the evening and at night (and on Sundays), when a pharmacy on duty is within 3 km and you're
+     * not on a route: one slim bar under Where to? ("2 pharmacies on duty near you"). ✕ hides it till tomorrow.
+     */
+    private fun syncDutyCard() {
+        if (!::dutyCard.isInitialized) return
+        val now = Duties.now()
+        val near = LocationTracker.position
+        val prefs = getSharedPreferences("gamemap", MODE_PRIVATE)
+        val today = run { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("Europe/Athens") }.format(java.util.Date(now - 8 * 3_600_000L)) }
+        val list = if (near == null || NavEngine.active || NavEngine.planningOn(false) || Convoy.active || !Duties.usuallyClosed(now) ||
+            prefs.getString("dutyBarHidden", "") == today || LocationStatus.state != LocationStatus.State.OK) emptyList()
+            else Duties.onDutyNear(near, 3000.0, now)
+        val key = if (list.isEmpty()) "" else "${list.size}|${list[0].name}|${NavEngine.formatDistance(Geo.distance(near!!, list[0].pos))}|${theme.name}|${MapState.dark}"
+        if (key == dutyKey) return
+        dutyKey = key
+        if (list.isEmpty()) { dutyCard.visibility = View.GONE; return }
+        val p = (12 * d).toInt()
+        val moon = readable(PoiLayer.MOON)
+        dutyCard.removeAllViews()
+        dutyCard.background = bg(opaque(panel), moon, 2f, 14f)
+        dutyCard.setPadding(p, p * 3 / 4, p / 2, p * 3 / 4)
+        dutyCard.isClickable = true
+        dutyCard.setOnClickListener { showPharmacies() }
+        dutyCard.addView(label("🌙", 22f), LinearLayout.LayoutParams((34 * d).toInt(), WRAP_CONTENT))
+        dutyCard.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding((6 * d).toInt(), 0, (6 * d).toInt(), 0)
+            addView(label(L.t(if (list.size == 1) "A pharmacy on duty near you" else "${list.size} pharmacies on duty near you"), 15f, bold = true).apply { setTextColor(ink) })
+            addView(label(L.t("Nearest ") + NavEngine.formatDistance(Geo.distance(near!!, list[0].pos)) + " · " + Duties.till(list[0], now).orEmpty(), 13f).apply { setTextColor(dim()) })
+        }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        dutyCard.addView(label(L.t("Show") + " ›", 15f, bold = true).apply { setTextColor(moon); setPadding(p / 2, p / 2, p / 2, p / 2) })
+        dutyCard.addView(label("✕", 15f).apply {
+            setTextColor(dim()); gravity = Gravity.CENTER; contentDescription = L.t("Hide till tomorrow"); isClickable = true
+            setOnClickListener { prefs.edit().putString("dutyBarHidden", today).apply(); dutyKey = "x"; dutyCard.visibility = View.GONE }
+        }, LinearLayout.LayoutParams((40 * d).toInt(), (40 * d).toInt()))
+        dutyCard.visibility = View.VISIBLE
+    }
+    internal fun dutyCardForTest(): View? = if (::dutyCard.isInitialized && dutyCard.visibility == View.VISIBLE) dutyCard else null
 
     private fun fixLocation(off: Boolean) {
         try {
@@ -721,6 +764,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             addView(searchCard, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             locCard = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE; elevation = 5 * d }
             addView(locCard, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (8 * d).toInt() })
+            dutyCard = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE; elevation = 5 * d }
+            addView(dutyCard, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (8 * d).toInt() })
             addView(chipsScroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             addView(suggestScroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = (8 * d).toInt() })
         }
@@ -839,7 +884,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** ≡ More: what used to crowd the chip row. */
     private fun renderMore() {
-        val key = "${theme.name}|${MapState.dark}|${Convoy.active}|${Places.labelled().joinToString { it.label.orEmpty() }}|${Places.saved("home")?.name}|${Places.saved("work")?.name}"
+        val dutyN = LocationTracker.position?.let { Duties.onDutyNear(it, 5000.0).size } ?: 0
+        val key = "${theme.name}|${MapState.dark}|${Convoy.active}|$dutyN|${Places.labelled().joinToString { it.label.orEmpty() }}|${Places.saved("home")?.name}|${Places.saved("work")?.name}"
         if (key == moreKey && sheetHost.childCount > 0) return
         moreKey = key
         sheetHost.removeAllViews()
@@ -849,18 +895,23 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sheetHost.addView(SheetScroll(0.72).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         val p = (12 * d).toInt()
         fun section(t: String) = body.addView(label(t, 12f, bold = true).apply { setTextColor(dim()); letterSpacing = 0.08f; setPadding(p / 4, p, 0, p / 2) })
-        fun tiles(vararg items: Triple<String, String, () -> Unit>) {
+        /** [hot]: that tile's title gets the violet look and [hotSub] under it (pharmacies on duty). */
+        fun tiles(vararg items: Triple<String, String, () -> Unit>, hot: String? = null, hotSub: String? = null) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val small = items.size >= 4
             items.forEachIndexed { i, (icon, title, act) ->
+                val isHot = title == hot && hotSub != null
+                val moon = readable(PoiLayer.MOON)
                 row.addView(LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(p, p, p / 2, p)
-                    background = bg(dim(22), dim(60), 1f, 14f)
+                    setPadding(if (small) p * 3 / 4 else p, p, p / 2, p)
+                    background = if (isHot) bg(Color.argb(40, 177, 151, 252), moon, 2f, 14f) else bg(dim(22), dim(60), 1f, 14f)
                     isClickable = true
                     setOnClickListener { act() }
                     addView(label(icon, 22f).apply { setTextColor(readable(accent)) }, LinearLayout.LayoutParams((30 * d).toInt(), (30 * d).toInt()))
-                    addView(label(title, 15f, bold = true).apply { setTextColor(ink); setPadding(0, p / 3, 0, 0); maxLines = 2 })
-                }, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { if (i < items.size - 1) marginEnd = p * 2 / 3 })
+                    addView(label(title, if (small) 14f else 15f, bold = true).apply { setTextColor(ink); setPadding(0, p / 3, 0, 0); maxLines = 2 })
+                    if (isHot) addView(label(hotSub!!, 12f, bold = true).apply { setTextColor(moon); maxLines = 2 })
+                }, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { if (i < items.size - 1) marginEnd = (if (small) p / 2 else p * 2 / 3) })
             }
             body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
@@ -869,6 +920,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             Triple("⛽", "Fuel") { closeSheet(); showFuel() },
             Triple("🅿", "Parking") { closeSheet(); showNearby("PARKING NEARBY", listOf("parking")) },
             Triple("🍽", "Food") { closeSheet(); showNearby("FOOD NEARBY", listOf("restaurant", "fast_food", "cafe")) },
+            Triple("💊", "Pharmacy") { closeSheet(); showPharmacies() },
+            hot = "Pharmacy", hotSub = if (dutyN > 0) "🌙 " + L.t(if (dutyN == 1) "1 on duty" else "$dutyN on duty") else null,
         )
         section("TOGETHER")
         if (Convoy.active) tiles(Triple("👥", "Your convoy") { openSheet("convoy") }, Triple("🙂", "Friends") { openSheet("friends") })
@@ -933,6 +986,123 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }, header = title, force = true)
             }
         }
+    }
+
+    // ------------------------------------------------------------------ pharmacies (on duty first)
+
+    private var pharmShown: List<Place>? = null
+    internal fun showPharmaciesForTest() = showPharmacies()
+
+    /** Pharmacies nearby: the ones on duty now first (from the duty list), then the others. */
+    private fun showPharmacies() {
+        val near = LocationTracker.position
+        if (near == null) { Toast.makeText(this, L.t("Waiting for your location…"), Toast.LENGTH_SHORT).show(); return }
+        Duties.refresh()
+        val seq = ++querySeq
+        lastResults = emptyList()
+        pharmShown = null
+        renderPharmacies(loading = true)
+        io.execute {
+            val local = try { Places.nearbyLocal(listOf("pharmacy"), near) } catch (e: Exception) { emptyList<Place>() }
+            if (local.isNotEmpty()) runOnUiThread { if (seq == querySeq && !isFinishing) { pharmShown = local; renderPharmacies(loading = true) } }
+            val r = try { Places.nearbyFull(listOf("pharmacy"), near, local) } catch (e: Exception) { null }
+            runOnUiThread {
+                if (seq != querySeq || isFinishing) return@runOnUiThread
+                pharmShown = r ?: local
+                renderPharmacies(loading = false)
+            }
+        }
+    }
+
+    private fun renderPharmacies(loading: Boolean) {
+        val near = LocationTracker.position ?: return
+        val now = Duties.now()
+        val p = (12 * d).toInt()
+        val moon = readable(PoiLayer.MOON)
+        val closed = Duties.usuallyClosed(now)
+        suggestList.removeAllViews()
+        fun head(t: String, c: Int) = suggestList.addView(label(t, 12f, bold = true).apply {
+            setTextColor(c); letterSpacing = 0.1f; setPadding(p + p / 2, p, p, p / 3)
+        })
+        head(L.t("PHARMACIES NEARBY"), dim(170))
+        val duties = Duties.onDutyNear(near, 15_000.0, now).take(6)
+        if (Duties.covers(near)) {
+            head("🌙 " + L.t("ON DUTY NOW"), moon)
+            if (duties.isEmpty()) suggestList.addView(label(L.t("None on duty right now within 15 km"), 14f).apply { setTextColor(dim()); setPadding(p + p / 2, 0, p, p / 2) })
+            duties.forEachIndexed { i, dt -> suggestList.addView(pharmacyRow(Duties.place(dt, now), "🌙 " + L.t("On duty") + " · " + Duties.till(dt, now), moon, dt.phone, first = i == 0)) }
+        } else if (Duties.all.isEmpty()) suggestList.addView(label(L.t(if (Duties.updated == 0L) "Getting the duty list…" else "No duty list for this area yet"), 14f).apply { setTextColor(dim()); setPadding(p + p / 2, 0, p, p / 2) })
+        val others = pharmShown.orEmpty().filter { o -> duties.none { Geo.distance(it.pos, o.pos) < 60 } }
+            .sortedBy { Geo.distance(near, it.pos) }.take(8)
+        if (others.isNotEmpty()) {
+            head(L.t(if (closed) "CLOSED NOW" else "OTHER PHARMACIES"), dim(170))
+            for (o in others) {
+                val next = Duties.at(o.pos)?.takeIf { !it.onDuty(now) }?.let { Duties.hoursLine(it, now) }
+                val status = when {
+                    next != null -> "🌙 $next"
+                    closed -> L.t("Closed") + " · " + Duties.opensLine(now)
+                    else -> ""
+                }
+                suggestList.addView(pharmacyRow(o, status, dim(), null, faded = closed))
+            }
+        } else if (loading) suggestList.addView(label(L.t("Searching nearby…"), 14f).apply { setTextColor(dim()); setPadding(p + p / 2, p / 2, p, p / 2) })
+        if (Duties.covers(near)) suggestList.addView(label(Duties.sourceLine(duties.firstOrNull()), 11.5f).apply { setTextColor(dim()); setPadding(p + p / 2, p / 2, p, p) })
+        suggestScroll.visibility = View.VISIBLE
+        refreshChrome()
+        suggestScroll.post {
+            val max = (resources.displayMetrics.heightPixels * 0.62f).toInt()
+            val lp = suggestScroll.layoutParams
+            val want = if (suggestList.height > max) max else WRAP_CONTENT
+            if (lp.height != want) { lp.height = want; suggestScroll.layoutParams = lp }
+        }
+    }
+
+    /** One pharmacy: cross, name, status (on duty till… / closed), distance and area, then Call and Go. */
+    private fun pharmacyRow(pl: Place, status: String, statusColor: Int, phone: String?, first: Boolean = false, faded: Boolean = false): View {
+        val p = (12 * d).toInt()
+        val near = LocationTracker.position
+        val moon = readable(PoiLayer.MOON)
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(p, p * 3 / 4, p, p * 3 / 4)
+            background = when {
+                first -> bg(Color.argb(36, 177, 151, 252), moon, 2f, 14f)
+                phone != null -> bg(Color.argb(24, 177, 151, 252), radius = 14f)
+                else -> null
+            }
+            if (faded) alpha = 0.6f
+            isClickable = true
+            setOnClickListener { choose(pl) }
+            addView(label("✚", 18f, bold = true).apply {
+                gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = bg(Color.rgb(47, 158, 68), radius = 19f)
+            }, LinearLayout.LayoutParams((38 * d).toInt(), (38 * d).toInt()))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(p, 0, p / 2, 0)
+                addView(label(pl.name, 16f, bold = true).apply { setTextColor(ink); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                if (status.isNotBlank()) addView(label(status, 13.5f, bold = true).apply { setTextColor(statusColor); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                val where = listOfNotNull(near?.let { NavEngine.formatDistance(Geo.distance(it, pl.pos)) }, pl.address.substringAfterLast(", ").takeIf { it.isNotBlank() }).joinToString(" · ")
+                addView(label(where, 13f).apply { setTextColor(dim()); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            val sq = (42 * d).toInt()
+            if (!phone.isNullOrBlank()) addView(label("📞", 17f).apply {
+                gravity = Gravity.CENTER; background = bg(Color.TRANSPARENT, dim(120), 1.5f, 12f)
+                contentDescription = L.t("Call"); isClickable = true
+                setOnClickListener { dial(phone) }
+            }, LinearLayout.LayoutParams(sq, sq).apply { marginEnd = p / 2 })
+            addView(label("➤", 18f, bold = true).apply {
+                gravity = Gravity.CENTER; setTextColor(onAccent(accent)); background = bg(if (faded) dim(60) else accent, radius = 12f)
+                contentDescription = L.t("Go"); isClickable = true
+                setOnClickListener {
+                    search.setText(""); search.clearFocus(); hideKeyboard(); suggestScroll.visibility = View.GONE
+                    if (NavEngine.active && !NavEngine.arrived) NavEngine.addStop(pl) else NavEngine.start(this@MainActivity, pl)
+                    MapState.recenter(); refreshChrome()
+                }
+            }, LinearLayout.LayoutParams(sq, sq))
+        }.also { it.layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { setMargins(p / 2, p / 6, p / 2, p / 6) } }
+    }
+
+    private fun dial(phone: String) {
+        try { startActivity(Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:" + phone.filter { it.isDigit() || it == '+' }))) }
+        catch (e: Exception) { Toast.makeText(this, phone, Toast.LENGTH_LONG).show() }
     }
 
     // ------------------------------------------------------------------ fuel nearby (by price)
@@ -1607,7 +1777,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 setTextColor(readable(accent)); setPadding(p, p, 0, p); setOnClickListener { showReviews(pl) }
             })
         })
-        if (pl.extra.isNotBlank()) placeCard.addView(label(pl.extra, 14f).apply {
+        val pharmacy = pl.icon == "💊" && near != null && Duties.covers(pl.pos)
+        val duty = if (pharmacy) Duties.at(pl.pos) else null
+        if (pharmacy) placeCard.addView(dutyBox(pl, duty), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 2 })
+        else if (pl.extra.isNotBlank()) placeCard.addView(label(pl.extra, 14f).apply {
             setTextColor(ink); setPadding(p, p / 2, p, p / 2); background = bg(dim(26), radius = 10f)
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = p / 3 })
 
@@ -1665,8 +1838,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             if (navigating) NavEngine.addStop(pl) else NavEngine.start(this, pl)
         }.apply { setTextColor(if (Ui.contrast(Color.WHITE, accent) >= 3) Color.WHITE else Color.BLACK); background = bg(accent, radius = 26f) },
             LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.6f).apply { marginEnd = p })
-        row.addView(pill(if (navigating) "Go instead" else "Routes") {
-            closePlace(); if (navigating) NavEngine.start(this, pl) else NavEngine.plan(this, pl)
+        val callable = duty?.phone?.takeIf { it.isNotBlank() && !navigating }
+        row.addView(pill(if (callable != null) "📞  " + L.t("Call") else if (navigating) "Go instead" else "Routes") {
+            if (callable != null) dial(callable)
+            else { closePlace(); if (navigating) NavEngine.start(this, pl) else NavEngine.plan(this, pl) }
         }.apply {
             setTextColor(ink); background = bg(Color.TRANSPARENT, dim(120), 1.5f, 26f)
             // one line, shrinking a little with big text or long words
@@ -1674,6 +1849,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setAutoSizeTextTypeUniformWithConfiguration(11, 16, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         placeCard.addView(row)
+        if (pharmacy) placeCard.addView(label(Duties.sourceLine(duty) + " · " + L.t("call ahead if it's urgent"), 11.5f).apply {
+            setTextColor(dim()); setPadding(p / 3, p / 2, 0, 0)
+        })
         // one row of labelled icons for everything else
         val savedNow = Places.isSaved(pl)
         val actions = mutableListOf<Triple<Int, String, () -> Unit>>(
@@ -1703,6 +1881,42 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         })
         appear(placeCard)
         homeSheet.visibility = View.GONE
+    }
+
+    /** A pharmacy's duty: on duty now (hours), on duty later today, or closed with the nearest one on duty. */
+    private fun dutyBox(pl: Place, duty: Duties.Duty?): View {
+        val p = (12 * d).toInt()
+        val now = Duties.now()
+        val moon = readable(PoiLayer.MOON)
+        val on = duty?.onDuty(now) == true
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(p, p * 2 / 3, p, p * 2 / 3)
+            background = bg(if (on) Color.argb(40, 177, 151, 252) else dim(22), radius = 12f)
+        }
+        val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val later = duty?.takeIf { !on }?.let { Duties.hoursLine(it, now) }
+        when {
+            on -> {
+                box.addView(label("🌙", 20f), LinearLayout.LayoutParams((32 * d).toInt(), WRAP_CONTENT))
+                text.addView(label(Duties.hoursLine(duty!!, now).orEmpty(), 15.5f, bold = true).apply { setTextColor(moon) })
+                LocationTracker.position?.let { Duties.onDutyNear(it, 3000.0, now).size }?.takeIf { it > 1 }?.let { n ->
+                    text.addView(label(L.t("One of $n on duty near you"), 13f).apply { setTextColor(dim()) })
+                }
+            }
+            else -> {
+                val closed = Duties.usuallyClosed(now)
+                text.addView(label(later ?: if (closed) L.t("Closed now") + " · " + Duties.opensLine(now) else L.t("Not on duty now"), 15f, bold = true)
+                    .apply { setTextColor(if (later != null) moon else ink) })
+                val nearest = Duties.onDutyNear(pl.pos, 15_000.0, now).firstOrNull()
+                if (nearest != null) text.addView(label(L.t("On duty nearby: ") + nearest.name + ", " +
+                    NavEngine.formatDistance(Geo.distance(LocationTracker.position ?: pl.pos, nearest.pos)) + " ›", 13.5f, bold = true).apply {
+                    setTextColor(moon); maxLines = 2; ellipsize = TextUtils.TruncateAt.END; isClickable = true
+                    setOnClickListener { showPlace(Duties.place(nearest, now), dropped = false) }
+                })
+            }
+        }
+        box.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        return box
     }
 
     /** Walking directions to [p]: Google Maps (walking) if it's there, otherwise any map app. */
@@ -2228,6 +2442,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val nav = NavEngine.active
         val planning = NavEngine.planningOn(false)
         val searching = search.hasFocus() || suggestScroll.visibility == View.VISIBLE || pickFor != null
+        if (searching || placeShown != null) { if (::dutyCard.isInitialized && dutyCard.visibility == View.VISIBLE) { dutyCard.visibility = View.GONE; dutyKey = "" } }
+        else syncDutyCard()
 
         searchCard.background = bg(panel, accent, 1.5f, 18f, pill = true)
         suggestScroll.background = bg(panel, radius = 18f)
@@ -2541,6 +2757,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             suggestList.addView(TextView(this).apply { text = it; textSize = 15f; setTextColor(dim(170)); setPadding(p + p / 2, p, p, p) })
         }
         val near = LocationTracker.position
+        // typed a pharmacy word: the ones on duty now on top, then everything else
+        if (pickFor == null && header != "RECENT" && near != null && Duties.isPharmacyQuery(search.text.toString())) {
+            val now = Duties.now()
+            val on = Duties.onDutyNear(near, 15_000.0, now).take(3)
+            if (on.isNotEmpty()) {
+                val moon = readable(PoiLayer.MOON)
+                suggestList.addView(label("🌙 " + L.t("ON DUTY NOW"), 12f, bold = true).apply { setTextColor(moon); letterSpacing = 0.1f; setPadding(p + p / 2, p, p, p / 3) })
+                for (dt in on) suggestList.addView(pharmacyRow(Duties.place(dt, now), "🌙 " + L.t("On duty") + " · " + Duties.till(dt, now), moon, dt.phone))
+                suggestList.addView(label(L.t("All pharmacies nearby") + " ›", 15f, bold = true).apply {
+                    setTextColor(moon); setPadding(p + p / 2, p / 2, p, p / 2); isClickable = true
+                    setOnClickListener { hideKeyboard(); showPharmacies() }
+                })
+                if (places.isNotEmpty()) suggestList.addView(label(L.t("PLACES"), 12f, bold = true).apply { setTextColor(dim(170)); letterSpacing = 0.1f; setPadding(p + p / 2, p, p, p / 3) })
+            }
+        }
         for (pl in places) suggestList.addView(resultRow(pl, removable = header == "RECENT"))
         // not there (or not the right one): put it on the map yourself, saved under that name
         if (missing != null) suggestList.addView(LinearLayout(this).apply {
@@ -6139,6 +6370,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Friends.arrived += friendsArrived
         InvitePop.changed += invitePopListener
         LocationStatus.changed += locListener
+        Duties.changed += dutyListener
         LocationStatus.phoneVisible = true
         LocationStatus.check(); syncLocCard()
         Friends.setVisible(true)
@@ -6162,6 +6394,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         Friends.arrived -= friendsArrived
         InvitePop.changed -= invitePopListener
         LocationStatus.changed -= locListener
+        Duties.changed -= dutyListener
         LocationStatus.phoneVisible = false
         Friends.setVisible(false)
         main.removeCallbacks(ticker)
@@ -6175,6 +6408,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         resumed = true
+        Duties.refresh()
+        syncDutyCard()
         updateCompass()
     }
 
