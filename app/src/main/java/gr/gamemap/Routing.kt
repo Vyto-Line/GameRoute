@@ -397,7 +397,15 @@ object TomTomRoute {
  * it takes in traffic, where the jams are and the speed limits. Geometry and turns stay OSRM's.
  */
 object TomTomTime {
-    class Result(val seconds: Int, val delay: Int, val traffic: List<Stretch>, val limits: List<Stretch>)
+    class Result(val seconds: Int, val delay: Int, val traffic: List<Stretch>, val limits: List<Stretch>, val meters: Int = 0)
+
+    /**
+     * TomTom's answer only counts if it followed our route: its length close to what's left of
+     * ours. Longer means it went another way (round a block, a U-turn) to join the route, which
+     * added minutes the driver never drives: the arrival time jumped 6 → 15 → 6 (drive, 20 Nov).
+     */
+    fun followsRoute(remainingMeters: Double, ttMeters: Int): Boolean =
+        ttMeters <= 0 || ttMeters <= remainingMeters * 1.12 + 250
 
     /** Evaluates [r] from [fromAlong] metres to its end. [departAt] (ms) asks for predicted traffic. */
     fun evaluate(r: RouteOption, fromAlong: Double, start: LatLng? = null, departAt: Long? = null): Result? {
@@ -407,7 +415,8 @@ object TomTomTime {
         if (remaining < 50) return null
         val step = maxOf(remaining / 90, 25.0)
         val pts = ArrayList<LatLng>()
-        start?.let { pts += it }
+        // (from the spot on the route, not the raw GPS point: a few metres off, on the other side
+        // of the road, and TomTom routed a detour back onto the route)
         var next = fromAlong
         for (i in r.points.indices) {
             if (r.cum[i] + 0.1 >= next) { pts += r.points[i]; next = r.cum[i] + step }
@@ -458,7 +467,12 @@ object TomTomTime {
                 }
             }
         }
-        return Result(sum.getInt("travelTimeInSeconds"), sum.optInt("trafficDelayInSeconds", 0), traffic, limits)
+        val meters = sum.optInt("lengthInMeters", 0)
+        if (!followsRoute(remaining, meters)) {
+            CrashLog.note("TomTom time ignored: ${meters} m against ${remaining.toInt()} m left (it went another way)")
+            return null
+        }
+        return Result(sum.getInt("travelTimeInSeconds"), sum.optInt("trafficDelayInSeconds", 0), traffic, limits, meters)
     }
 }
 

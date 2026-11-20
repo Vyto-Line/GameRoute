@@ -284,6 +284,25 @@ object NavEngine {
 
     private var secondsPerMeter = 0.08
 
+    /**
+     * A new traffic factor. A change of more than a third only counts when the next answer
+     * agrees (within 15%): one odd answer no longer moves the arrival time by minutes.
+     */
+    private var pendingRatio: Double? = null
+    private fun acceptRatio(r: Double, why: String) {
+        val old = trafficRatio
+        val big = Math.abs(r / old - 1) > 0.33
+        val p = pendingRatio
+        if (big && (p == null || Math.abs(r / p - 1) > 0.15)) {
+            pendingRatio = r
+            CrashLog.note("arrival: $why says ×${"%.2f".format(r)} (now ×${"%.2f".format(old)}), waiting for a second answer")
+            return
+        }
+        pendingRatio = null
+        trafficRatio = r
+        if (Math.abs(r / old - 1) > 0.1) CrashLog.note("arrival: $why ×${"%.2f".format(old)} → ×${"%.2f".format(r)}")
+    }
+
     // ---------------------------------------------------------------- time left (steady)
     /**
      * Time from each route point to the end, without traffic. Not "distance × the route's average
@@ -1167,18 +1186,20 @@ object NavEngine {
         val r = current ?: return
         trafficAt = System.currentTimeMillis()
         val from = along
-        val plain = plainLeft(r, along)
         val declinedNow = declined.toList()
         val nearEnd = remainingDistance < 1500
         val hasOffer = offer != null
         bg.execute {
-            val res = try { TomTomTime.evaluate(r, from, start = pos) } catch (e: Exception) { null }
+            val res = try { TomTomTime.evaluate(r, from) } catch (e: Exception) { null }
             main.post {
                 if (current !== r || res == null) return@post
-                if (plain > 30) trafficRatio = (res.seconds / plain).coerceIn(0.6, 4.0)
                 trafficDelaySeconds = res.delay
                 r.traffic = res.traffic
                 if (res.limits.isNotEmpty()) r.limits = res.limits
+                // the factor against our own time for the same stretch, worked out with the limits
+                // just put in (before, it was worked out with the old ones and applied to the new)
+                val ours = plainLeft(r, from)
+                if (ours > 30) acceptRatio((res.seconds / ours).coerceIn(0.6, 4.0), "TomTom traffic")
                 setEta(plainLeft(r, along) * trafficRatio)
                 changed.fire()
             }
