@@ -185,7 +185,7 @@ class WholeAppCheckTest {
                 File(pics, "car_${t.name.lowercase()}_${if (dark) "dark" else "light"}.png").outputStream().use { cb.compress(Bitmap.CompressFormat.PNG, 80, it) }
             }
         }
-        val sb = StringBuilder("Checked $n screens (12 screens + settings pages + driving, 14 styles, light/dark, English/Greek)\n")
+        val sb = StringBuilder("Checked $n screens (12 screens + settings pages + driving, ${Theme.entries.size} styles, light/dark, English/Greek)\n")
         sb.append("Texts looked at: $looked (behind a sheet, skipped: $hidden). Texts per screen: $perScreen\n\n")
         for ((k, v) in findings.entries.sortedByDescending { it.value.size }) {
             val pic = v.firstOrNull { it.startsWith("picture") }

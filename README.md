@@ -32,7 +32,7 @@ Android · Android Auto · English and Ελληνικά
 - 👥 **Convoy:** drive together, race with a 3-2-1
 - 🤝 **Friends:** invite them in one tap
 - 🏆 **XP, levels, prestige ranks** and a Garage of unlocks
-- 🎨 **14 map styles**, each with day and night
+- 🎨 **16 map styles**, each with day and night
 - 🚘 **Android Auto**, with its own style
 
 ---
@@ -133,7 +133,7 @@ The same map on the car screen, with the convoy box, places to tap, and its own 
 <img src="docs/screenshots/car-place.webp" alt="A fuel station on the car screen" width="100%">
 </details>
 
-## 🎨 14 map styles
+## 🎨 16 map styles
 
 <img src="docs/screenshots/themes-light.webp" alt="The fourteen map styles" width="100%">
 
@@ -157,6 +157,8 @@ Light, dark, or switching by itself at sunset.
 - **Blueprint:** drafting lines, highlighter route
 - **Nautical Chart:** a sea chart
 - **Arctic:** bright ice, red route
+- **Tokyo Night:** wet streets lined with shop lights, rain at night, a hot-pink route
+- **Watercolour:** painted paper, soft parks and water, a red brush-stroke route
 - **High Contrast:** black and yellow, easy to read
 
 <img src="docs/screenshots/map.webp" alt="Zoomed out to countries, and Settings with its search box" width="100%">
