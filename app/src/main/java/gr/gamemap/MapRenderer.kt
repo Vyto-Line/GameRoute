@@ -3009,8 +3009,14 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     /** "Jam in 800 m · +2 min", under the banner (phone) or at the top of the map (car). */
+    /** Where the warning chip was drawn last (tests). */
+    internal val alertChipAt = RectF()
+
     private fun drawJamChip(c: Canvas, a: Rect, d: Float, t: Theme, hud: Boolean) {
         if (NavEngine.offer != null || NavEngine.arrived) return
+        // in the car the chips end left of the button column (they covered the buttons: photo, 21 Nov)
+        val rightEdge = (if (car) carHits.filter { it.first.left > a.exactCenterX() }.minOfOrNull { it.first.left }?.minus(10 * d) else null)
+            ?: (a.right - 12 * d)
         // speed camera / incident / report ahead
         Alerts.ahead?.let { al ->
             text.textSize = 15 * d
@@ -3020,7 +3026,7 @@ class MapRenderer(private val car: Boolean = false) {
             val w = text.measureText(label) + 52 * d
             val h = 40 * d
             val top = bannerBottom + 10 * d
-            val left = if (hud) a.right - 12 * d - w else a.left + 12 * d
+            val left = if (hud) rightEdge - w else a.left + 12 * d
             val r = RectF(left, top, left + w, top + h)
             fill.color = Color.rgb(255, 244, 214); c.drawRoundRect(r, h / 2, h / 2, fill)
             stroke.color = Color.rgb(255, 150, 0); stroke.strokeWidth = 2 * d; c.drawRoundRect(r, h / 2, h / 2, stroke)
@@ -3034,6 +3040,7 @@ class MapRenderer(private val car: Boolean = false) {
             text.color = Color.rgb(110, 60, 0)
             c.drawText(label, r.left + 40 * d, r.centerY() + 5.5f * d, text)
             bannerBottom = r.bottom; bannerRight = r.right
+            alertChipAt.set(r)
             text.typeface = t.typeface
         }
         if (!NavEngine.active) return
@@ -3046,7 +3053,7 @@ class MapRenderer(private val car: Boolean = false) {
         val w = text.measureText(label) + 44 * d
         val h = 38 * d
         val top = bannerBottom + 10 * d
-        val left = if (hud && a.width() < 700 * d) a.right - 12 * d - w else a.left + 12 * d
+        val left = if (hud && a.width() < 700 * d) rightEdge - w else a.left + 12 * d
         val r = RectF(left, top, left + w, top + h)
         fill.color = Color.rgb(251, 227, 227)
         c.drawRoundRect(r, h / 2, h / 2, fill)
