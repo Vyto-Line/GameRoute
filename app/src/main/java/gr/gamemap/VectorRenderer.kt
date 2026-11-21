@@ -73,6 +73,17 @@ object VectorRenderer {
             fill.color = color
             c.drawPath(pathOf(f), fill)
         }
+        /** Watercolour: water and greens painted twice, a soft bled edge and the wash inside. */
+        fun wash(f: VectorTile.Feature, color: Int) {
+            if (!(s.soft && aa) || f.type != 3 || color == 0) return area(f, color)
+            fill.color = color; fill.alpha = 110
+            fill.maskFilter = android.graphics.BlurMaskFilter(4f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            c.drawPath(pathOf(f), fill)
+            fill.maskFilter = null; fill.alpha = 255
+            fill.color = color; fill.alpha = 200
+            c.drawPath(pathOf(f), fill)
+            fill.alpha = 255
+        }
 
         fun px(width: Float) = width / k // output pixels → data units
 
@@ -91,11 +102,11 @@ object VectorRenderer {
             "cemetery" -> s.park
             else -> 0
         })
-        for (f in layer("park")) area(f, s.park)
+        for (f in layer("park")) wash(f, s.park)
 
         // ---- water
         val water = layer("water")
-        for (f in water) area(f, s.water)
+        for (f in water) wash(f, s.water)
         s.waterEdge?.let { edge ->
             if (z >= 12) {
                 line.color = edge; line.strokeWidth = px(if (aa) 1.2f else 1f); line.alpha = 170
@@ -223,6 +234,48 @@ object VectorRenderer {
             for (f in roads) if (f["class"] == cls) c.drawPath(pathOf(f), line)
         }
         line.pathEffect = null
+
+        // shop lights along both sides of the streets (Tokyo Night), zoomed in
+        s.streetLights?.let { cols ->
+            if (z >= 15 && aa) {
+                val step = px(if (z >= 17) 18f else 26f)
+                val dot = px(if (z >= 17) 1.7f else 1.3f)
+                for ((cls, kind) in visible) {
+                    if (cls != "minor" && cls != "primary" && cls != "secondary" && cls != "tertiary") continue
+                    val off = px(width(kind) / 2 + 2.2f)
+                    for (f in roads) {
+                        if (f["class"] != cls) continue
+                        for (part in f.parts) {
+                            var carry = 0f
+                            var j = 0
+                            while (j + 3 < part.size) {
+                                val x0 = part[j]; val y0 = part[j + 1]; val x1 = part[j + 2]; val y1 = part[j + 3]
+                                val len = kotlin.math.hypot(x1 - x0, y1 - y0)
+                                if (len > 0f) {
+                                    val nx = -(y1 - y0) / len; val ny = (x1 - x0) / len
+                                    var t = step - carry
+                                    while (t < len) {
+                                        val px0 = x0 + (x1 - x0) * t / len; val py0 = y0 + (y1 - y0) * t / len
+                                        var hsh = (px0.toInt() * 73856093) xor (py0.toInt() * 19349663)
+                                        hsh = hsh * 1103515245 + 12345
+                                        if ((hsh ushr 4) % 5 != 0) { // most spots lit, some dark
+                                            val side = if ((hsh ushr 9) and 1 == 0) 1f else -1f
+                                            val col = cols[(hsh ushr 12).mod(cols.size)]
+                                            val lx = px0 + nx * off * side; val ly = py0 + ny * off * side
+                                            fill.color = col; fill.alpha = 45; c.drawCircle(lx, ly, dot * 3f, fill)
+                                            fill.alpha = 255; c.drawCircle(lx, ly, dot, fill)
+                                        }
+                                        t += step
+                                    }
+                                    carry = (carry + len) % step
+                                }
+                                j += 2
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         return bmp
     }

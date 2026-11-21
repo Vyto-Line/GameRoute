@@ -232,6 +232,8 @@ object Xp {
         Theme.RALLY to listOf("Co-driver", "Privateer", "Club Racer", "Stage Hunter", "Gravel Ace", "Works Driver", "Team Leader", "Rally Ace", "Champion", "Rally Legend", "Rally Icon"),
         Theme.BLUEPRINT to listOf("Draftsman", "Surveyor", "Junior Planner", "Planner", "Engineer", "Senior Engineer", "Architect", "Lead Architect", "Chief Architect", "Master Planner", "City Founder"),
         Theme.NAUTICAL to listOf("Deckhand", "Bosun", "Helmsman", "Navigator", "Second Mate", "First Mate", "Captain", "Commodore", "Rear Admiral", "Admiral", "Fleet Admiral"),
+        Theme.TOKYO_NIGHT to listOf("Rookie", "Night Walker", "Alley Runner", "Neon Courier", "Late Express", "Signal Chaser", "Midnight Local", "Night Owl", "City Lights", "Legend of the Night", "Tokyo Icon"),
+        Theme.WATERCOLOUR to listOf("Sketcher", "Dabbler", "Painter", "Wanderer", "Landscape Painter", "Plein Air", "Colourist", "Master Painter", "Gallery Artist", "Living Masterpiece", "Watercolour Icon"),
         Theme.ARCTIC to listOf("Trekker", "Snow Scout", "Ice Walker", "Ice Ranger", "Glacier Guide", "Expedition Lead", "Polar Explorer", "Aurora Seeker", "North Star", "Legend of the North", "Polar Icon"),
     )
     /** The level each title starts at: every 5 levels, up to prestige at 50. */

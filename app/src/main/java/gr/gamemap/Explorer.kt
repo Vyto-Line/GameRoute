@@ -114,6 +114,8 @@ object Explorer {
         Theme.BLUEPRINT -> gr.gamemap.L.t("Plan complete")
         Theme.NAUTICAL -> gr.gamemap.L.t("Landfall")
         Theme.ARCTIC -> gr.gamemap.L.t("Expedition complete")
+        Theme.TOKYO_NIGHT -> gr.gamemap.L.t("Last stop")
+        Theme.WATERCOLOUR -> gr.gamemap.L.t("Journey painted")
         Theme.HIGH_CONTRAST -> gr.gamemap.L.t("You have arrived")
     }
 

@@ -58,6 +58,10 @@ class MapStyle(
     val trafficJam: Int = Color.rgb(230, 30, 30),
     /** Lit windows dotted on buildings when zoomed in (night styles), or null. */
     val windows: IntArray? = null,
+    /** Small shop lights along both sides of the streets when zoomed in (Tokyo Night), or null. */
+    val streetLights: IntArray? = null,
+    /** Parks and water painted with soft, bled edges (Watercolour). */
+    val soft: Boolean = false,
 )
 
 /** Everything that changes between a theme's light and dark version. */
@@ -101,6 +105,10 @@ enum class Theme(
     val drafting: Boolean = false,
     /** Light snow drifting over the map (Arctic). */
     val snow: Boolean = false,
+    /** Watercolour paper: a fine grain and a soft pale edge (not the old-map brown). */
+    val wash: Boolean = false,
+    /** Rain only in the dark version (Tokyo Night: wet streets at night, a clear morning). */
+    val rainOnlyDark: Boolean = false,
 ) {
     OPEN_WORLD(
         "Free Roam",
@@ -517,6 +525,82 @@ enum class Theme(
             hudText = rgb(225, 238, 250), hudPanel = argb(228, 14, 26, 42),
         ),
         snow = true,
+    ),
+    TOKYO_NIGHT(
+        "Tokyo Night",
+        light = Look(
+            style = MapStyle(
+                land = rgb(233, 236, 242), water = rgb(183, 207, 234), park = rgb(207, 227, 214),
+                wood = rgb(196, 220, 204), sand = rgb(236, 232, 222), farm = rgb(228, 232, 236),
+                urban = rgb(222, 226, 234), pitch = rgb(204, 226, 212),
+                building = rgb(214, 219, 229), buildingEdge = rgb(190, 197, 213), waterEdge = rgb(120, 160, 214),
+                motorway = rgb(255, 236, 240), major = Color.WHITE, minor = Color.WHITE,
+                path = rgb(206, 212, 224), rail = rgb(160, 168, 190), casing = rgb(190, 198, 216),
+                label = rgb(26, 31, 54), labelHalo = Color.WHITE,
+                trafficFree = rgb(20, 170, 110), trafficSlow = rgb(240, 140, 0), trafficJam = rgb(220, 30, 70),
+                streetLights = intArrayOf(argb(200, 255, 77, 109), argb(200, 255, 190, 60), argb(190, 40, 170, 230), argb(190, 230, 40, 140)),
+            ),
+            route = rgb(230, 57, 70), routeGlow = argb(90, 230, 57, 70),
+            player = rgb(26, 31, 54), playerOutline = Color.WHITE,
+            hudText = rgb(26, 31, 54), hudPanel = argb(232, 255, 255, 255),
+            traffic = TrafficLook(glow = listOf(10f to 40, 6f to 80), core = 3.5f, freeWidth = 2f, freeAlpha = 110),
+        ),
+        dark = Look(
+            style = MapStyle(
+                land = rgb(11, 13, 20), water = rgb(10, 27, 51), park = rgb(16, 36, 30),
+                wood = rgb(14, 32, 27), sand = rgb(26, 26, 30), farm = rgb(14, 16, 24),
+                urban = rgb(16, 19, 30), pitch = rgb(18, 40, 32),
+                building = rgb(22, 27, 46), buildingEdge = rgb(35, 42, 69), waterEdge = rgb(40, 90, 160),
+                motorway = rgb(58, 68, 104), major = rgb(37, 45, 69), minor = rgb(28, 34, 51),
+                path = rgb(30, 36, 54), rail = rgb(70, 60, 110),
+                label = Color.WHITE, labelHalo = rgb(11, 13, 20),
+                trafficFree = rgb(60, 220, 170), trafficSlow = rgb(255, 190, 60), trafficJam = rgb(255, 50, 100),
+                streetLights = intArrayOf(rgb(255, 77, 109), rgb(255, 209, 102), rgb(76, 201, 240), rgb(247, 37, 133), rgb(124, 255, 203)),
+            ),
+            route = rgb(255, 46, 99), routeGlow = argb(140, 255, 46, 99),
+            player = Color.WHITE, playerOutline = rgb(255, 46, 99),
+            hudText = rgb(241, 244, 255), hudPanel = argb(218, 14, 18, 32),
+            traffic = TrafficLook(glow = listOf(14f to 45, 8f to 100), core = 3f, freeWidth = 2f, freeAlpha = 120),
+        ),
+        hud = HudShape.ROUND, rain = true, rainOnlyDark = true,
+    ),
+    WATERCOLOUR(
+        "Watercolour",
+        light = Look(
+            style = MapStyle(
+                land = rgb(247, 241, 227), water = rgb(169, 204, 227), park = rgb(184, 216, 168),
+                wood = rgb(166, 204, 150), sand = rgb(240, 226, 196), farm = rgb(236, 230, 206),
+                urban = rgb(238, 226, 210), pitch = rgb(190, 220, 170),
+                building = rgb(230, 211, 184), buildingEdge = null, waterEdge = null,
+                motorway = rgb(246, 226, 190), major = rgb(255, 253, 248), minor = Color.WHITE,
+                path = rgb(222, 206, 184), rail = rgb(190, 170, 150), casing = rgb(217, 196, 166),
+                label = rgb(107, 91, 78), labelHalo = rgb(247, 241, 227),
+                trafficFree = rgb(90, 170, 110), trafficSlow = rgb(230, 150, 50), trafficJam = rgb(209, 73, 91),
+                soft = true,
+            ),
+            route = rgb(209, 73, 91), routeGlow = argb(90, 242, 161, 170),
+            player = rgb(46, 64, 87), playerOutline = rgb(247, 241, 227),
+            hudText = rgb(74, 63, 53), hudPanel = argb(240, 255, 251, 242),
+            traffic = TrafficLook(glow = listOf(10f to 35), core = 3.5f, freeWidth = 2f, freeAlpha = 90),
+        ),
+        dark = Look(
+            style = MapStyle(
+                land = rgb(44, 42, 51), water = rgb(47, 62, 82), park = rgb(60, 74, 63),
+                wood = rgb(54, 70, 58), sand = rgb(62, 56, 52), farm = rgb(50, 48, 56),
+                urban = rgb(52, 50, 60), pitch = rgb(62, 78, 64),
+                building = rgb(66, 62, 75), buildingEdge = null, waterEdge = null,
+                motorway = rgb(130, 112, 96), major = rgb(110, 105, 121), minor = rgb(91, 87, 102),
+                path = rgb(80, 76, 90), rail = rgb(100, 90, 110), casing = rgb(36, 34, 42),
+                label = rgb(232, 220, 203), labelHalo = rgb(44, 42, 51),
+                trafficFree = rgb(110, 190, 130), trafficSlow = rgb(240, 170, 70), trafficJam = rgb(240, 100, 110),
+                soft = true,
+            ),
+            route = rgb(242, 143, 59), routeGlow = argb(110, 242, 143, 59),
+            player = rgb(247, 241, 227), playerOutline = rgb(44, 42, 51),
+            hudText = rgb(243, 233, 218), hudPanel = argb(235, 58, 54, 66),
+            traffic = TrafficLook(glow = listOf(10f to 35), core = 3.5f, freeWidth = 2f, freeAlpha = 90),
+        ),
+        serif = true, wash = true,
     ),
     HIGH_CONTRAST(
         "High Contrast",

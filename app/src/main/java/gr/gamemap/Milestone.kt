@@ -62,6 +62,8 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
         theme == Theme.LOOKOUT -> "beacon"
         theme == Theme.RETRO -> "coins"
         theme == Theme.ARCTIC -> "aurora"
+        theme == Theme.TOKYO_NIGHT -> "rain"
+        theme == Theme.WATERCOLOUR -> "burst"
         // Catch 'Em Trail: binoculars and the campfire take turns (5, 15, 25…: binoculars)
         theme == Theme.TRAILBLAZER -> if ((level / 5) % 2 == 1) "binoc" else "camp"
         else -> "burst"

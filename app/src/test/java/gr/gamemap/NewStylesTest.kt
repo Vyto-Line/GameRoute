@@ -37,8 +37,8 @@ class NewStylesTest {
             return Location("gps").apply { latitude = p.lat; longitude = p.lon; speed = 12f; bearing = Geo.bearing(r.points[i], r.points[i + 1]); accuracy = 5f; time = System.currentTimeMillis() }
         }
         val log = StringBuilder()
-        for (th in listOf(Theme.RALLY, Theme.BLUEPRINT, Theme.NAUTICAL, Theme.ARCTIC, Theme.HIGH_CONTRAST))
-        for (mode in listOf(MapState.LightMode.DARK, MapState.LightMode.LIGHT)) for (car in listOf(false)) {
+        for (th in listOf(Theme.TOKYO_NIGHT, Theme.WATERCOLOUR, Theme.VIOLET_RAIN))
+        for (mode in listOf(MapState.LightMode.DARK, MapState.LightMode.LIGHT)) for (car in listOf(false, true)) {
             MapState.setTheme(th)
             MapState.setLightMode(mode)
             val w = if (car) 1920 else 1080; val h = if (car) 720 else 2340; val d = if (car) 1.6f else 2.75f
@@ -51,7 +51,7 @@ class NewStylesTest {
             val t0 = System.nanoTime()
             repeat(30) { rr.draw(c, w, h, area, d, true) }
             log.append("${th.name.padEnd(14)} ${mode.name.padEnd(5)} ${"%.1f".format((System.nanoTime() - t0) / 30 / 1e6)} ms/frame\n")
-            File(out, "style_${th.name.lowercase()}_${mode.name.lowercase()}.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
+            File(out, "style_${th.name.lowercase()}_${mode.name.lowercase()}${if (car) "_car" else ""}.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
         }
         File(out, "newstyles.txt").writeText(log.toString())
     }

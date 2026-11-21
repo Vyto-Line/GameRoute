@@ -615,6 +615,13 @@ object L {
         "Download failed: check internet" to "Η λήψη απέτυχε: ελέγξτε το ίντερνετ",
         // style names
         "Free Roam" to "Ελεύθερη Περιπλάνηση", "Might City" to "Πόλη της Ισχύος", "Midnight Run" to "Μεσονύχτια Κούρσα", "Blockworld" to "Κυβόκοσμος", "Realm Map" to "Χάρτης Βασιλείου", "Fire Tower" to "Πυροφυλάκιο", "Catch 'Em Trail" to "Κυνήγι Ορόσημων", "8-Bit" to "8-Bit", "Violet Rain" to "Βιολετί Βροχή", "Through the rain" to "Μέσα από τη βροχή", "Rally Roadbook" to "Ράλι Roadbook", "Blueprint" to "Σχέδιο", "Nautical Chart" to "Ναυτικός Χάρτης", "Arctic" to "Αρκτική", "High Contrast" to "Υψηλή Αντίθεση",
+        "Tokyo Night" to "Νύχτα στο Τόκιο", "Watercolour" to "Ακουαρέλα", "Last stop" to "Τελευταία στάση", "Journey painted" to "Το ταξίδι ζωγραφίστηκε",
+        "Night Walker" to "Νυχτερινός περιπατητής", "Alley Runner" to "Δρομέας των στενών", "Neon Courier" to "Κούριερ του νέον", "Late Express" to "Το τελευταίο εξπρές",
+        "Signal Chaser" to "Κυνηγός φαναριών", "Midnight Local" to "Μεσονύχτιος ντόπιος", "Night Owl" to "Νυχτοπούλι", "City Lights" to "Φώτα της πόλης",
+        "Legend of the Night" to "Θρύλος της νύχτας", "Tokyo Icon" to "Είδωλο του Τόκιο",
+        "Sketcher" to "Σκιτσογράφος", "Dabbler" to "Ερασιτέχνης", "Painter" to "Ζωγράφος", "Landscape Painter" to "Τοπιογράφος", "Plein Air" to "Στο ύπαιθρο",
+        "Colourist" to "Κολορίστας", "Master Painter" to "Μάστορας ζωγράφος", "Gallery Artist" to "Καλλιτέχνης γκαλερί", "Living Masterpiece" to "Ζωντανό αριστούργημα",
+        "Watercolour Icon" to "Είδωλο της ακουαρέλας",
         "Stage complete" to "Η ειδική ολοκληρώθηκε", "Plan complete" to "Το σχέδιο ολοκληρώθηκε", "Landfall" to "Στεριά!", "Expedition complete" to "Η αποστολή ολοκληρώθηκε", "You have arrived" to "Φτάσατε",
         "Co-driver" to "Συνοδηγός", "Privateer" to "Ιδιώτης οδηγός", "Stage Hunter" to "Κυνηγός ειδικών", "Works Driver" to "Εργοστασιακός οδηγός", "Rally Ace" to "Άσσος του ράλι", "Rally Legend" to "Θρύλος του ράλι",
         "Draftsman" to "Σχεδιαστής", "Surveyor" to "Τοπογράφος", "Planner" to "Πολεοδόμος", "Engineer" to "Μηχανικός", "Chief Architect" to "Επικεφαλής αρχιτέκτονας", "Master Planner" to "Μεγάλος σχεδιαστής",

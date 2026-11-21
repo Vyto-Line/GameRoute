@@ -247,14 +247,16 @@ class MapRenderer(private val car: Boolean = false) {
         if (!lite) {
             if (theme.grid) drawGrid(c, full, d)
             if (theme.paper) drawPaper(c, full)
+            if (theme.wash) drawWash(c, full)
             // Settings › Performance › Map effects (off in Battery mode and on phones that struggle)
             if (Perf.effectsOn) {
                 if (theme.scanlines) drawScanlines(c, full, d, theme)
                 if (theme.sunGlow) drawSunGlow(c, full)
-                if (theme.rain) drawRain(c, full, d)
+                val raining = theme.rain && (!theme.rainOnlyDark || MapState.dark)
+                if (raining) drawRain(c, full, d)
                 if (theme.snow) drawSnow(c, full, d)
                 if (theme.drafting) drawDrafting(c, full, d)
-                effectsMoving = theme.rain || theme.snow
+                effectsMoving = raining || theme.snow
             }
         }
         if (theme.radar) drawRadarFrame(c, cx, cy, radius, bearing, d)
@@ -1067,6 +1069,34 @@ class MapRenderer(private val car: Boolean = false) {
         fill.shader = null
     }
 
+    private var washTex: Bitmap? = null
+    private var washDark = false
+
+    /** Watercolour paper: fine fibres and a soft pale edge, in the light or the ink-wash night. */
+    private fun drawWash(c: Canvas, a: Rect) {
+        val dark = MapState.dark
+        val tex = washTex?.takeIf { washDark == dark } ?: Bitmap.createBitmap(160, 160, Bitmap.Config.ARGB_8888).also { b ->
+            val rnd = java.util.Random(11)
+            for (y in 0 until 160) for (x in 0 until 160) {
+                val v = rnd.nextInt(100)
+                b.setPixel(x, y, when {
+                    v < 5 -> if (dark) Color.argb(26, 255, 245, 230) else Color.argb(30, 120, 100, 80)
+                    v > 94 -> if (dark) Color.argb(20, 0, 0, 0) else Color.argb(34, 255, 255, 255)
+                    else -> Color.TRANSPARENT
+                })
+            }
+            washTex = b; washDark = dark
+        }
+        fill.shader = BitmapShader(tex, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+        c.drawRect(a, fill)
+        val r = hypot(a.width().toFloat(), a.height().toFloat()) / 2
+        val edge = if (dark) Color.argb(90, 30, 28, 36) else Color.argb(80, 255, 252, 244)
+        fill.shader = RadialGradient(a.exactCenterX(), a.exactCenterY(), r, intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, edge),
+            floatArrayOf(0f, 0.7f, 1f), Shader.TileMode.CLAMP)
+        c.drawRect(a, fill)
+        fill.shader = null
+    }
+
     private fun drawPaper(c: Canvas, a: Rect) {
         val tex = paperTex ?: Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888).also { b ->
             val rnd = java.util.Random(7)
@@ -1107,11 +1137,11 @@ class MapRenderer(private val car: Boolean = false) {
         val dark = MapState.dark
         val top = a.top.toFloat(); val hh = a.height() * 0.38f
         fill.shader = LinearGradient(0f, top, 0f, top + hh,
-            intArrayOf(if (dark) Color.argb(150, 42, 15, 74) else Color.argb(90, 150, 110, 210), Color.TRANSPARENT),
+            intArrayOf(if (theme == Theme.TOKYO_NIGHT) Color.argb(110, 20, 24, 48) else if (dark) Color.argb(150, 42, 15, 74) else Color.argb(90, 150, 110, 210), Color.TRANSPARENT),
             null, Shader.TileMode.CLAMP)
         c.drawRect(a.left.toFloat(), top, a.right.toFloat(), top + hh, fill)
         fill.shader = null
-        stroke.color = if (dark) Color.argb(40, 217, 200, 255) else Color.argb(46, 90, 60, 150)
+        stroke.color = if (theme == Theme.TOKYO_NIGHT) Color.argb(48, 170, 190, 255) else if (dark) Color.argb(40, 217, 200, 255) else Color.argb(46, 90, 60, 150)
         stroke.strokeWidth = 1f * d
         // a drop crosses the screen in about two seconds (bigger, nearer drops a little faster),
         // falling a little sideways, and comes back in at the top somewhere else: a light rain
