@@ -1137,11 +1137,11 @@ class MapRenderer(private val car: Boolean = false) {
         val dark = MapState.dark
         val top = a.top.toFloat(); val hh = a.height() * 0.38f
         fill.shader = LinearGradient(0f, top, 0f, top + hh,
-            intArrayOf(if (theme == Theme.TOKYO_NIGHT) Color.argb(110, 20, 24, 48) else if (dark) Color.argb(150, 42, 15, 74) else Color.argb(90, 150, 110, 210), Color.TRANSPARENT),
+            intArrayOf(if (MapState.theme == Theme.TOKYO_NIGHT) Color.argb(110, 20, 24, 48) else if (dark) Color.argb(150, 42, 15, 74) else Color.argb(90, 150, 110, 210), Color.TRANSPARENT),
             null, Shader.TileMode.CLAMP)
         c.drawRect(a.left.toFloat(), top, a.right.toFloat(), top + hh, fill)
         fill.shader = null
-        stroke.color = if (theme == Theme.TOKYO_NIGHT) Color.argb(48, 170, 190, 255) else if (dark) Color.argb(40, 217, 200, 255) else Color.argb(46, 90, 60, 150)
+        stroke.color = if (MapState.theme == Theme.TOKYO_NIGHT) Color.argb(48, 170, 190, 255) else if (dark) Color.argb(40, 217, 200, 255) else Color.argb(46, 90, 60, 150)
         stroke.strokeWidth = 1f * d
         // a drop crosses the screen in about two seconds (bigger, nearer drops a little faster),
         // falling a little sideways, and comes back in at the top somewhere else: a light rain
