@@ -1,0 +1,3 @@
+Checked 1216 screens (12 screens + settings pages + driving, 16 styles, light/dark, English/Greek)
+Texts looked at: 20262 (behind a sheet, skipped: 10895). Texts per screen: {Home=9, Settings=32, Settings › map=24, Settings › nav=20, Settings › alerts=16, Settings › sharing=18, Settings › app=26, Settings › perf=21, Settings › advanced=22, You=31, Progress=72, Garage=41, Friends=19, Convoy=21, Report=15, Map style=32, Trips=12, Offline maps=66, Driving=62}
+
