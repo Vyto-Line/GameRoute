@@ -1304,7 +1304,7 @@ class MapRenderer(private val car: Boolean = false) {
     private var tripSeen: Any? = null
     private var tripSeenAt = 0L
     /** Where each car button is on screen, for the car's tap callback. */
-    private val carHits = ArrayList<Pair<RectF, String>>()
+    internal val carHits = ArrayList<Pair<RectF, String>>()
     /** The buttons of the last finished frame (taps are read on another thread than drawing). */
     @Volatile internal var hitsShown: List<Pair<RectF, String>> = emptyList()
         private set

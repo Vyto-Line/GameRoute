@@ -385,7 +385,7 @@ object Alerts {
     class Ahead(val key: String, val label: String, val glyph: String, val dist: Double, val speech: String)
 
     var ahead: Ahead? = null
-        private set
+        internal set
     /** A report we just drove past, to ask "still there?". */
     var askAbout: Report? = null
         private set
