@@ -269,7 +269,7 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
                 if (t > 900) fadeTitle(c, cx, cy + 70 * d, ink, ((t - 900) / 500f).coerceIn(0f, 1f))
             }
         }
-        text.textSize = 15 * d; text.color = if (kind == "rally" || kind == "compass") Color.argb(200, 0, 0, 0) else Color.argb(200, 255, 255, 255)
+        text.textSize = 15 * d; text.color = if (kind == "rally" || kind == "compass" || kind == "paint") Color.argb(200, 0, 0, 0) else Color.argb(200, 255, 255, 255)
         text.typeface = Typeface.DEFAULT_BOLD
         c.drawText(L.t(if (level >= 50) "Level 50: prestige is ready" else "LEVEL UP"), cx, h * 0.12f, text)
         text.textSize = (if (t > endMs) 15 else 13) * d
@@ -477,8 +477,6 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
             if (on) text.setShadowLayer(22 * d, 0f, 0f, pink)
             c.drawText(num, cx, cy, text); text.clearShadowLayer()
         }
-        text.textSize = 13 * d; text.color = Color.rgb(255, 155, 181); text.letterSpacing = 0.3f
-        c.drawText(L.t("LEVEL UP"), cx, cy - 160 * d, text); text.letterSpacing = 0f
         if (t > 1300) fadeTitle(c, cx, cy + 90 * d, Color.rgb(76, 201, 240), ((t - 1300) / 500f).coerceIn(0f, 1f))
     }
 
@@ -511,8 +509,6 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
             val tw = text.measureText(num)
             c.save(); c.clipRect(cx - tw / 2 - 10 * d, 0f, cx - tw / 2 + (tw + 20 * d) * k, h); c.drawText(num, cx, cy, text); c.restore()
         }
-        text.textSize = 20 * d; text.color = Color.rgb(138, 117, 100)
-        c.drawText(L.t("Level up"), cx, cy - 165 * d, text)
         if (t > 1400) fadeTitle(c, cx, cy + 90 * d, Color.rgb(209, 73, 91), ((t - 1400) / 500f).coerceIn(0f, 1f))
     }
 
