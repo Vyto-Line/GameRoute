@@ -262,6 +262,14 @@ object VectorRenderer {
                                             val side = if ((hsh ushr 9) and 1 == 0) 1f else -1f
                                             val col = cols[(hsh ushr 12).mod(cols.size)]
                                             val lx = px0 + nx * off * side; val ly = py0 + ny * off * side
+                                            if (s.wet) {
+                                                // its reflection on the wet road: a soft streak along the street, just inside it
+                                                val rx = px0 + nx * off * side * 0.45f; val ry = py0 + ny * off * side * 0.45f
+                                                val ux = (x1 - x0) / len; val uy = (y1 - y0) / len
+                                                line.color = col; line.alpha = 55; line.strokeWidth = dot * 1.6f
+                                                c.drawLine(rx - ux * dot * 5, ry - uy * dot * 5, rx + ux * dot * 5, ry + uy * dot * 5, line)
+                                                line.alpha = 255
+                                            }
                                             fill.color = col; fill.alpha = 45; c.drawCircle(lx, ly, dot * 3f, fill)
                                             fill.alpha = 255; c.drawCircle(lx, ly, dot, fill)
                                         }

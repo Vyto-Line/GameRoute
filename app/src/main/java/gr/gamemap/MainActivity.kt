@@ -639,7 +639,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     /** Secondary text (strength 255 = full ink); thin lines and fills below 120 stay faint. */
     private fun dim(a: Int = 185) = if (a < 120) Color.argb(a, Color.red(ink), Color.green(ink), Color.blue(ink)) else Ui.dim(theme, a)
     private fun bg(fill: Int, stroke: Int = 0, strokeDp: Float = 0f, radius: Float = 16f, topOnly: Boolean = false, pill: Boolean = false) =
-        HudDrawable(theme.hud, fill, d, radius, stroke, strokeDp, topOnly, pill)
+        HudDrawable(theme.hud, fill, d, radius, stroke, strokeDp, topOnly, pill, glow = theme.route)
     private fun luminance(c: Int) = (0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)) / 255.0
     private fun onAccent(c: Int) = if (luminance(c) > 0.5) Color.rgb(15, 18, 22) else Color.WHITE
     private fun darken(c: Int) = Color.rgb(Color.red(c) * 6 / 10, Color.green(c) * 6 / 10, Color.blue(c) * 6 / 10)
@@ -6076,6 +6076,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         "flag_trophy" -> { pt.color = Color.rgb(255, 196, 40)
                             val pa = android.graphics.Path().apply { moveTo(cx - s * 0.7f, cy - s); lineTo(cx + s * 0.7f, cy - s); lineTo(cx + s * 0.45f, cy); quadTo(cx, cy + s * 0.3f, cx - s * 0.45f, cy); close() }
                             c.drawPath(pa, pt); c.drawRect(cx - s * 0.12f, cy + s * 0.1f, cx + s * 0.12f, cy + s * 0.55f, pt); c.drawRect(cx - s * 0.5f, cy + s * 0.55f, cx + s * 0.5f, cy + s * 0.8f, pt) }
+                        in Flags.ids -> Flags.draw(c, item.id, cx, cy + s * (if (item.id == "flag_beacon") 1.6f else if (item.id == "flag_x") 0.2f else 1.1f), s / (if (item.id == "flag_beacon") 70f else 30f), Xp.rankColor())
                         else -> { pt.color = Color.rgb(255, 214, 0); c.drawCircle(cx, cy, s * 0.55f, pt)
                             pt.style = android.graphics.Paint.Style.STROKE; pt.strokeWidth = 2 * d; pt.color = Color.BLACK; c.drawCircle(cx, cy, s * 0.55f, pt) }
                     }

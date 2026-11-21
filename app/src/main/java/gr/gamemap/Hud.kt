@@ -23,6 +23,8 @@ class HudDrawable(
     private val topOnly: Boolean = false,
     /** Fully round ends (chips, round buttons) when the theme is ROUND. */
     private val pill: Boolean = false,
+    /** GLASS: the colour of its thin glowing edge. */
+    private val glow: Int = 0,
 ) : Drawable() {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = fillColor }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -30,6 +32,7 @@ class HudDrawable(
     }
     private val path = Path()
     private val r = RectF()
+    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
     override fun draw(c: Canvas) {
         val b = bounds
@@ -37,9 +40,16 @@ class HudDrawable(
         r.set(b.left + inset, b.top + inset, b.right - inset, b.bottom - inset)
         path.reset()
         when (shape) {
-            HudShape.ROUND -> {
-                val rad = if (pill) r.height() / 2 else radiusDp * d
+            HudShape.ROUND, HudShape.GLASS -> {
+                val rad = if (pill) r.height() / 2 else radiusDp * d * (if (shape == HudShape.GLASS) 0.7f else 1f)
                 val radii = if (topOnly) floatArrayOf(rad, rad, rad, rad, 0f, 0f, 0f, 0f) else FloatArray(8) { rad }
+                path.addRoundRect(r, radii, Path.Direction.CW)
+            }
+            HudShape.PAPER -> {
+                // hand-cut: each corner a little different
+                val k = if (pill) r.height() / 2 else radiusDp * d
+                val radii = if (topOnly) floatArrayOf(k * 0.9f, k * 0.8f, k * 1.15f, k * 1.0f, 0f, 0f, 0f, 0f)
+                    else floatArrayOf(k * 0.9f, k * 0.8f, k * 1.15f, k * 1.0f, k * 0.75f, k * 0.95f, k * 1.2f, k * 1.05f)
                 path.addRoundRect(r, radii, Path.Direction.CW)
             }
             HudShape.CHAMFER -> {
@@ -62,6 +72,13 @@ class HudDrawable(
         fill.isAntiAlias = shape != HudShape.PIXEL
         c.drawPath(path, fill)
         if (strokeDp > 0 && strokeColor != 0) c.drawPath(path, stroke)
+        else if (shape == HudShape.GLASS && glow != 0) {
+            // a thin neon edge with a soft glow
+            edge.color = glow; edge.alpha = 60; edge.strokeWidth = 4f * d; c.drawPath(path, edge)
+            edge.alpha = 210; edge.strokeWidth = 1.2f * d; c.drawPath(path, edge)
+        } else if (shape == HudShape.PAPER) {
+            edge.color = android.graphics.Color.argb(45, 90, 70, 50); edge.strokeWidth = 1f * d; c.drawPath(path, edge)
+        }
     }
 
     override fun setAlpha(alpha: Int) { fill.alpha = alpha }

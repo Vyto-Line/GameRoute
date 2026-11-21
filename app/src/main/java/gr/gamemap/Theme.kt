@@ -4,7 +4,8 @@ import android.graphics.Color
 import android.graphics.Typeface
 
 /** How the HUD panels are drawn. */
-enum class HudShape { ROUND, CHAMFER, PIXEL }
+/** Panel shapes. GLASS: rounded with a thin glowing edge (Tokyo Night). PAPER: hand-cut, slightly uneven corners (Watercolour). */
+enum class HudShape { ROUND, CHAMFER, PIXEL, GLASS, PAPER }
 
 /** How live traffic is drawn (glowing lines, arrows along jams), tuned per theme. */
 class TrafficLook(
@@ -62,6 +63,8 @@ class MapStyle(
     val streetLights: IntArray? = null,
     /** Parks and water painted with soft, bled edges (Watercolour). */
     val soft: Boolean = false,
+    /** Wet streets: each street light also shines as a soft streak on the road (Tokyo Night, dark). */
+    val wet: Boolean = false,
 )
 
 /** Everything that changes between a theme's light and dark version. */
@@ -109,6 +112,8 @@ enum class Theme(
     val wash: Boolean = false,
     /** Rain only in the dark version (Tokyo Night: wet streets at night, a clear morning). */
     val rainOnlyDark: Boolean = false,
+    /** The style's own font, from assets/fonts (with Greek), for titles, the HUD and the map's street names. */
+    val font: String? = null,
 ) {
     OPEN_WORLD(
         "Free Roam",
@@ -556,13 +561,14 @@ enum class Theme(
                 label = Color.WHITE, labelHalo = rgb(11, 13, 20),
                 trafficFree = rgb(60, 220, 170), trafficSlow = rgb(255, 190, 60), trafficJam = rgb(255, 50, 100),
                 streetLights = intArrayOf(rgb(255, 77, 109), rgb(255, 209, 102), rgb(76, 201, 240), rgb(247, 37, 133), rgb(124, 255, 203)),
+                wet = true,
             ),
             route = rgb(255, 46, 99), routeGlow = argb(140, 255, 46, 99),
             player = Color.WHITE, playerOutline = rgb(255, 46, 99),
             hudText = rgb(241, 244, 255), hudPanel = argb(218, 14, 18, 32),
             traffic = TrafficLook(glow = listOf(14f to 45, 8f to 100), core = 3f, freeWidth = 2f, freeAlpha = 120),
         ),
-        hud = HudShape.ROUND, rain = true, rainOnlyDark = true,
+        hud = HudShape.GLASS, rain = true, rainOnlyDark = true, font = "fonts/advent_semibold.ttf",
     ),
     WATERCOLOUR(
         "Watercolour",
@@ -600,7 +606,7 @@ enum class Theme(
             hudText = rgb(243, 233, 218), hudPanel = argb(235, 58, 54, 66),
             traffic = TrafficLook(glow = listOf(10f to 35), core = 3.5f, freeWidth = 2f, freeAlpha = 90),
         ),
-        serif = true, wash = true,
+        serif = true, wash = true, hud = HudShape.PAPER, font = "fonts/alegreya_bold_italic.ttf",
     ),
     HIGH_CONTRAST(
         "High Contrast",
@@ -656,7 +662,7 @@ enum class Theme(
     val background: Int get() = style.land
 
     val typeface: Typeface
-        get() = if (serif) Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        get() = font?.let { Fonts.get(it) } ?: if (serif) Typeface.create(Typeface.SERIF, Typeface.BOLD)
         else Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
 }
 

@@ -63,6 +63,7 @@ class GameMapApp : Application() {
         Startup.step("parked") { Parked.init(this) }
         Startup.step("tolls") { Tolls.init(this) }
         Startup.step("duties") { Duties.init(this) }
+        Fonts.init(this)
         Startup.step("reviews") { Reviews.init(this) }
         Startup.step("nav engine") { NavEngine.init(this) }
         // GPS precision follows navigation (precise while navigating, battery-friendly otherwise)

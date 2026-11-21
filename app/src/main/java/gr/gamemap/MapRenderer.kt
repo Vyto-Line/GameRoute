@@ -860,7 +860,14 @@ class MapRenderer(private val car: Boolean = false) {
         val u = d / scale
         fill.color = Xp.routeGlow(theme.look); c.drawCircle(x, y, 18 * u, fill)
         // the Garage's destination flag (standing on the spot, upright whatever the map's turn)
-        when (Xp.chosen("flag").id) {
+        val flagId = Xp.chosen("flag").id
+        if (flagId in Flags.ids) {
+            c.save(); c.rotate(currentBearing, x, y)
+            Flags.draw(c, flagId, x, y, u * 1.15f, Xp.rankColor())
+            c.restore()
+            return
+        }
+        when (flagId) {
             "flag_checkered" -> {
                 c.save(); c.rotate(currentBearing, x, y)
                 stroke.color = Color.BLACK; stroke.strokeWidth = 2.5f * u; c.drawLine(x, y, x, y - 30 * u, stroke)
@@ -1003,6 +1010,12 @@ class MapRenderer(private val car: Boolean = false) {
         c.drawText("N", nx, ny + 5.5f * d, text)
     }
 
+    /** A hand-cut card: rounded corners, each a little different (Watercolour). */
+    private fun paperPath(r: RectF, k: Float): Path {
+        val kk = minOf(k, r.height() / 2.2f)
+        return Path().apply { addRoundRect(r, floatArrayOf(kk * 0.9f, kk * 0.8f, kk * 1.15f, kk * 1.0f, kk * 0.75f, kk * 0.95f, kk * 1.2f, kk * 1.05f), Path.Direction.CW) }
+    }
+
     /** A HUD panel in the theme's shape: rounded, cut-corner, or pixel-stepped. */
     private fun panel(c: Canvas, r: RectF, d: Float, t: Theme, outline: Boolean, outlineColor: Int? = null) {
         // slightly see-through so the map shows behind, still solid enough to read
@@ -1012,6 +1025,22 @@ class MapRenderer(private val car: Boolean = false) {
             HudShape.ROUND -> {
                 c.drawRoundRect(r, 12 * d, 12 * d, fill)
                 if (outline) c.drawRoundRect(r, 12 * d, 12 * d, stroke)
+            }
+            HudShape.GLASS -> {
+                c.drawRoundRect(r, 10 * d, 10 * d, fill)
+                val col = outlineColor ?: t.route
+                stroke.color = withAlpha(col, 60); stroke.strokeWidth = 5 * d; c.drawRoundRect(r, 10 * d, 10 * d, stroke)
+                stroke.color = withAlpha(col, if (outline) 255 else 200); stroke.strokeWidth = 1.4f * d; c.drawRoundRect(r, 10 * d, 10 * d, stroke)
+                stroke.strokeWidth = 2 * d
+            }
+            HudShape.PAPER -> {
+                val p = paperPath(r, 14 * d)
+                // a soft shadow under the card, then the card
+                val keep = fill.color
+                fill.color = Color.argb(40, 40, 30, 20); c.save(); c.translate(0f, 2.5f * d); c.drawPath(p, fill); c.restore()
+                fill.color = keep; c.drawPath(p, fill)
+                if (outline) { stroke.strokeWidth = 1.8f * d; c.drawPath(p, stroke); stroke.strokeWidth = 2 * d }
+                else { stroke.color = Color.argb(50, 90, 70, 50); stroke.strokeWidth = 1 * d; c.drawPath(p, stroke); stroke.strokeWidth = 2 * d }
             }
             HudShape.CHAMFER -> {
                 val k = minOf(14 * d, r.height() / 3)
@@ -1311,10 +1340,19 @@ class MapRenderer(private val car: Boolean = false) {
         stroke.color = if (light) Ui.onPanel(t, t.route, 3.0) else withAlpha(t.route, 230)
         stroke.strokeWidth = (if (light) 2.2f else 1.8f) * d
         when (t.hud) {
-            HudShape.ROUND -> {
+            HudShape.ROUND, HudShape.PAPER -> {
                 val rad = minOf(r.width(), r.height()) / 2
                 c.drawRoundRect(r, rad, rad, fill)
                 if (fillCol == null) c.drawRoundRect(r, rad, rad, stroke)
+            }
+            HudShape.GLASS -> {
+                val rad = minOf(r.width(), r.height()) / 2
+                c.drawRoundRect(r, rad, rad, fill)
+                if (fillCol == null) {
+                    val sw = stroke.strokeWidth; val sc = stroke.color
+                    stroke.color = withAlpha(t.route, 55); stroke.strokeWidth = 5 * d; c.drawRoundRect(r, rad, rad, stroke)
+                    stroke.color = sc; stroke.strokeWidth = sw; c.drawRoundRect(r, rad, rad, stroke)
+                }
             }
             HudShape.CHAMFER -> {
                 val k = minOf(10 * d, r.height() / 3)

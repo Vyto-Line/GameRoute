@@ -30,7 +30,7 @@ class CelebrationsTest {
             File(out, "celebrate_${th.name.lowercase()}_${if (dark) "d" else "l"}.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 90, it) }
         }
         // the styles' own celebrations, frame by frame (Catch 'Em Trail at 15: binoculars, 10: campfire)
-        for ((th, lv) in listOf(Theme.OPEN_WORLD to 10, Theme.NEON_RACER to 10, Theme.BLOCKY to 10, Theme.LOOKOUT to 10, Theme.RETRO to 10, Theme.ARCTIC to 10, Theme.TRAILBLAZER to 15, Theme.TRAILBLAZER to 10)) {
+        for ((th, lv) in listOf(Theme.OPEN_WORLD to 10, Theme.NEON_RACER to 10, Theme.BLOCKY to 10, Theme.LOOKOUT to 10, Theme.RETRO to 10, Theme.ARCTIC to 10, Theme.TRAILBLAZER to 15, Theme.TRAILBLAZER to 10, Theme.TOKYO_NIGHT to 15, Theme.WATERCOLOUR to 15)) {
             MapState.setTheme(th); MapState.setLightMode(MapState.LightMode.DARK); activity.refreshForTest()
             for (ms in listOf(400L, 1200L, 2400L, 4200L)) {
                 val f = activity.milestoneForTest(lv, ms)

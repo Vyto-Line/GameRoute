@@ -118,7 +118,7 @@ class Labels {
         val newData = key != cacheKey
         if (newData) { cacheKey = key; cands = (if (overview) countries(z, cam.world) else emptyList()) + collect(tiles, z, dz, dataPx) }
 
-        text.typeface = if (theme.serif) Typeface.create(Typeface.SERIF, Typeface.BOLD_ITALIC)
+        text.typeface = theme.font?.let { Fonts.get(it) } ?: if (theme.serif) Typeface.create(Typeface.SERIF, Typeface.BOLD_ITALIC)
         else Typeface.create("sans-serif-condensed", Typeface.BOLD)
         text.color = if (plain) (if (MapState.dark) android.graphics.Color.WHITE else android.graphics.Color.rgb(28, 28, 32)) else st.label
         halo.typeface = text.typeface

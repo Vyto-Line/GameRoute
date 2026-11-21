@@ -62,8 +62,8 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
         theme == Theme.LOOKOUT -> "beacon"
         theme == Theme.RETRO -> "coins"
         theme == Theme.ARCTIC -> "aurora"
-        theme == Theme.TOKYO_NIGHT -> "rain"
-        theme == Theme.WATERCOLOUR -> "burst"
+        theme == Theme.TOKYO_NIGHT -> "tokyo"
+        theme == Theme.WATERCOLOUR -> "paint"
         // Catch 'Em Trail: binoculars and the campfire take turns (5, 15, 25…: binoculars)
         theme == Theme.TRAILBLAZER -> if ((level / 5) % 2 == 1) "binoc" else "camp"
         else -> "burst"
@@ -105,6 +105,8 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
             "aurora" -> Color.rgb(6, 16, 28)
             "binoc" -> Color.rgb(11, 18, 32)
             "camp" -> Color.rgb(10, 16, 48)
+            "tokyo" -> Color.rgb(6, 7, 13)
+            "paint" -> Color.rgb(247, 241, 227)
             else -> if (dark || kind != "burst") Color.rgb(10, 9, 20) else Color.rgb(246, 248, 252)
         }
         val ink = if (kind == "rally") Color.rgb(42, 30, 20) else if (kind == "compass") Color.rgb(22, 50, 79)
@@ -250,6 +252,8 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
             "aurora" -> drawAurora(c, w, h, cx, cy, t, num)
             "binoc" -> drawBinoculars(c, w, h, cx, cy, t, num)
             "camp" -> drawCampfire(c, w, h, cx, cy, t)
+            "tokyo" -> drawTokyo(c, w, h, cx, cy, t, num)
+            "paint" -> drawPaint(c, w, h, cx, cy, t, num)
             else -> {
                 // a burst in the style's colours, the number pops
                 val k = (t / 600f).coerceIn(0f, 1f)
@@ -441,6 +445,77 @@ class Milestone(ctx: Context, private val level: Int, private val title: String,
     }
 
     /** Arctic: an aurora ripples, snow falls, the number frosts over. */
+    /** Tokyo Night (5, 15, 25…): shop lights and rain, a neon sign flickers on with the number. */
+    private fun drawTokyo(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
+        val cols = intArrayOf(Color.rgb(255, 77, 109), Color.rgb(255, 209, 102), Color.rgb(76, 201, 240), Color.rgb(247, 37, 133), Color.rgb(124, 255, 203))
+        // a pink glow rising from the street
+        fill.shader = LinearGradient(0f, h * 0.55f, 0f, h, Color.TRANSPARENT, Color.argb(50, 247, 37, 133), Shader.TileMode.CLAMP)
+        c.drawRect(0f, h * 0.55f, w, h, fill); fill.shader = null
+        for (i in 0 until 46) {
+            val x = drops[i * 3] * w; val y = h * 0.45f + drops[i * 3 + 1] * h * 0.55f
+            val tw = 0.6f + 0.4f * sin(t / 500f + i)
+            val col = cols[i % cols.size]
+            fill.color = Color.argb((60 * tw).toInt(), Color.red(col), Color.green(col), Color.blue(col)); c.drawCircle(x, y, 9 * d, fill)
+            fill.color = Color.argb((255 * tw).toInt(), Color.red(col), Color.green(col), Color.blue(col)); c.drawCircle(x, y, 2.6f * d, fill)
+        }
+        stroke.color = Color.argb(90, 159, 180, 255); stroke.strokeWidth = 1 * d
+        for (i in 0 until 50) {
+            val x = drops[i * 3 + 2] * w; val ln = (16 + drops[i * 3] * 16) * d
+            val y = ((drops[i * 3 + 1] * h + t * (0.7f + drops[i * 3] * 0.5f)) % (h + ln)) - ln
+            c.drawLine(x, y, x - 3 * d, y + ln, stroke)
+        }
+        val pink = Color.rgb(255, 46, 99)
+        // the sign: flickers on at 0.4 s, settles by 1.2 s
+        val on = t > 400 && !(t in 520f..600f) && !(t in 700f..760f) && !(t in 900f..930f)
+        if (t > 400) {
+            val box = RectF(cx - 105 * d, cy - 135 * d, cx + 105 * d, cy + 40 * d)
+            val a = if (on) 255 else 70
+            stroke.color = Color.argb(a / 4, 255, 46, 99); stroke.strokeWidth = 12 * d; c.drawRoundRect(box, 18 * d, 18 * d, stroke)
+            stroke.color = Color.argb(a, 255, 46, 99); stroke.strokeWidth = 3 * d; c.drawRoundRect(box, 18 * d, 18 * d, stroke)
+            text.textSize = 130 * d
+            text.color = Color.argb(a, 255, 255, 255)
+            if (on) text.setShadowLayer(22 * d, 0f, 0f, pink)
+            c.drawText(num, cx, cy, text); text.clearShadowLayer()
+        }
+        text.textSize = 13 * d; text.color = Color.rgb(255, 155, 181); text.letterSpacing = 0.3f
+        c.drawText(L.t("LEVEL UP"), cx, cy - 160 * d, text); text.letterSpacing = 0f
+        if (t > 1300) fadeTitle(c, cx, cy + 90 * d, Color.rgb(76, 201, 240), ((t - 1300) / 500f).coerceIn(0f, 1f))
+    }
+
+    /** Watercolour (5, 15, 25…): blots of paint bloom and drip, the number is painted in. */
+    private fun drawPaint(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
+        val blots = listOf(Triple(-0.28f, -0.25f, Color.rgb(242, 161, 170)), Triple(0.22f, -0.32f, Color.rgb(169, 204, 227)),
+            Triple(-0.05f, 0.05f, Color.rgb(184, 216, 168)), Triple(0.3f, 0.08f, Color.rgb(247, 208, 138)), Triple(-0.3f, 0.18f, Color.rgb(195, 177, 225)))
+        blots.forEachIndexed { i, (ox, oy, col) ->
+            val k = ease(((t - i * 120f) / 1300f).coerceIn(0f, 1f))
+            if (k <= 0f) return@forEachIndexed
+            val x = cx + ox * w * 0.9f; val y = cy - 40 * d + oy * h * 0.35f; val r = (85 + i * 6) * d * k
+            fill.shader = android.graphics.RadialGradient(x, y, r, intArrayOf(Color.argb(150, Color.red(col), Color.green(col), Color.blue(col)), Color.argb(110, Color.red(col), Color.green(col), Color.blue(col)), Color.TRANSPARENT), floatArrayOf(0f, 0.7f, 1f), Shader.TileMode.CLAMP)
+            c.drawCircle(x, y, r, fill); fill.shader = null
+            // a drip runs down from the lower blots
+            if (oy > 0f || i == 0) {
+                val dk = ((t - 900 - i * 150f) / 1600f).coerceIn(0f, 1f)
+                if (dk > 0f) {
+                    fill.color = Color.argb(150, Color.red(col), Color.green(col), Color.blue(col))
+                    val dx = x + (i - 2) * 6 * d
+                    c.drawRoundRect(RectF(dx - 3.5f * d, y + r * 0.6f, dx + 3.5f * d, y + r * 0.6f + dk * 90 * d), 3.5f * d, 3.5f * d, fill)
+                    c.drawCircle(dx, y + r * 0.6f + dk * 90 * d, 5 * d, fill)
+                }
+            }
+        }
+        // the number, painted in from the left
+        val ink = Color.rgb(46, 64, 87)
+        val k = ((t - 400) / 900f).coerceIn(0f, 1f)
+        if (k > 0f) {
+            text.textSize = 150 * d; text.color = ink
+            val tw = text.measureText(num)
+            c.save(); c.clipRect(cx - tw / 2 - 10 * d, 0f, cx - tw / 2 + (tw + 20 * d) * k, h); c.drawText(num, cx, cy, text); c.restore()
+        }
+        text.textSize = 20 * d; text.color = Color.rgb(138, 117, 100)
+        c.drawText(L.t("Level up"), cx, cy - 165 * d, text)
+        if (t > 1400) fadeTitle(c, cx, cy + 90 * d, Color.rgb(209, 73, 91), ((t - 1400) / 500f).coerceIn(0f, 1f))
+    }
+
     private fun drawAurora(c: Canvas, w: Float, h: Float, cx: Float, cy: Float, t: Float, num: String) {
         val sh = sin(t / 900f) * 50 * d
         fun blob(x: Float, y: Float, r: Float, col: Int) {
