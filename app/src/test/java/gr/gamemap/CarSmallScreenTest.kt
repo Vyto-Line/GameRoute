@@ -47,6 +47,8 @@ class CarSmallScreenTest {
             if (mode == "message") {
                 // a convoy message while parked, with Where to? and the Home / Work chips (the photo of 22 Nov)
                 NavEngine.stop(); Convoy.debugStart(Place("Sounio", "", route.points.last())); Convoy.debugMessage("Maria (test)", "stop")
+                // no destination yet, so Where to? and the chips show instead of the lobby
+                Convoy::class.java.getDeclaredField("destination").apply { isAccessible = true }.set(null, null)
             }
             for ((w, h, dens) in listOf(Triple(800, 400, 1f), Triple(800, 480, 1f), Triple(1280, 480, 1f), Triple(1886, 816, 1.75f), Triple(1024, 600, 1.3f))) {
                 MapState.setTheme(Theme.HIGH_CONTRAST)
