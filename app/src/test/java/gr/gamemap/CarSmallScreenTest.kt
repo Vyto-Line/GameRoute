@@ -35,13 +35,18 @@ class CarSmallScreenTest {
         LocationTracker.onLocationChanged(Location("gps").apply { latitude = start.lat; longitude = start.lon; accuracy = 5f; time = System.currentTimeMillis() })
         NavEngine.debugDrive(Place("Sounio", "", route.points.last()), route, 0)
         val log = StringBuilder()
-        for (withInvite in listOf(false, true)) {
+        for (mode in listOf("plain", "invite", "message")) {
+            val withInvite = mode == "invite"
             InvitePop.resetForTest()
             if (withInvite) {
                 // (a turn under 200 m holds the card back: offer it parked, as in the photo)
                 NavEngine.stop()
                 InvitePop.offer(FriendCore.Invite("i1", "f1", "Nikos (test)", "ABC123", "Sounio", System.currentTimeMillis(), 1, "race"))
                 assertTrue("the card is up", InvitePop.current != null)
+            }
+            if (mode == "message") {
+                // a convoy message while parked, with Where to? and the Home / Work chips (the photo of 22 Nov)
+                NavEngine.stop(); Convoy.debugStart(Place("Sounio", "", route.points.last())); Convoy.debugMessage("Maria (test)", "stop")
             }
             for ((w, h, dens) in listOf(Triple(800, 400, 1f), Triple(800, 480, 1f), Triple(1280, 480, 1f), Triple(1886, 816, 1.75f), Triple(1024, 600, 1.3f))) {
                 MapState.setTheme(Theme.HIGH_CONTRAST)
@@ -54,11 +59,15 @@ class CarSmallScreenTest {
                     val ov = RectF(); if (ov.setIntersect(a, b) && ov.width() > 2 && ov.height() > 2) log.append("${w}x$h invite=$withInvite: $an overlaps $bn\n")
                 }
                 if (!r.endAt.isEmpty && RectF.intersects(r.endAt, r.roadNameRect)) log.append("${w}x$h: street name under End\n")
+                if (mode == "message") {
+                    if (r.messageAt.isEmpty) log.append("${w}x$h: no convoy message\n")
+                    for ((hr, n) in hits) { val ov = RectF(); if (ov.setIntersect(hr, r.messageAt) && ov.width() > 2 && ov.height() > 2) log.append("${w}x$h: convoy message overlaps $n\n") }
+                }
                 if (withInvite && r.inviteAt.isEmpty) log.append("${w}x$h: no invite card\n")
-                File(out, "car_small_${w}x${h}${if (withInvite) "_invite" else ""}.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
+                File(out, "car_small_${w}x${h}${if (mode == "plain") "" else "_$mode"}.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
             }
         }
-        NavEngine.stop(); InvitePop.resetForTest()
+        NavEngine.stop(); InvitePop.resetForTest(); Convoy.leave(quiet = true); Convoy.lastMessage = null
         File(out, "car_small.txt").writeText(log.ifEmpty { "no overlaps" }.toString())
         assertTrue(log.toString(), log.isEmpty())
     }

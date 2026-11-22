@@ -6,6 +6,8 @@ package gr.gamemap
  */
 object History {
     val builds: List<Triple<String, String, String>> = listOf(
+        Triple("114", "Pharmacies on duty all over Greece, with closing times; two new styles, Tokyo Night and Watercolour, with their own fonts and panels; new finish flags and level-ups; a see-through arrow; a new car menu in your style; better address search; car screens tidier on small displays; steadier arrival times",
+            "Εφημερεύοντα φαρμακεία σε όλη την Ελλάδα, με ώρα κλεισίματος· δύο νέα στυλ, Tokyo Night και Watercolour, με δικές τους γραμματοσειρές και πάνελ· νέες σημαίες τερματισμού και level-ups· διάφανο βέλος· νέο μενού στο αυτοκίνητο στα χρώματα του στυλ· καλύτερη αναζήτηση διευθύνσεων· πιο τακτοποιημένες οθόνες αυτοκινήτου σε μικρές οθόνες· πιο σταθερές ώρες άφιξης"),
         Triple("113", "Steadier GPS and arrow, faster rerouting, a clear convoy flow with a race board, the car's own panels and a closer car view, traffic lines on the roads, steady street names, a sliding Saved & recent bar, a location-off card, better battery",
             "Πιο σταθερό GPS και βέλος, ταχύτερος επανυπολογισμός, καθαρό κομβόι με πίνακα αγώνα, τα δικά μας πάνελ και πιο κοντινή όψη στο αυτοκίνητο, κίνηση πάνω στους δρόμους, σταθερά ονόματα οδών, συρόμενη μπάρα αποθηκευμένων, κάρτα όταν η τοποθεσία είναι κλειστή, καλύτερη μπαταρία"),
         Triple("111.2", "Convoy invites in a small card (phone and car); speed orange or red over the limit; the road name under your arrow", "Προσκλήσεις κομβόι σε μικρή κάρτα (κινητό και αυτοκίνητο)· η ταχύτητα πορτοκαλί ή κόκκινη πάνω από το όριο· το όνομα του δρόμου κάτω από το βέλος"),

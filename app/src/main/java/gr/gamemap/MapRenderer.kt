@@ -318,7 +318,7 @@ class MapRenderer(private val car: Boolean = false) {
         if (hud && Convoy.active && Convoy.onConvoyRoute && !NavEngine.arrived && !NavEngine.planningOn(car)) {
             if (car) drawCarConvoy(c, area, d, theme) else drawConvoyStrip(c, area, d, theme)
         }
-        if (hud && Convoy.active) drawConvoyMessage(c, area, d, theme)
+        messageAt.setEmpty(); if (hud && Convoy.active) drawConvoyMessage(c, area, d, theme)
         if (car && hud && carButtons && NavEngine.planningOn(car)) drawCarRoutes(c, fullArea, d, theme)
         if (carTrip) drawCarTrip(c, area, d, theme)
         else if (car && carButtons && selectedPlace != null && !NavEngine.planningOn(car)) drawCarPlace(c, area, d, theme)
@@ -2525,6 +2525,9 @@ class MapRenderer(private val car: Boolean = false) {
         friendHits = hits
     }
 
+    /** Where the convoy's quick message sits (tests). */
+    internal val messageAt = RectF()
+
     @Volatile private var friendHits: List<Pair<RectF, Convoy.Member>> = emptyList()
 
     /** The convoy friend under a screen point (their arrow or name tag), if any. */
@@ -2547,6 +2550,7 @@ class MapRenderer(private val car: Boolean = false) {
             }
         }
         val r = RectF(left, top, left + w, top + 36 * d)
+        messageAt.set(r)
         panel(c, r, d, t, outline = true)
         fill.color = t.route; c.drawCircle(r.left + 18 * d, r.centerY(), 6 * d, fill)
         text.color = Ui.ink(t); c.drawText(label, r.left + 32 * d, r.centerY() + 5 * d, text)
