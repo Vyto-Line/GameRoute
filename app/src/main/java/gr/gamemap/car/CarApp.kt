@@ -141,6 +141,9 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
     }
     /** Called with the id of a GameMap button tapped on the car screen. */
     var onButton: ((String) -> Unit)? = null
+    /** Called (main thread) when the car's style or light/dark changes, so Android Auto's ☰ is recoloured. */
+    var onStyle: (() -> Unit)? = null
+    @Volatile private var styleKey = ""
     val ownButtons get() = renderer.carButtons
     private val main = Handler(Looper.getMainLooper())
     /**
@@ -279,6 +282,8 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
                 val t0 = android.os.SystemClock.uptimeMillis()
                 val v = visible
                 renderer.draw(c, w, h, if (v.isEmpty) Rect(0, 0, w, h) else v, density, hud = true)
+                val sk = "${MapState.carTheme ?: MapState.theme}|${MapState.dark}"
+                if (sk != styleKey) { val first = styleKey.isEmpty(); styleKey = sk; if (!first) main.post { onStyle?.invoke() } }
                 gr.gamemap.Perf.frameDrawn(android.os.SystemClock.uptimeMillis() - t0)
             } catch (e: Exception) {
                 // a frame drawn while the data changed under it: skip it, the next one is fine
@@ -701,6 +706,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     init {
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(surface)
         surface.onButton = { onCarButton(it) }
+        surface.onStyle = { main.removeCallbacks(refresh); main.post(refresh) }
         nav.setNavigationManagerCallback(object : NavigationManagerCallback {
             // Android Auto stops it (the car app closing, another navigation app): it comes back
             // when GameRoute's car screen opens again
@@ -866,6 +872,21 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         try { am.showAlert(alert) } catch (_: Exception) {}
     }
 
+    /** Android Auto's ☰ in the style's colours (cars that don't allow custom colours show their own). */
+    private fun styledMenu(): Action {
+        val th = MapState.carTheme ?: MapState.theme
+        val light = th.light; val dark = th.dark
+        fun solid(c: Int) = android.graphics.Color.rgb(android.graphics.Color.red(c), android.graphics.Color.green(c), android.graphics.Color.blue(c))
+        val ink = androidx.car.app.model.CarColor.createCustom(solid(light.route), solid(dark.route))
+        val bg = androidx.car.app.model.CarColor.createCustom(solid(light.hudPanel), solid(dark.hudPanel))
+        val ic = CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.ic_menu)).setTint(ink).build()
+        return try {
+            Action.Builder().setIcon(ic).setBackgroundColor(bg).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
+        } catch (e: Exception) {
+            Action.Builder().setIcon(ic).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
+        }
+    }
+
     private fun action(res: Int, onClick: () -> Unit) =
         Action.Builder().setIcon(icon(carContext, res)).setOnClickListener(onClick).build()
 
@@ -1015,10 +1036,11 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 .setMapActionStrip(ActionStrip.Builder().addAction(Action.PAN).build()).build()
         }
         if (surface.ownButtons) {
-            // GameMap draws its own see-through buttons; Android Auto keeps one: the ☰ menu
-            val b = NavigationTemplate.Builder().setActionStrip(
-                ActionStrip.Builder().addAction(action(R.drawable.ic_menu) { screenManager.push(CarMenuScreen(carContext)) }).build()
-            )
+            // GameMap draws its own see-through buttons; Android Auto keeps one: the ☰ menu, in the
+            // style's colours (its panel behind, the route colour for the lines) where the car allows
+            val b = NavigationTemplate.Builder()
+            try { b.setActionStrip(ActionStrip.Builder().addAction(styledMenu()).build()) }
+            catch (e: Exception) { b.setActionStrip(ActionStrip.Builder().addAction(action(R.drawable.ic_menu) { screenManager.push(CarMenuScreen(carContext)) }).build()) }
             b.setMapActionStrip(ActionStrip.Builder().addAction(Action.PAN).build())
             return b.build()
         }
