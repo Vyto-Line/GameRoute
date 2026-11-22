@@ -936,7 +936,9 @@ object Places {
             }
             // far away (another country) and not the name typed: not what anyone wants
             if (d > 1_500_000 && fit < 0.99) continue
-            // another country for a few letters typed ("καλλ" → Kall, Germany): only if nothing else fits
+            // another country for a few letters typed ("καλλ" → Kall in Germany): left out; a whole
+            // name typed (5+ letters, "london") still finds it
+            if (d > 800_000 && focus != null && whole.length < 5) continue
             if (d > 800_000) s -= 30
             // a sight in the places squares placed in the wrong town (Sounio's temple "in Athens")
             if (src == SRC_OPEN && p.icon == "🏛" && misplaced(p)) continue
