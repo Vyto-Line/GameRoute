@@ -876,15 +876,17 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     internal var menuStyleError: String? = null
 
     /** Android Auto's ☰ in the style's colours (cars that don't allow custom colours show their own). */
-    private fun styledMenu(): Action {
+    private fun styledMenu(background: Boolean = true): Action {
         val th = MapState.carTheme ?: MapState.theme
         val light = th.lookFor(false); val dark = th.lookFor(true)
         fun solid(c: Int) = android.graphics.Color.rgb(android.graphics.Color.red(c), android.graphics.Color.green(c), android.graphics.Color.blue(c))
         val ink = androidx.car.app.model.CarColor.createCustom(solid(light.route), solid(dark.route))
         val bg = androidx.car.app.model.CarColor.createCustom(solid(light.hudPanel), solid(dark.hudPanel))
         val ic = CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.ic_menu)).setTint(ink).build()
+        if (!background) return Action.Builder().setIcon(ic).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
         return try {
-            Action.Builder().setIcon(ic).setBackgroundColor(bg).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
+            // a background colour is only allowed on a "primary" action
+            Action.Builder().setIcon(ic).setBackgroundColor(bg).setFlags(Action.FLAG_PRIMARY).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
         } catch (e: Exception) {
             menuStyleError = "action: $e"
             Action.Builder().setIcon(ic).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
@@ -1044,7 +1046,12 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             // style's colours (its panel behind, the route colour for the lines) where the car allows
             val b = NavigationTemplate.Builder()
             try { b.setActionStrip(ActionStrip.Builder().addAction(styledMenu()).build()) }
-            catch (e: Exception) { menuStyleError = e.toString(); b.setActionStrip(ActionStrip.Builder().addAction(action(R.drawable.ic_menu) { screenManager.push(CarMenuScreen(carContext)) }).build()) }
+            catch (e: Exception) {
+                // (no coloured background allowed there: at least the lines in the style's colour)
+                menuStyleError = e.toString()
+                try { b.setActionStrip(ActionStrip.Builder().addAction(styledMenu(background = false)).build()) }
+                catch (e2: Exception) { menuStyleError += " / $e2"; b.setActionStrip(ActionStrip.Builder().addAction(action(R.drawable.ic_menu) { screenManager.push(CarMenuScreen(carContext)) }).build()) }
+            }
             b.setMapActionStrip(ActionStrip.Builder().addAction(Action.PAN).build())
             return b.build()
         }
