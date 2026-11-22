@@ -647,7 +647,8 @@ object Places {
 
     /** Greek typed in Latin letters ("eggeli", "xalandri", "thiseio") → Greek letters. */
     fun greeklish(s: String): String {
-        val t = s.lowercase()
+        // accents off first: TomTom writes "Kallithéa", and an é left in the middle broke the match
+        val t = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "")
         if (t.none { it in 'a'..'z' }) return s
         val sb = StringBuilder()
         var i = 0
