@@ -955,6 +955,9 @@ object Places {
      * "crepa land glyfada" → ("crepa land", Γλυφάδα): a town or neighbourhood named at the end
      * (or the start) of a search, so the search looks there.
      */
+    internal fun splitAreaForTest(query: String, near: LatLng?): String = splitArea(query, near)?.let { "${it.first} | ${it.second.name} ${it.second.pos}" } ?: "none"
+    internal fun tryTomtomForTest(query: String, near: LatLng?) = tryTomtom(query, near, false)
+    internal fun addressForTest(query: String, near: LatLng?) = address(query, near)
     private fun splitArea(query: String, near: LatLng?): Pair<String, Named>? {
         val words = query.trim().split(Regex("[\\s,]+")).filter { it.isNotEmpty() }
         if (words.size < 2) return null
