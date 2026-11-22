@@ -67,7 +67,7 @@ class CarSmallScreenTest {
                 File(out, "car_small_${w}x${h}${if (mode == "plain") "" else "_$mode"}.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
             }
         }
-        NavEngine.stop(); InvitePop.resetForTest(); Convoy.leave(quiet = true); Convoy.lastMessage = null
+        NavEngine.stop(); InvitePop.resetForTest(); Convoy.leave(quiet = true)
         File(out, "car_small.txt").writeText(log.ifEmpty { "no overlaps" }.toString())
         assertTrue(log.toString(), log.isEmpty())
     }
