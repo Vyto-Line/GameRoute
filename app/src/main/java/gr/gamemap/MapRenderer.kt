@@ -1860,6 +1860,7 @@ class MapRenderer(private val car: Boolean = false) {
             text.textAlign = Paint.Align.LEFT
             return
         }
+        if (p.columns != null) { drawDrawer(c, a, d, t, p, ink, dimInk, accentInk); return }
         val w = minOf(if (p.tiles.isNotEmpty()) 600 * d else 560 * d, a.width() * 0.55f)
         val top = maxOf(bannerBottom, a.top.toFloat()) + 10 * d
         val r = RectF(a.left + 12 * d, top, a.left + 12 * d + w, a.bottom - 12 * d)
@@ -1947,6 +1948,66 @@ class MapRenderer(private val car: Boolean = false) {
         p.note?.let { n ->
             text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT; text.textSize = 14 * d; text.color = dimInk
             c.drawText(ellipsize(n, r.width() - 2 * pad), r.left + pad, r.bottom - pad - 4 * d, text)
+        }
+        text.textAlign = Paint.Align.LEFT
+    }
+
+    /** The menu as a side drawer from the left (55b): two columns with headings, each row with its value. */
+    private fun drawDrawer(c: Canvas, a: Rect, d: Float, t: Theme, p: CarPanel, ink: Int, dimInk: Int, accentInk: Int) {
+        val cols = p.columns!!.filter { it.isNotEmpty() }
+        val w = minOf(360 * d * cols.size, a.width() * 0.62f)
+        val r = RectF(a.left.toFloat() - 20 * d, a.top.toFloat() + 6 * d, a.left + w, a.bottom - 6f * d)
+        panel(c, r, d, t, outline = true)
+        carHits += RectF(r) to "cp:none"   // taps on the drawer's empty parts don't reach the map
+        val pad = 12 * d
+        val back = RectF(a.left + pad, r.top + pad, a.left + pad + 48 * d, r.top + pad + 48 * d)
+        glassButton(c, back, d, t)
+        text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 26 * d; text.color = ink
+        c.drawText("‹", back.centerX(), back.centerY() + 9 * d, text)
+        carHits += back to "cp:back"
+        text.textAlign = Paint.Align.LEFT; text.typeface = t.typeface; text.textSize = 22 * d; text.color = accentInk
+        c.drawText(ellipsize(p.title, w - 90 * d), back.right + 12 * d, back.centerY() + 8 * d, text)
+        val top = back.bottom + 8 * d
+        val colW = (r.right - a.left - pad * (cols.size + 1)) / cols.size
+        for ((ci, col) in cols.withIndex()) {
+            val heads = col.count { it.id.startsWith("head:") }
+            val rowsN = col.size - heads
+            // rows shrink a little when a column is long (context rows at the top: End navigation…)
+            val rowH = ((r.bottom - pad - top - heads * 24 * d) / maxOf(1, rowsN)).coerceIn(44 * d, 60 * d)
+            val x0 = a.left + pad + ci * (colW + pad)
+            var y = top
+            for (row in col) {
+                if (row.id.startsWith("head:")) {
+                    text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 12.5f * d; text.color = dimInk
+                    text.letterSpacing = 0.12f; c.drawText(row.title, x0 + 12 * d, y + 17 * d, text); text.letterSpacing = 0f
+                    y += 24 * d; continue
+                }
+                if (y + rowH > r.bottom - pad / 2) break
+                val rr = RectF(x0, y, x0 + colW, y + rowH - 6 * d)
+                if (row.highlight || row.moon) {
+                    val col2 = if (row.moon) PoiLayer.MOON else t.route
+                    fill.color = withAlpha(col2, 34); c.drawRoundRect(rr, 10 * d, 10 * d, fill)
+                    stroke.color = col2; stroke.strokeWidth = 2 * d; c.drawRoundRect(rr, 10 * d, 10 * d, stroke)
+                }
+                carHits += rr to "cp:" + row.id
+                text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT; text.textSize = 21 * d; text.color = ink
+                c.drawText(row.icon, rr.left + 22 * d, rr.centerY() + 7.5f * d, text)
+                val rightText = row.right ?: "›"
+                text.textAlign = Paint.Align.RIGHT; text.typeface = Typeface.DEFAULT_BOLD
+                text.textSize = if (row.right != null) 16 * d else 21 * d; text.color = if (row.right != null) accentInk else dimInk
+                c.drawText(ellipsize(rightText, colW * 0.4f), rr.right - 10 * d, rr.centerY() + 6.5f * d, text)
+                val rw = minOf(text.measureText(rightText), colW * 0.4f) + 20 * d
+                val tx = rr.left + 44 * d; val tw = rr.right - tx - rw
+                text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d
+                text.color = if (row.red) Color.rgb(255, 99, 99) else ink
+                c.drawText(ellipsize(row.title, tw), tx, if (row.sub != null) rr.centerY() - 2 * d else rr.centerY() + 6 * d, text)
+                row.sub?.let { s ->
+                    text.typeface = if (row.moon || row.highlight) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; text.textSize = 13.5f * d
+                    text.color = if (row.moon) (if (Ui.contrast(PoiLayer.MOON, Ui.panel(t)) >= 3) PoiLayer.MOON else accentInk) else if (row.highlight) accentInk else dimInk
+                    c.drawText(ellipsize(s, tw), tx, rr.centerY() + 16 * d, text)
+                }
+                y += rowH
+            }
         }
         text.textAlign = Paint.Align.LEFT
     }

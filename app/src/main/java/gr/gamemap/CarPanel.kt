@@ -18,6 +18,11 @@ class CarPanel(
     val message: String = "",
     val loading: Boolean = false,
     val empty: String = "",
+    /**
+     * The menu as a side drawer (mockup 55b): columns of rows from the left edge, full height, the map
+     * still showing on the right. A row whose id starts "head:" is a section heading (NEARBY…).
+     */
+    val columns: List<List<CarRow>>? = null,
 )
 
 class CarRow(

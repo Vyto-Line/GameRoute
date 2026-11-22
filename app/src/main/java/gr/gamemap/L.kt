@@ -318,7 +318,7 @@ object L {
         "CLOSED NOW" to "ΚΛΕΙΣΤΑ ΤΩΡΑ", "OTHER PHARMACIES" to "ΑΛΛΑ ΦΑΡΜΑΚΕΙΑ", "Closed" to "Κλειστό", "Closed now" to "Κλειστό τώρα",
         "Not on duty now" to "Δεν εφημερεύει τώρα", "Call" to "Κλήση", "All pharmacies nearby" to "Όλα τα φαρμακεία κοντά", "PLACES" to "ΜΕΡΗ",
         "call ahead if it's urgent" to "αν είναι επείγον, τηλεφώνησε πρώτα", "A pharmacy on duty near you" to "Ένα φαρμακείο εφημερεύει κοντά σου",
-        "Show" to "Δείξε", "Hide till tomorrow" to "Απόκρυψη ως αύριο", "All on duty now" to "Όλα όσα εφημερεύουν τώρα",
+        "Show" to "Δείξε", "Hide till tomorrow" to "Απόκρυψη ως αύριο", "NEARBY" to "ΚΟΝΤΑ", "TOGETHER" to "ΜΑΖΙ", "SETTINGS" to "ΡΥΘΜΙΣΕΙΣ", "Start a convoy" to "Ξεκίνα κομβόι", "All on duty now" to "Όλα όσα εφημερεύουν τώρα",
         // home and search
         "Where to?" to "Πού πάμε;",
         "Type a destination" to "Γράψτε προορισμό",
