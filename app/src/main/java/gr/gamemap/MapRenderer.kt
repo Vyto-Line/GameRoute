@@ -2536,8 +2536,16 @@ class MapRenderer(private val car: Boolean = false) {
         val label = "$who: ${Convoy.messageText(key)}"
         text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 15 * d
         val w = text.measureText(label) + 44 * d
-        val top = maxOf(bannerBottom, convoyStrip.bottom, carConvoyBottom) + 8 * d
+        var top = maxOf(bannerBottom, convoyStrip.bottom, carConvoyBottom) + 8 * d
         val left = if (car) a.left + 12 * d else a.exactCenterX() - w / 2
+        // the car: below Where to? and the Home / Work chips too (it sat on the chips, 22 Nov)
+        if (car) {
+            var moved = true; var guard = 0
+            while (moved && guard++ < 8) {
+                moved = false
+                for ((hr, _) in carHits) if (hr.left < left + w && hr.right > left && hr.top < top + 36 * d && hr.bottom > top) { top = hr.bottom + 8 * d; moved = true }
+            }
+        }
         val r = RectF(left, top, left + w, top + 36 * d)
         panel(c, r, d, t, outline = true)
         fill.color = t.route; c.drawCircle(r.left + 18 * d, r.centerY(), 6 * d, fill)
