@@ -8,6 +8,7 @@ import java.io.File
 
 /** Probe (22 Nov): "μπουμπουλινας 17 Καλλιθέα" and "Καλλιθέα" from the south of Athens. */
 @RunWith(RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [34])
 class KallitheaProbeTest {
     @Test
     fun probe() {
