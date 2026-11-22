@@ -875,7 +875,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     /** Android Auto's ☰ in the style's colours (cars that don't allow custom colours show their own). */
     private fun styledMenu(): Action {
         val th = MapState.carTheme ?: MapState.theme
-        val light = th.light; val dark = th.dark
+        val light = th.lookFor(false); val dark = th.lookFor(true)
         fun solid(c: Int) = android.graphics.Color.rgb(android.graphics.Color.red(c), android.graphics.Color.green(c), android.graphics.Color.blue(c))
         val ink = androidx.car.app.model.CarColor.createCustom(solid(light.route), solid(dark.route))
         val bg = androidx.car.app.model.CarColor.createCustom(solid(light.hudPanel), solid(dark.hudPanel))
