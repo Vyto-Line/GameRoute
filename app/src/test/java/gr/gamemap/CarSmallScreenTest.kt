@@ -37,7 +37,12 @@ class CarSmallScreenTest {
         val log = StringBuilder()
         for (withInvite in listOf(false, true)) {
             InvitePop.resetForTest()
-            if (withInvite) InvitePop.offer(FriendCore.Invite("i1", "f1", "Nikos (test)", "ABC123", "Sounio", System.currentTimeMillis(), 1, "race"))
+            if (withInvite) {
+                // (a turn under 200 m holds the card back: offer it parked, as in the photo)
+                NavEngine.stop()
+                InvitePop.offer(FriendCore.Invite("i1", "f1", "Nikos (test)", "ABC123", "Sounio", System.currentTimeMillis(), 1, "race"))
+                assertTrue("the card is up", InvitePop.current != null)
+            }
             for ((w, h, dens) in listOf(Triple(800, 400, 1f), Triple(800, 480, 1f), Triple(1280, 480, 1f), Triple(1886, 816, 1.75f), Triple(1024, 600, 1.3f))) {
                 MapState.setTheme(Theme.HIGH_CONTRAST)
                 val r = MapRenderer(car = true).apply { carButtons = true }
@@ -49,6 +54,7 @@ class CarSmallScreenTest {
                     val ov = RectF(); if (ov.setIntersect(a, b) && ov.width() > 2 && ov.height() > 2) log.append("${w}x$h invite=$withInvite: $an overlaps $bn\n")
                 }
                 if (!r.endAt.isEmpty && RectF.intersects(r.endAt, r.roadNameRect)) log.append("${w}x$h: street name under End\n")
+                if (withInvite && r.inviteAt.isEmpty) log.append("${w}x$h: no invite card\n")
                 File(out, "car_small_${w}x${h}${if (withInvite) "_invite" else ""}.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
             }
         }
