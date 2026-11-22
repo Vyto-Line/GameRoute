@@ -682,7 +682,10 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             F.markSeen(listOf(i))
             val title = gr.gamemap.L.t("${i.from} invites you to a convoy")
             val sub = if (i.dest.isNotBlank()) i.dest else gr.gamemap.L.t("No destination yet")
-            if (carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_5) {
+            if (surface.ownButtons) {
+                // GameRoute's own card on the map has Join / Not now: no Android Auto alert as well
+                // (both showed at once: photo, 22 Nov)
+            } else if (carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_5) {
                 val alert = Alert.Builder(FRIEND_ALERT, CarText.create(title), 20_000L)
                     .setSubtitle(CarText.create(sub))
                     .addAction(Action.Builder().setTitle(gr.gamemap.L.t("Join")).setOnClickListener { carJoinConvoy(carContext, i.convoy) }.build())
@@ -899,9 +902,6 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     internal var menuStyleError: String? = null
-
-    /** ☰: GameRoute's own menu on the map (touch screens), Android Auto's list otherwise. */
-    private fun openMenu() { if (surface.ownButtons) openMenuPanel() else screenManager.push(CarMenuScreen(carContext)) }
 
     /** Android Auto's ☰ in the style's colours (cars that don't allow custom colours show their own). */
     private fun styledMenu(background: Boolean = true): Action {

@@ -313,7 +313,7 @@ class MapRenderer(private val car: Boolean = false) {
             if (car) drawBanner(c, Rect(area.left, 0, area.right, area.bottom), d * 0.8f, theme, pad = 8 * d)
             else drawBanner(c, area, d, theme)
         }
-        convoyStrip.setEmpty(); carConvoyBottom = 0f; carConvoyRect.setEmpty()
+        convoyStrip.setEmpty(); carConvoyBottom = 0f; carConvoyRect.setEmpty(); etaAt.setEmpty()
         // the convoy strip/box only on the convoy's own route (a route of my own looks like any other)
         if (hud && Convoy.active && Convoy.onConvoyRoute && !NavEngine.arrived && !NavEngine.planningOn(car)) {
             if (car) drawCarConvoy(c, area, d, theme) else drawConvoyStrip(c, area, d, theme)
@@ -334,7 +334,7 @@ class MapRenderer(private val car: Boolean = false) {
         if (car && hud && carButtons && carFriends != null && !NavEngine.planningOn(car) && !carTrip) drawCarFriends(c, area, d, theme)
         if (car && hud && carButtons && carFriends == null) carPanel?.let { drawCarPanel(c, area, d, theme, it) }
         if (car && hud) carFlash?.let { (msg, at) -> if (System.currentTimeMillis() - at < 2200) { drawCarFlash(c, area, d, theme, msg); animating = true } else carFlash = null }
-        if (car && hud && carButtons) InvitePop.current?.let { drawCarInvite(c, area, d, theme, it); animating = true }
+        if (car && hud && carButtons) InvitePop.current?.let { drawCarInvite(c, area, d, theme, it); animating = true } ?: inviteAt.setEmpty()
         if (car && hud && LocationStatus.state != LocationStatus.State.OK && InvitePop.current == null) drawCarLocationOff(c, area, d, theme)
         drawDiscovery(c, area, d, theme)
         if (hud && (view.userBearing != null || !following)) drawCompass(c, area, bearing, d, theme)
@@ -1451,15 +1451,27 @@ class MapRenderer(private val car: Boolean = false) {
         }
         // right: style, traffic / voice, report (below the ☰, whichever one is showing)
         var y = maxOf(stripBottom, a.top.toFloat()) + gap
-        btn("style", y); y += size + gap
+        // a short screen: all of them don't fit in one column (Friends hid behind +, 22 Nov):
+        // the top ones move to a second column beside the first
+        val nTop = if (NavEngine.active) 3 else 2
+        val nBottom = 2 + (if (!view.following || view.userBearing != null || view.zoomedAway || (NavEngine.active && NavEngine.route.size > 1)) 1 else 0)
+        val fits = y + (nTop + nBottom) * (size + gap) <= a.bottom - 14 * d + gap
+        val topX = if (fits) x else x - size - gap
+        fun btnTop(id: String, yy: Float, iconId: String = id) {
+            val r = RectF(topX, yy, topX + size, yy + size)
+            glassButton(c, r, d, t, null)
+            icon(c, iconId, r.centerX(), r.centerY(), size * 0.46f, ink)
+            carHits += r to id
+        }
+        btnTop("style", y); y += size + gap
         // (Show traffic moved to Settings › Map; driving, the sound button takes its place)
-        if (NavEngine.active) { btn(if (Voice.muted) "unmute" else "mute", y); y += size + gap }
+        if (NavEngine.active) { btnTop(if (Voice.muted) "unmute" else "mute", y); y += size + gap }
         // Friends (where Report used to be): how many are online, in a green badge
-        btn("friends", y)
+        btnTop("friends", y)
         val online = if (Friends.ready && Friends.core.started) Friends.core.friends.count { Friends.core.isOnline(it.fid) } +
             Friends.core.invites.count { it.convoy != Convoy.code } else 0
         if (online > 0) {
-            val bx = x + size - 4 * d; val by = y + 4 * d
+            val bx = topX + size - 4 * d; val by = y + 4 * d
             fill.color = Color.rgb(64, 200, 120); c.drawCircle(bx, by, 11 * d, fill)
             stroke.color = Color.rgb(12, 14, 20); stroke.strokeWidth = 2 * d; c.drawCircle(bx, by, 11 * d, stroke)
             text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 13 * d; text.color = Color.rgb(12, 14, 20)
@@ -1476,12 +1488,14 @@ class MapRenderer(private val car: Boolean = false) {
 
         text.typeface = Typeface.DEFAULT_BOLD
         text.textAlign = Paint.Align.LEFT
+        if (!(NavEngine.active && !NavEngine.arrived)) endAt.setEmpty()
         if (NavEngine.active && !NavEngine.arrived) {
             // End, next to the arrival panel
             text.textSize = 18 * d
             val w = text.measureText(gr.gamemap.L.t("End")) + 44 * d
             val left = if (etaRight > 0) etaRight + 10 * d else a.left + 160 * d
             val r = RectF(left, a.bottom - 14 * d - 66 * d, left + w, a.bottom - 14 * d)
+            endAt.set(r)
             glassButton(c, r, d, t, Color.argb(225, 229, 72, 77))
             text.color = white
             c.drawText(gr.gamemap.L.t("End"), r.left + 22 * d, r.centerY() + 6.5f * d, text)
@@ -2049,6 +2063,13 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     /** Car: a convoy invite, centred at the top for ~10 s: who, where, big Not now and Join. */
+    /** End and the arrival box (last frame), so the street name under the arrow keeps clear of them. */
+    internal val endAt = RectF()
+    internal val etaAt = RectF()
+
+    /** Where the invite card is (last frame), so the compass keeps clear of it. */
+    internal val inviteAt = RectF()
+
     private fun drawCarInvite(c: Canvas, a: Rect, d: Float, t: Theme, i: FriendCore.Invite) {
         // between what's top left (the turn box, or Where to?) and the buttons on the right; if
         // that gap is too narrow, under them, across the map (it was squeezed: the name was cut to
@@ -2064,12 +2085,16 @@ class MapRenderer(private val car: Boolean = false) {
         val since = System.currentTimeMillis() - InvitePop.shownAt
         val left = InvitePop.left()
         val slide = minOf(1f, since / 260f, (left * InvitePop.SHOW_MS) / 220f).coerceIn(0f, 1f)
-        val h = 76 * d
+        // too narrow for the name beside the buttons (the name was cut to "Ni…", 22 Nov): two rows,
+        // who and where on top, Not now / Join underneath
+        val twoRows = w < 520 * d
+        val h = if (twoRows) 136 * d else 76 * d
         val top = y0 - (1f - slide) * (y0 + h - a.top)
         val r = RectF(x0, top, x0 + w, top + h)
+        inviteAt.set(r)
         panel(c, r, d, t, outline = true)
         // their avatar, or their initial
-        val cx = r.left + 14 * d + 24 * d; val cy = r.centerY()
+        val cx = r.left + 14 * d + 24 * d; val cy = if (twoRows) r.top + 38 * d else r.centerY()
         val av = try { Avatars.ofFriend(i.fid) } catch (_: Exception) { null }
         if (av != null && av.first.id.isNotBlank()) Avatars.draw(c, av.first, av.second, cx, cy, 24 * d)
         else {
@@ -2077,14 +2102,21 @@ class MapRenderer(private val car: Boolean = false) {
             text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 20 * d; text.color = Color.WHITE
             c.drawText(i.from.trim().take(1).uppercase().ifBlank { "?" }, cx, cy + 7 * d, text)
         }
-        val join = RectF(r.right - 112 * d, r.top + 12 * d, r.right - 12 * d, r.bottom - 12 * d)
-        val no = RectF(join.left - 118 * d, join.top, join.left - 10 * d, join.bottom)
+        val join: RectF; val no: RectF
+        if (twoRows) {
+            val bw = (r.width() - 34 * d) / 2
+            no = RectF(r.left + 12 * d, r.bottom - 64 * d, r.left + 12 * d + bw, r.bottom - 12 * d)
+            join = RectF(no.right + 10 * d, no.top, r.right - 12 * d, no.bottom)
+        } else {
+            join = RectF(r.right - 112 * d, r.top + 12 * d, r.right - 12 * d, r.bottom - 12 * d)
+            no = RectF(join.left - 118 * d, join.top, join.left - 10 * d, join.bottom)
+        }
         text.textAlign = Paint.Align.LEFT; text.typeface = Typeface.DEFAULT_BOLD
-        val tx = cx + 36 * d; val tw = no.left - tx - 10 * d
+        val tx = cx + 36 * d; val tw = (if (twoRows) r.right - 14 * d else no.left - 10 * d) - tx
         text.textSize = 19 * d; text.color = Ui.ink(t)
-        c.drawText(ellipsize(gr.gamemap.L.t("${i.from} invites you"), tw), tx, r.top + 33 * d, text)
+        c.drawText(ellipsize(gr.gamemap.L.t("${i.from} invites you"), tw), tx, if (twoRows) cy - 5 * d else r.top + 33 * d, text)
         text.textSize = 15 * d; text.color = withAlpha(Ui.ink(t), 170); text.typeface = t.typeface
-        c.drawText(ellipsize("🏁 " + (if (i.dest.isNotBlank()) gr.gamemap.L.t("Convoy to ${i.dest}") else gr.gamemap.L.t("A convoy")), tw), tx, r.top + 57 * d, text)
+        c.drawText(ellipsize("🏁 " + (if (i.dest.isNotBlank()) gr.gamemap.L.t("Convoy to ${i.dest}") else gr.gamemap.L.t("A convoy")), tw), tx, if (twoRows) cy + 19 * d else r.top + 57 * d, text)
         // Not now / Join
         fill.color = withAlpha(Ui.ink(t), 40); c.drawRoundRect(no, 12 * d, 12 * d, fill)
         text.textAlign = Paint.Align.CENTER; text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 17 * d; text.color = Ui.ink(t)
@@ -2383,8 +2415,15 @@ class MapRenderer(private val car: Boolean = false) {
         val w = text.measureText(shown) + 22 * d
         val h = (if (car) 29 else 25) * d
         val top = (py + (if (weak) 72 else 32) * d).coerceAtMost(a.bottom - h - 4 * d)
-        val left = (px - w / 2).coerceIn(a.left + 6 * d, a.right - 6 * d - w)
-        val r = RectF(left, top, left + w, top + h)
+        var left = (px - w / 2).coerceIn(a.left + 6 * d, a.right - 6 * d - w)
+        var r = RectF(left, top, left + w, top + h)
+        // never under End or the arrival box (small car screens: End sat on the name, 22 Nov)
+        val blockers = listOfNotNull(endAt.takeIf { !it.isEmpty }, etaAt.takeIf { !it.isEmpty })
+        if (blockers.any { RectF.intersects(it, r) }) {
+            val right = blockers.maxOf { it.right } + 8 * d
+            r = if (right + w < a.right - 80 * d) RectF(right, top, right + w, top + h)
+                else RectF(left, py - 46 * d - h, left + w, py - 46 * d)   // else above the arrow
+        }
         roadNameRect.set(r)
         panel(c, r, d, t, outline = false)
         text.color = Ui.ink(t)
@@ -2701,7 +2740,7 @@ class MapRenderer(private val car: Boolean = false) {
         val h = 66 * d
         val left = a.left + 14 * d + 136 * d
         val box = RectF(left, a.bottom - 14 * d - h, left + w, a.bottom - 14 * d)
-        etaRight = box.right
+        etaRight = box.right; etaAt.set(box)
         panel(c, box, d, t, outline = false)
         text.typeface = tf; text.textSize = 26 * d
         text.color = Ui.onPanel(t, when { delay >= 10 -> Color.rgb(255, 110, 110); delay >= 3 -> Color.rgb(255, 184, 107); else -> Color.rgb(123, 227, 160) })
@@ -3194,7 +3233,7 @@ class MapRenderer(private val car: Boolean = false) {
             var moved = true; var guard = 0
             while (moved && guard++ < 8) {
                 moved = false
-                for ((hr, _) in carHits) if (hr.left < x + r && hr.right > x - r && hr.top < y + r + 6 * d && hr.bottom > y - r - 6 * d) {
+                for (hr in carHits.map { it.first } + listOfNotNull(inviteAt.takeIf { !it.isEmpty })) if (hr.left < x + r && hr.right > x - r && hr.top < y + r + 6 * d && hr.bottom > y - r - 6 * d) {
                     y = hr.bottom + 12 * d + r; moved = true
                 }
             }
