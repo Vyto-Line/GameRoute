@@ -312,6 +312,7 @@ class CarMapSurface(private val ctx: CarContext) : SurfaceCallback {
 
 class MapScreen(carContext: CarContext) : Screen(carContext) {
     private val surface = CarMapSurface(carContext)
+    internal fun ownButtonsForTest() = surface.ownButtons
     /** The car's BACK steps back through the Friends panel while it's open (otherwise as usual). */
     private val backFriends = object : androidx.activity.OnBackPressedCallback(false) {
         override fun handleOnBackPressed() { surface.friendsBack(); isEnabled = surface.friendsOpen }
@@ -872,6 +873,8 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         try { am.showAlert(alert) } catch (_: Exception) {}
     }
 
+    internal var menuStyleError: String? = null
+
     /** Android Auto's ☰ in the style's colours (cars that don't allow custom colours show their own). */
     private fun styledMenu(): Action {
         val th = MapState.carTheme ?: MapState.theme
@@ -883,6 +886,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         return try {
             Action.Builder().setIcon(ic).setBackgroundColor(bg).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
         } catch (e: Exception) {
+            menuStyleError = "action: $e"
             Action.Builder().setIcon(ic).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
         }
     }
@@ -1040,7 +1044,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
             // style's colours (its panel behind, the route colour for the lines) where the car allows
             val b = NavigationTemplate.Builder()
             try { b.setActionStrip(ActionStrip.Builder().addAction(styledMenu()).build()) }
-            catch (e: Exception) { b.setActionStrip(ActionStrip.Builder().addAction(action(R.drawable.ic_menu) { screenManager.push(CarMenuScreen(carContext)) }).build()) }
+            catch (e: Exception) { menuStyleError = e.toString(); b.setActionStrip(ActionStrip.Builder().addAction(action(R.drawable.ic_menu) { screenManager.push(CarMenuScreen(carContext)) }).build()) }
             b.setMapActionStrip(ActionStrip.Builder().addAction(Action.PAN).build())
             return b.build()
         }
