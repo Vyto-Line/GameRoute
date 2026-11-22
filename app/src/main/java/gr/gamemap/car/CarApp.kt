@@ -348,6 +348,16 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
     private fun T(s: String) = gr.gamemap.L.t(s)
 
     /** The ◈ menu, as a panel. */
+    /**
+     * Android Auto's ☰: GameRoute's own menu drawn on the map, in the style (it opened Android Auto's
+     * plain grey list, 22 Nov). Tapped again, it closes. Cars without our buttons keep the list.
+     */
+    private fun openMenu() {
+        if (!surface.ownButtons) { screenManager.push(CarMenuScreen(carContext)); return }
+        if (surface.panelKey == "menu") closePanel() else openMenuPanel()
+    }
+    internal fun openMenuForTest() = openMenu()
+
     private fun openMenuPanel() {
         val C = gr.gamemap.Convoy; val F = gr.gamemap.Friends
         val rows = ArrayList<gr.gamemap.CarRow>(); val acts = HashMap<String, () -> Unit>()
@@ -883,13 +893,13 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
         val ink = androidx.car.app.model.CarColor.createCustom(solid(light.route), solid(dark.route))
         val bg = androidx.car.app.model.CarColor.createCustom(solid(light.hudPanel), solid(dark.hudPanel))
         val ic = CarIcon.Builder(IconCompat.createWithResource(carContext, R.drawable.ic_menu)).setTint(ink).build()
-        if (!background) return Action.Builder().setIcon(ic).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
+        if (!background) return Action.Builder().setIcon(ic).setOnClickListener { openMenu() }.build()
         return try {
             // a background colour is only allowed on a "primary" action
-            Action.Builder().setIcon(ic).setBackgroundColor(bg).setFlags(Action.FLAG_PRIMARY).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
+            Action.Builder().setIcon(ic).setBackgroundColor(bg).setFlags(Action.FLAG_PRIMARY).setOnClickListener { openMenu() }.build()
         } catch (e: Exception) {
             menuStyleError = "action: $e"
-            Action.Builder().setIcon(ic).setOnClickListener { screenManager.push(CarMenuScreen(carContext)) }.build()
+            Action.Builder().setIcon(ic).setOnClickListener { openMenu() }.build()
         }
     }
 
@@ -1050,7 +1060,7 @@ class MapScreen(carContext: CarContext) : Screen(carContext) {
                 // (no coloured background allowed there: at least the lines in the style's colour)
                 menuStyleError = e.toString()
                 try { b.setActionStrip(ActionStrip.Builder().addAction(styledMenu(background = false)).build()) }
-                catch (e2: Exception) { menuStyleError += " / $e2"; b.setActionStrip(ActionStrip.Builder().addAction(action(R.drawable.ic_menu) { screenManager.push(CarMenuScreen(carContext)) }).build()) }
+                catch (e2: Exception) { menuStyleError += " / $e2"; b.setActionStrip(ActionStrip.Builder().addAction(action(R.drawable.ic_menu) { openMenu() }).build()) }
             }
             b.setMapActionStrip(ActionStrip.Builder().addAction(Action.PAN).build())
             return b.build()

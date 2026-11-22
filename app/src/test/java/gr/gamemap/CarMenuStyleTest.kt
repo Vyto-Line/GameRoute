@@ -34,5 +34,14 @@ class CarMenuStyleTest {
             assertTrue("${th.name}: styled $log", tint?.type == CarColor.TYPE_CUSTOM)
         }
         File(out, "car_menu_style.txt").writeText(log.toString())
+        // the ☰ opens GameRoute's own menu on the map, not Android Auto's grey list
+        val screen = gr.gamemap.car.MapScreen(ctx)
+        screen.openMenuForTest()
+        val surf = gr.gamemap.car.MapScreen::class.java.getDeclaredField("surface").apply { isAccessible = true }.get(screen)
+        val rend = surf.javaClass.getDeclaredField("renderer").apply { isAccessible = true }.get(surf) as MapRenderer
+        assertTrue("☰ opens our menu", rend.carPanel?.key == "menu")
+        assertTrue("no list screen pushed", ctx.getCarService(androidx.car.app.ScreenManager::class.java).stackSize <= 1)
+        screen.openMenuForTest()
+        assertTrue("tapped again it closes", rend.carPanel == null)
     }
 }
