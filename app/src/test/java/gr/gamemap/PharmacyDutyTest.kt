@@ -75,7 +75,7 @@ class PharmacyDutyTest {
         val start = Osrm.parseAll(File(data, "route.json").readText())[0].points[0]
         setUp(start)
         RuntimeEnvironment.getApplication().getSharedPreferences("gamemap", 0).edit()
-            .putLong("lastUpdateCheck", System.currentTimeMillis()).putInt("levelCelebrated", 50).putBoolean("seenWhatsNew114", true).apply()
+            .putLong("lastUpdateCheck", System.currentTimeMillis()).putInt("levelCelebrated", 50).putBoolean("seenWhatsNew115", true).apply()
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         val root = activity.window.decorView
         val looper = shadowOf(Looper.getMainLooper())
