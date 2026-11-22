@@ -921,8 +921,22 @@ object Places {
                 if (exact && !(p.icon == "🛣" && q.number == null)) s += (if (big > 0) 12.0 else 4.0) + far * 14 * Math.log10(1 + d / 1000) * 0.15
                 else if (allIn) s -= minOf(extra, 3) * 2.5
             }
+            // words typed that aren't in the name are usually the area ("μπουμπουλινας 17 καλλιθεα"):
+            // a result in that area goes well ahead of the same street elsewhere (it was 5th, 22 Nov)
+            if (qWords.size >= 2) {
+                val left = qWords.filter { fs -> fs.none { f -> f.length >= 3 && words.any { it.startsWith(f) } } }
+                    .filter { fs -> fs.any { it.length >= 4 } }
+                if (left.isNotEmpty()) {
+                    val where = nameWords(p.address)
+                    val inArea = left.count { fs -> fs.any { f -> f.length >= 4 && where.any { it.startsWith(f) } } }
+                    if (inArea > 0) s += 22.0 * inArea
+                    else if (where.isNotEmpty()) s -= 6
+                }
+            }
             // far away (another country) and not the name typed: not what anyone wants
             if (d > 1_500_000 && fit < 0.99) continue
+            // another country for a few letters typed ("καλλ" → Kall, Germany): only if nothing else fits
+            if (d > 800_000) s -= 30
             // a sight in the places squares placed in the wrong town (Sounio's temple "in Athens")
             if (src == SRC_OPEN && p.icon == "🏛" && misplaced(p)) continue
             if (area != null && d < 5000) s += 8
@@ -930,6 +944,16 @@ object Places {
             all += C(p, s, if (isAddr && q.number != null) 1.0 else fit)
         }
         all.sortByDescending { it.score }
+        // towns with the same name ("Καλλιθέα" in Athens, near Katerini, in Evia…): the nearest first
+        if (focus != null) {
+            val groups = all.withIndex().filter { it.value.p.town >= 1 || it.value.p.icon == "🏙" }
+                .groupBy { norm(Names.latin(it.value.p.name)) }.values.filter { it.size > 1 }
+            for (g in groups) {
+                val slots = g.map { it.index }.sorted()
+                val nearestFirst = g.map { it.value }.sortedBy { Geo.distance(focus, it.p.pos) }
+                slots.forEachIndexed { k, i -> all[i] = nearestFirst[k] }
+            }
+        }
         val out = ArrayList<Place>()
         for (c in all) {
             val i = out.indexOfFirst { samePlace(it, c.p) }

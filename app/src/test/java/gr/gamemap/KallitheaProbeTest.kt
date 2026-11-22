@@ -38,5 +38,20 @@ class KallitheaProbeTest {
             Thread.sleep(1200)
         }
         File(out, "kallithea.txt").writeText(log.toString())
+        val bad = ArrayList<String>()
+        for (q in listOf("μπουμπουλινας 17 καλλιθεα", "μπουμπουλινας 17, καλλιθεα", "Μπουμπουλίνας 17 Καλλιθέα", "boumpoulinas 17 kallithea")) {
+            val first = Places.find(q, near, false)?.firstOrNull()
+            if (first == null || !(first.address.contains("Kallith") || first.address.contains("Καλλιθ"))) bad += "$q → ${first?.name} · ${first?.address}"
+            Thread.sleep(1500)
+        }
+        for (q in listOf("καλλιθεα", "kallithea", "Καλλιθέα")) {
+            val first = Places.find(q, near, false)?.firstOrNull()
+            if (first == null || Geo.distance(near, first.pos) > 6000) bad += "$q → ${first?.name} · ${first?.address} ${first?.pos}"
+            Thread.sleep(1500)
+        }
+        val kall = Places.find("καλλ", near, true).orEmpty().take(5)
+        if (kall.any { Geo.distance(near, it.pos) > 800_000 }) bad += "καλλ → far away: " + kall.joinToString { it.name }
+        File(out, "kallithea_check.txt").writeText(bad.joinToString("\n").ifEmpty { "all good" })
+        org.junit.Assert.assertTrue(bad.joinToString("\n"), bad.isEmpty())
     }
 }
