@@ -57,6 +57,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import gr.gamemap.LocationTracker
 import gr.gamemap.MapRenderer
+import gr.gamemap.*
 import gr.gamemap.MapState
 import gr.gamemap.NavEngine
 import gr.gamemap.NavStep

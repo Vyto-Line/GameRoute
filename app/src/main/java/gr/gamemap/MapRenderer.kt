@@ -405,7 +405,7 @@ class MapRenderer(internal val car: Boolean = false) {
         /** Tests: bytes allocated so far on this thread, to find per-frame garbage (null on phones). */
         @JvmStatic var allocProbe: (() -> Long)? = null
         @JvmStatic val allocs = HashMap<String, Long>()
-        private var allocMark = 0L
+        internal var allocMark = 0L
         val times = HashMap<String, Long>()
     }
 
@@ -543,7 +543,7 @@ class MapRenderer(internal val car: Boolean = false) {
 
     internal data class EllKey(val s: String, val w: Int, val size: Float, val face: android.graphics.Typeface?)
     internal val ellMemo = HashMap<EllKey, String>()
-    internal var tripText = ""; private var tripTextM = -1L
+    internal var tripText = ""; internal var tripTextM = -1L
 
     /** "Jam in 800 m · +2 min", under the banner (phone) or at the top of the map (car). */
     /** Where the warning chip was drawn last (tests). */
