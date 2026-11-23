@@ -104,7 +104,7 @@ class PharmacyDutyTest {
         shot("pharm_51e_menu")
         log.append("51e menu: ${texts().filter { it.contains("Pharmacy") || it.contains("on duty") }}\n")
         assertTrue("menu tile with the count", texts().any { it == "Pharmacy" } && texts().any { it.contains("2 on duty") })
-        MainActivity::class.java.getDeclaredMethod("closeSheet").apply { isAccessible = true }.invoke(activity)
+        ActivityMethod.of("closeSheet").apply { isAccessible = true }.invoke(activity)
 
         activity.showPharmaciesForTest()
         looper.idleFor(java.time.Duration.ofMillis(800))
@@ -136,7 +136,7 @@ class PharmacyDutyTest {
         log.append("after the duty box: ${texts().filter { it.contains("ON DUTY NOW") }}\n")
         assertTrue("duty box opens the list", texts().any { it.contains("ON DUTY NOW") })
 
-        val showPlace = MainActivity::class.java.getDeclaredMethod("showPlace", Place::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+        val showPlace = ActivityMethod.of("showPlace", Place::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
         showPlace.invoke(activity, Duties.place(Duties.onDutyNear(start)[0]), false)
         shot("pharm_51c_card")
         log.append("51c card: ${texts().filter { it.contains("duty") || it.contains("Call") || it.contains("Duty list") }}\n")
@@ -146,7 +146,7 @@ class PharmacyDutyTest {
         shot("pharm_51c_closed")
         log.append("51c closed: ${texts().filter { it.contains("Closed") || it.contains("On duty nearby") }}\n")
         assertTrue("closed + nearest on duty", texts().any { it.startsWith("Closed now · opens 08:00") } && texts().any { it.startsWith("On duty nearby: ΠΑΠΑΔΟΠΟΥΛΟΥ") })
-        MainActivity::class.java.getDeclaredMethod("closePlace").apply { isAccessible = true }.invoke(activity)
+        ActivityMethod.of("closePlace").apply { isAccessible = true }.invoke(activity)
 
         val search = MainActivity::class.java.getDeclaredField("search").apply { isAccessible = true }.get(activity) as EditText
         search.requestFocus(); search.setText("φαρμακ")

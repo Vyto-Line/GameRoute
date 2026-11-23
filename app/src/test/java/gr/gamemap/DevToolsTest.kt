@@ -24,7 +24,7 @@ class DevToolsTest {
         assertFalse("tests must run as a public build", BuildConfig.TEST_BUILD)
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         @Suppress("UNCHECKED_CAST")
-        val rows = MainActivity::class.java.getDeclaredMethod("settingsRowsFor", String::class.java)
+        val rows = ActivityMethod.of("settingsRowsFor", String::class.java)
             .apply { isAccessible = true }.invoke(activity, "dev") as List<View>
         assertEquals("a public build shows no Developer rows", 0, rows.size)
     }

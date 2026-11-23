@@ -22,7 +22,7 @@ class SettingRowsTest {
     fun longValuesGoUnderTheTitle() {
         val out = File(System.getProperty("previewOut") ?: "build/previews").apply { mkdirs() }
         val a = Robolectric.buildActivity(MainActivity::class.java).setup().get()
-        val m = MainActivity::class.java.getDeclaredMethod("settingRow", String::class.java, String::class.java, Function0::class.java).apply { isAccessible = true }
+        val m = ActivityMethod.of("settingRow", String::class.java, String::class.java, Function0::class.java).apply { isAccessible = true }
         val rows = listOf(
             "Reset what's been seen" to "Celebrations, What's new, welcome screens",
             "Test a crash" to "Saves a report, like a real crash",

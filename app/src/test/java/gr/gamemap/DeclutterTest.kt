@@ -36,7 +36,7 @@ class DeclutterTest {
             root.draw(Canvas(bmp))
             File(out, "dc_$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        fun call(name: String) = MainActivity::class.java.getDeclaredMethod(name).apply { isAccessible = true }.invoke(activity)
+        fun call(name: String) = ActivityMethod.of(name).apply { isAccessible = true }.invoke(activity)
         MapState.setLightMode(MapState.LightMode.DARK); MapState.setTheme(Theme.NEON_NOIR)
         val now = System.currentTimeMillis()
         val p = r.points[r.points.size / 3]

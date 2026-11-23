@@ -41,7 +41,7 @@ class XpAndSuggestTest {
         Convoy.myName = "Vyto"; Convoy.debugStart(a)
         val code = Convoy.code
         field("planPlace").set(NavEngine, b)
-        MainActivity::class.java.getDeclaredMethod("startConvoyFromPreview").apply { isAccessible = true }.invoke(activity)
+        ActivityMethod.of("startConvoyFromPreview").apply { isAccessible = true }.invoke(activity)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("same convoy", code, Convoy.code)
         assertEquals("the place went to the convoy", "Mikel Coffee", Convoy.destination?.name)

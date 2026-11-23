@@ -89,7 +89,7 @@ class ReadmeShotsTest {
             LocationTracker.onLocationChanged(l)
         }
         fun back() { activity.onBackPressedDispatcher.onBackPressed(); looper.idle() }
-        fun call(name: String) = MainActivity::class.java.getDeclaredMethod(name).apply { isAccessible = true }.invoke(activity)
+        fun call(name: String) = ActivityMethod.of(name).apply { isAccessible = true }.invoke(activity)
         lateinit var mapView: GameMapView
         fun clean() { // nothing left open from the shot before
             try { call("closeSearch") } catch (_: Exception) {}
@@ -122,7 +122,7 @@ class ReadmeShotsTest {
         InvitePop.close(); Friends.core.removeInviteForTest("conv7777777"); looper.idle()
         style(Theme.OPEN_WORLD, false)
         // search: a shop only the new places data has
-        val run = MainActivity::class.java.getDeclaredMethod("runQuery", String::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+        val run = ActivityMethod.of("runQuery", String::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
         Places.prepareGazetteer(LatLng(37.9755, 23.7348)); OpenPlaces.prepare(LatLng(37.9755, 23.7348))
         val search = MainActivity::class.java.getDeclaredField("search").apply { isAccessible = true }.get(activity) as android.widget.EditText
         search.requestFocus(); search.setText("starbucks"); run.invoke(activity, "starbucks", true)

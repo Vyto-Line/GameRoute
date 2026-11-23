@@ -31,7 +31,7 @@ class DialogsTest {
             val bmp = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888); root.draw(Canvas(bmp))
             File(out, "popup_$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        fun call(name: String) = MainActivity::class.java.getDeclaredMethod(name).apply { isAccessible = true }.invoke(activity)
+        fun call(name: String) = ActivityMethod.of(name).apply { isAccessible = true }.invoke(activity)
         Friends.init(activity); Friends.start()
         for ((th, dark) in listOf(Theme.VIOLET_RAIN to true, Theme.RALLY to true, Theme.BLUEPRINT to true, Theme.OPEN_WORLD to false)) {
             MapState.setTheme(th); MapState.setLightMode(if (dark) MapState.LightMode.DARK else MapState.LightMode.LIGHT)
@@ -53,7 +53,7 @@ class DialogsTest {
         assertTrue("no Android dialog was used", ShadowDialog.getShownDialogs().isEmpty())
         // What's new: build 100 and every earlier build
         MainActivity::class.java.getDeclaredField("settingsPage").apply { isAccessible = true }.set(activity, "whatsnew")
-        MainActivity::class.java.getDeclaredMethod("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "settings")
+        ActivityMethod.of("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "settings")
         MainActivity::class.java.getDeclaredField("settingsPage").apply { isAccessible = true }.set(activity, "whatsnew")
         activity.refreshForTest(); shot("whatsnew_top")
         fun texts(v: android.view.View): List<String> = if (v is android.widget.TextView) listOf(v.text.toString()) else (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { texts(g.getChildAt(it)) } } ?: emptyList()
@@ -64,7 +64,7 @@ class DialogsTest {
         // level 5 reached without the phone's arrival card (no route, or only in the car): the
         // celebration still comes, once, the next time the phone is on the map
         activity.popupsForTest().forEach { it.dismiss() }
-        MainActivity::class.java.getDeclaredMethod("closeSheet").apply { isAccessible = true }.invoke(activity)
+        ActivityMethod.of("closeSheet").apply { isAccessible = true }.invoke(activity)
         Perf.animations = Perf.FULL
         Explorer.addXp(1000 - Explorer.xp + 10)
         activity.getSharedPreferences("gamemap", android.content.Context.MODE_PRIVATE).edit().putInt("levelCelebrated", 4).commit()

@@ -56,7 +56,7 @@ class SavedLabelsTest {
         log.append("\"babas\" (Greeklish) first: ${Places.local("babas", here).firstOrNull()?.name}\n")
         MapState.zoomBy(16.0 - MapState.targetZoom)
         shot("labels_home")
-        val run = MainActivity::class.java.getDeclaredMethod("runQuery", String::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+        val run = ActivityMethod.of("runQuery", String::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
         val search = MainActivity::class.java.getDeclaredField("search").apply { isAccessible = true }.get(activity) as android.widget.EditText
         search.requestFocus(); search.setText("gy"); run.invoke(activity, "gy", false)
         repeat(40) { looper.idleFor(java.time.Duration.ofMillis(100)); Thread.sleep(60) }

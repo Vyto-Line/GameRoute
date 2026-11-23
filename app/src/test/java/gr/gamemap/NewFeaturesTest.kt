@@ -61,7 +61,7 @@ class NewFeaturesTest {
         // parked car: home card, marker, place card
         Parked.save(r.points[r.points.size / 3], System.currentTimeMillis() - 40 * 60_000L)
         shot("new_parked_home")
-        val m = MainActivity::class.java.getDeclaredMethod("showPlace", Place::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+        val m = ActivityMethod.of("showPlace", Place::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
         m.invoke(activity, Parked.place(), false); shot("new_parked_card")
         activity.onBackPressedDispatcher.onBackPressed(); looper.idle()
         Parked.clear()

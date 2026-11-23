@@ -76,7 +76,7 @@ class TextAuditTest {
                 if (words.isNotEmpty()) english.getOrPut(screen) { sortedSetOf() } += s.take(80)
             }
         }
-        fun call(name: String) = try { MainActivity::class.java.getDeclaredMethod(name).apply { isAccessible = true }.invoke(activity) } catch (_: Exception) { null }
+        fun call(name: String) = try { ActivityMethod.of(name).apply { isAccessible = true }.invoke(activity) } catch (_: Exception) { null }
         fun clean() { call("closeSheet"); call("closePlace"); call("closeSearch"); looper.idle() }
         val page = MainActivity::class.java.getDeclaredField("settingsPage").apply { isAccessible = true }
         for (lang in listOf("en", "el")) {

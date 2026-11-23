@@ -46,7 +46,7 @@ class ConvoyJoinTest {
         MapState.zoomBy(16.0 - MapState.targetZoom)
         shot("join_home")
         activity.openSheetForTest("convoy"); shot("join_sheet")
-        MainActivity::class.java.getDeclaredMethod("closeSheet").apply { isAccessible = true }.invoke(activity)
+        ActivityMethod.of("closeSheet").apply { isAccessible = true }.invoke(activity)
         val map = MainActivity::class.java.getDeclaredField("map").apply { isAccessible = true }.get(activity)
         @Suppress("UNCHECKED_CAST")
         val tap = map.javaClass.getMethod("getOnFriendTap").invoke(map) as ((Convoy.Member) -> Unit)

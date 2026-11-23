@@ -49,7 +49,7 @@ class FriendsUiTest {
             val bmp = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888); root.draw(Canvas(bmp))
             File(out, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        fun call(name: String) = try { MainActivity::class.java.getDeclaredMethod(name).apply { isAccessible = true }.invoke(activity) } catch (_: Exception) { null }
+        fun call(name: String) = try { ActivityMethod.of(name).apply { isAccessible = true }.invoke(activity) } catch (_: Exception) { null }
         MapState.setTheme(Theme.NEON_NOIR); MapState.setLightMode(MapState.LightMode.DARK)
         val page = MainActivity::class.java.getDeclaredField("settingsPage").apply { isAccessible = true }
         for (lang in listOf("en", "el")) {

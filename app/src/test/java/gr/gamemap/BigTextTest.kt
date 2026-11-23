@@ -58,11 +58,11 @@ class BigTextTest {
             activity.openSheetForTest("you"); shot("you_${th.name.lowercase()}")
             if (th == Theme.VIOLET_RAIN) {
                 // opened from You: a back button to You; Settings › a page: back to Settings
-                MainActivity::class.java.getDeclaredMethod("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "progress"); shot("progress_back")
-                MainActivity::class.java.getDeclaredMethod("sheetBack").apply { isAccessible = true }.invoke(activity); shot("back_to_you")
+                ActivityMethod.of("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "progress"); shot("progress_back")
+                ActivityMethod.of("sheetBack").apply { isAccessible = true }.invoke(activity); shot("back_to_you")
                 activity.showSettings(); shot("settings_center")
             }
-            MainActivity::class.java.getDeclaredMethod("closeSheet").apply { isAccessible = true }.invoke(activity)
+            ActivityMethod.of("closeSheet").apply { isAccessible = true }.invoke(activity)
         }
     }
 }

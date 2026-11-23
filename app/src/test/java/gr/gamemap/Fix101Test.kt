@@ -70,7 +70,7 @@ class Fix101Test {
 
         // no flicker: the open menu isn't rebuilt when the map or GPS changes (only when what it shows does)
         for (kind in listOf("style", "settings", "report")) {
-            MainActivity::class.java.getDeclaredMethod("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, kind)
+            ActivityMethod.of("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, kind)
             looper.idle()
             val first = (host as ViewGroup).getChildAt(0)
             repeat(5) { MapState.changed.fire(); NavEngine.changed.fire(); looper.idle() }
@@ -79,7 +79,7 @@ class Fix101Test {
             assertTrue("$kind rebuilt itself (flicker)", same)
         }
         // a real change still shows: Dark → Light redraws the style list
-        MainActivity::class.java.getDeclaredMethod("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "style")
+        ActivityMethod.of("openSheet", String::class.java).apply { isAccessible = true }.invoke(activity, "style")
         looper.idle()
         val before = (host as ViewGroup).getChildAt(0)
         MapState.setLightMode(MapState.LightMode.LIGHT); looper.idle()

@@ -39,7 +39,7 @@ class XpLevelsTest {
             root.draw(Canvas(bmp))
             File(out, "xp_$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        fun call(name: String) = MainActivity::class.java.getDeclaredMethod(name).apply { isAccessible = true }.invoke(activity)
+        fun call(name: String) = ActivityMethod.of(name).apply { isAccessible = true }.invoke(activity)
         MapState.setLightMode(MapState.LightMode.DARK); MapState.setTheme(Theme.NEON_NOIR)
         // a trip: clean, new roads, a convoy race in 2nd place
         Xp.startTrip()
