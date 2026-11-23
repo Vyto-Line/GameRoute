@@ -135,14 +135,14 @@ The same map on the car screen, with the convoy box, places to tap, and its own 
 
 ## 🎨 16 map styles
 
-<img src="docs/screenshots/themes-light.webp" alt="The fourteen map styles" width="100%">
+<img src="docs/screenshots/themes-light.webp" alt="The sixteen map styles" width="100%">
 
 Light, dark, or switching by itself at sunset.
 
 <details>
 <summary><b>Night versions and the list</b></summary>
 <br>
-<img src="docs/screenshots/themes-dark.webp" alt="The fourteen map styles at night" width="100%">
+<img src="docs/screenshots/themes-dark.webp" alt="The sixteen map styles at night" width="100%">
 
 - **Free Roam:** asphalt grey, purple route
 - **Might City:** teal megacity, yellow route
