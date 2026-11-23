@@ -52,7 +52,9 @@ class PerfTest {
             var m = 200.0
             // warm up: tiles rendered, labels cached
             repeat(60) { LocationTracker.onLocationChanged(at(m)); rr.draw(c, w, h, area, d, true); shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50)); Thread.sleep(40) }
-            MapRenderer.times.clear(); MapRenderer.profile = true
+            MapRenderer.times.clear(); MapRenderer.allocs.clear(); MapRenderer.profile = true
+            val mx = java.lang.management.ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+            MapRenderer.allocProbe = { mx.getThreadAllocatedBytes(Thread.currentThread().id) }
             val frames = 60
             val t0 = System.nanoTime()
             repeat(frames) { k ->
@@ -62,7 +64,9 @@ class PerfTest {
             val total = (System.nanoTime() - t0) / frames / 1e6
             MapRenderer.profile = false
             log.append("${if (car) "car  " else "phone"}${if (lite) " LITE" else ""} ${th.name.padEnd(16)} ${"%5.1f".format(total)} ms  " +
-                MapRenderer.times.entries.sortedByDescending { it.value }.joinToString { "${it.key} ${"%.1f".format(it.value / frames / 1e6)}" } + "\n")
+                MapRenderer.times.entries.sortedByDescending { it.value }.joinToString { "${it.key} ${"%.1f".format(it.value / frames / 1e6)}" } +
+                "\n      garbage/frame ${MapRenderer.allocs.values.sum() / frames / 1024} KB: " +
+                MapRenderer.allocs.entries.filter { it.value / frames > 512 }.sortedByDescending { it.value }.joinToString { "${it.key} ${it.value / frames / 1024}" } + "\n")
         }
         // drawing one 512 px map tile (background work while driving)
         for (th in Theme.entries) for (dark in listOf(false, true)) {

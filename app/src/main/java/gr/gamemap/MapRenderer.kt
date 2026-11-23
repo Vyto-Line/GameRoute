@@ -169,6 +169,7 @@ class MapRenderer(private val car: Boolean = false) {
         c.scale(scale, scale)
 
         var tp0 = System.nanoTime()
+        if (profile) allocProbe?.let { allocMark = it() }
         drawTiles(c, theme, z, px, py, hypot(w.toDouble(), h.toDouble()) * 0.75 / scale, scale, bearing, cx, cy, w, h)
         prof("tiles", tp0); tp0 = System.nanoTime()
         val reach = hypot(w.toDouble(), h.toDouble()) * 0.75 / scale
@@ -717,7 +718,9 @@ class MapRenderer(private val car: Boolean = false) {
     // ---------------------------------------------------------------- route
 
     private fun prof(k: String, t0: Long) {
-        if (profile) times[k] = (times[k] ?: 0L) + (System.nanoTime() - t0)
+        if (!profile) return
+        times[k] = (times[k] ?: 0L) + (System.nanoTime() - t0)
+        allocProbe?.let { p -> val now = p(); allocs[k] = (allocs[k] ?: 0L) + (now - allocMark); allocMark = now }
     }
 
     companion object {
@@ -726,6 +729,10 @@ class MapRenderer(private val car: Boolean = false) {
         private val NAV_PLACES = setOf(PoiLayer.Kind.FUEL, PoiLayer.Kind.PARKING)
         /** Tests switch this on to see where frame time goes. */
         @JvmStatic var profile = false
+        /** Tests: bytes allocated so far on this thread, to find per-frame garbage (null on phones). */
+        @JvmStatic var allocProbe: (() -> Long)? = null
+        @JvmStatic val allocs = HashMap<String, Long>()
+        private var allocMark = 0L
         val times = HashMap<String, Long>()
     }
 
