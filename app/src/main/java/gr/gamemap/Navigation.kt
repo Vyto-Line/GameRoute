@@ -221,6 +221,7 @@ object LocationTracker : LocationListener {
     /** From here (~16 km/h) the arrow faces the way it really moves. 113 had 30 km/h to calm pulling
      *  away, but then city corners (taken at 15-30) slid sideways again for a moment (23 Nov). */
     private const val GLIDE_SPEED = 4.5f
+    private const val CURVE_SPEED = 7f
 
     private var slowPending: Float? = null
     private var travelFrom: LatLng? = null
@@ -433,7 +434,9 @@ object LocationTracker : LocationListener {
         else p
         glideMeters = fromPos?.let { Geo.distance(it, target) } ?: 0.0
         // leave along the arrow's current heading for a third of the way, then curve into the fix
-        ctrlPos = fromPos?.takeIf { !firstFix && held == null && speed > 2f && glideMeters > 3.0 }?.let { Geo.offset(it, heading, glideMeters / 3) }
+        // (under ~25 km/h a straight glide: the arrow faces exactly where it goes, and a curve started
+        // from a slightly-off arrow made it overshoot while pulling away)
+        ctrlPos = fromPos?.takeIf { !firstFix && held == null && speed > CURVE_SPEED && glideMeters > 3.0 }?.let { Geo.offset(it, heading, glideMeters / 3) }
         toPos = target
         fixAt = SystemClock.uptimeMillis()
         if (firstFix) heading = headingTarget
