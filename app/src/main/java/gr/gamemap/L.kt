@@ -52,7 +52,8 @@ object L {
         words[s]?.let { return it }
         synchronized(memo) { memo[s] }?.let { return it }
         val r = work(s)
-        synchronized(memo) { memo[s] = r }
+        // changing values ("850 m ahead") would fill it for ever: start again past a few thousand
+        synchronized(memo) { if (memo.size > 4000) memo.clear(); memo[s] = r }
         return r
     }
 

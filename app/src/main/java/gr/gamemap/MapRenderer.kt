@@ -1117,6 +1117,11 @@ class MapRenderer(private val car: Boolean = false) {
     private var washDark = false
 
     /** Watercolour paper: fine fibres and a soft pale edge, in the light or the ink-wash night. */
+    /** Full-screen style shaders, made once per screen size (they were remade every frame). */
+    private val overlayShaders = HashMap<String, Shader>()
+    private inline fun overlayShader(key: String, make: () -> Shader): Shader =
+        overlayShaders[key] ?: make().also { if (overlayShaders.size > 12) overlayShaders.clear(); overlayShaders[key] = it }
+
     private fun drawWash(c: Canvas, a: Rect) {
         val dark = MapState.dark
         val tex = washTex?.takeIf { washDark == dark } ?: Bitmap.createBitmap(160, 160, Bitmap.Config.ARGB_8888).also { b ->
@@ -1131,12 +1136,14 @@ class MapRenderer(private val car: Boolean = false) {
             }
             washTex = b; washDark = dark
         }
-        fill.shader = BitmapShader(tex, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+        fill.shader = overlayShader("washTex$dark") { BitmapShader(tex, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT) }
         c.drawRect(a, fill)
-        val r = hypot(a.width().toFloat(), a.height().toFloat()) / 2
-        val edge = if (dark) Color.argb(90, 30, 28, 36) else Color.argb(80, 255, 252, 244)
-        fill.shader = RadialGradient(a.exactCenterX(), a.exactCenterY(), r, intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, edge),
-            floatArrayOf(0f, 0.7f, 1f), Shader.TileMode.CLAMP)
+        fill.shader = overlayShader("washEdge$dark${a.width()}x${a.height()}") {
+            val r = hypot(a.width().toFloat(), a.height().toFloat()) / 2
+            val edge = if (dark) Color.argb(90, 30, 28, 36) else Color.argb(80, 255, 252, 244)
+            RadialGradient(a.exactCenterX(), a.exactCenterY(), r, intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, edge),
+                floatArrayOf(0f, 0.7f, 1f), Shader.TileMode.CLAMP)
+        }
         c.drawRect(a, fill)
         fill.shader = null
     }
@@ -1155,14 +1162,14 @@ class MapRenderer(private val car: Boolean = false) {
             }
             paperTex = b
         }
-        fill.shader = BitmapShader(tex, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+        fill.shader = overlayShader("paperTex") { BitmapShader(tex, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT) }
         c.drawRect(a, fill)
-        val r = hypot(a.width().toFloat(), a.height().toFloat()) / 2
-        fill.shader = RadialGradient(
-            a.exactCenterX(), a.exactCenterY(), r,
-            intArrayOf(Color.TRANSPARENT, Color.argb(70, 120, 80, 30), Color.argb(190, 80, 45, 15)),
-            floatArrayOf(0.5f, 0.85f, 1f), Shader.TileMode.CLAMP
-        )
+        fill.shader = overlayShader("paperEdge${a.width()}x${a.height()}") {
+            val r = hypot(a.width().toFloat(), a.height().toFloat()) / 2
+            RadialGradient(a.exactCenterX(), a.exactCenterY(), r,
+                intArrayOf(Color.TRANSPARENT, Color.argb(70, 120, 80, 30), Color.argb(190, 80, 45, 15)),
+                floatArrayOf(0.5f, 0.85f, 1f), Shader.TileMode.CLAMP)
+        }
         c.drawRect(a, fill)
         fill.shader = null
     }
@@ -2889,7 +2896,7 @@ class MapRenderer(private val car: Boolean = false) {
         text.textSize = 14 * d; text.color = ink
         c.drawText(unit, (box.left + c1) / 2, box.top + 62 * d, text)
         text.textSize = 12 * d; text.color = Ui.dim(t, 170)
-        c.drawText(String.format(java.util.Locale.US, "%.2f km", NavEngine.tripSoFar / 1000), (box.left + c1) / 2, box.top + 84 * d, text)
+        c.drawText(hundredthsKm(NavEngine.tripSoFar), (box.left + c1) / 2, box.top + 84 * d, text)
         // 2) the junction
         drawJunction(c, (c1 + c2) / 2, box.top + mainH / 2, 78 * d, step, ink, accent, d)
         // 3) what to do, and the road you turn into
@@ -2990,9 +2997,24 @@ class MapRenderer(private val car: Boolean = false) {
     }
 
     private fun ellipsize(s: String, maxW: Float): String {
+        if (text.measureText(s) <= maxW) return s
+        // too long: shortened once, then remembered (it was redone letter by letter every frame)
+        val key = EllKey(s, maxW.toInt(), text.textSize, text.typeface)
+        ellMemo[key]?.let { return it }
         var line = s
         while (line.length > 3 && text.measureText(line) > maxW) line = line.dropLast(2) + "…"
+        if (ellMemo.size > 300) ellMemo.clear()
+        ellMemo[key] = line
         return line
+    }
+    private data class EllKey(val s: String, val w: Int, val size: Float, val face: android.graphics.Typeface?)
+    private val ellMemo = HashMap<EllKey, String>()
+    private var tripText = ""; private var tripTextM = -1L
+    /** "0.09 km", remade only when it changes (every 10 m). */
+    private fun hundredthsKm(m: Double): String {
+        val h = Math.round(m / 10)
+        if (h != tripTextM) { tripTextM = h; tripText = "${h / 100}.${(h % 100).toString().padStart(2, '0')} km" }
+        return tripText
     }
 
     /** One small arrow per lane: bright for lanes to use, faint for the others. */

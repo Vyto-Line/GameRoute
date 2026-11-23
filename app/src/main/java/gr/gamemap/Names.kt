@@ -19,8 +19,15 @@ object Names {
     fun hasGreek(s: String) = s.any { it in 'Ͱ'..'Ͽ' || it in 'ἀ'..'῿' }
 
     /** Greek letters in Latin ones, keeping capitals ("ΣΤΑΔΙΟΥ" → "STADIOU", "Αιόλου" → "Aiolou"). */
+    /** Names asked for every frame (the turn box, the map's labels): worked out once, then remembered. */
+    private val memo = HashMap<String, String>()
     fun latin(s: String): String {
         if (!hasGreek(s)) return s
+        synchronized(memo) { memo[s] }?.let { return it }
+        return latinOf(s).also { r -> synchronized(memo) { if (memo.size > 2000) memo.clear(); memo[s] = r } }
+    }
+
+    private fun latinOf(s: String): String {
         val out = StringBuilder()
         var i = 0
         while (i < s.length) {

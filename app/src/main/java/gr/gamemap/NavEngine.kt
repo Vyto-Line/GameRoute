@@ -1292,18 +1292,21 @@ object NavEngine {
 
     // ============================================================= text helpers
 
+    /** 1.25 → "1.3" without String.format (that one makes kilobytes of garbage, and the turn box asks every frame). */
+    internal fun tenths(v: Double): String { val t = Math.round(v * 10); return "${t / 10}.${t % 10}" }
+
     fun formatDistance(m: Double): String {
         if (MapState.imperial) {
             val mi = m / 1609.344
             return when {
                 mi >= 10 -> "${mi.toInt()} mi"
-                mi >= 0.2 -> String.format(java.util.Locale.US, "%.1f mi", mi)
+                mi >= 0.2 -> "${tenths(mi)} mi"
                 else -> "${((m * 3.28084 / 50).toInt() * 50).coerceAtLeast(50)} ft"
             }
         }
         return when {
             m >= 10_000 -> "${(m / 1000).toInt()} km"
-            m >= 1000 -> String.format(java.util.Locale.US, "%.1f km", m / 1000)
+            m >= 1000 -> "${tenths(m / 1000)} km"
             m >= 100 -> "${((m / 50).toInt() * 50)} m"
             else -> "${((m / 10).toInt() * 10)} m"
         }
@@ -1314,8 +1317,22 @@ object NavEngine {
         return if (mins >= 60) "${mins / 60} h ${mins % 60} min" else "$mins min"
     }
 
-    fun clock(atMs: Long): String =
-        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(atMs))
+    /** "17:42". Asked several times a frame: one formatter, and the same minute's text reused. */
+    fun clock(atMs: Long): String {
+        val minute = atMs / 60_000
+        synchronized(clockMemo) {
+            clockMemo[minute]?.let { return it }
+            if (clockFmt == null || clockZone != java.util.TimeZone.getDefault()) {
+                clockZone = java.util.TimeZone.getDefault(); clockMemo.clear()
+                clockFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).apply { timeZone = clockZone }
+            }
+            if (clockMemo.size > 240) clockMemo.clear()
+            return clockFmt!!.format(java.util.Date(atMs)).also { clockMemo[minute] = it }
+        }
+    }
+    private val clockMemo = HashMap<Long, String>()
+    private var clockFmt: java.text.SimpleDateFormat? = null
+    private var clockZone: java.util.TimeZone? = null
 
     fun arrivalClock(): String = clock(System.currentTimeMillis() + (remainingSeconds * 1000).toLong())
 
