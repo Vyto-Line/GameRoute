@@ -53,8 +53,10 @@ class PerfTest {
             // warm up: tiles rendered, labels cached
             repeat(60) { LocationTracker.onLocationChanged(at(m)); rr.draw(c, w, h, area, d, true); shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50)); Thread.sleep(40) }
             MapRenderer.times.clear(); MapRenderer.allocs.clear(); MapRenderer.profile = true
-            val mx = java.lang.management.ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-            MapRenderer.allocProbe = { mx.getThreadAllocatedBytes(Thread.currentThread().id) }
+            // the JVM's per-thread allocation counter (not in android.jar, so by reflection)
+            val mx = Class.forName("java.lang.management.ManagementFactory").getMethod("getThreadMXBean").invoke(null)
+            val probe = Class.forName("com.sun.management.ThreadMXBean").getMethod("getThreadAllocatedBytes", Long::class.javaPrimitiveType)
+            MapRenderer.allocProbe = { probe.invoke(mx, Thread.currentThread().id) as Long }
             val frames = 60
             val t0 = System.nanoTime()
             repeat(frames) { k ->
