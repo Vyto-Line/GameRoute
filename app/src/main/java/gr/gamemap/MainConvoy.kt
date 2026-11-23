@@ -48,6 +48,15 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import java.util.concurrent.Executors
 import kotlin.math.abs
+import gr.gamemap.MainActivity.GameDialog
+import gr.gamemap.MainActivity.GameBuilder
+import gr.gamemap.MainActivity.SettingsGroup
+import gr.gamemap.MainActivity.YouRing
+import gr.gamemap.MainActivity.AvatarView
+import gr.gamemap.MainActivity.SheetScroll
+import gr.gamemap.MainActivity.GarageSwatch
+import gr.gamemap.MainActivity.ArrivalFx
+import gr.gamemap.MainActivity.Companion.SEARCH_TOKEN
 
 // Part of MainActivity, moved out in the clean-up of 23 Nov 2026 (see tools/split_main.py).
 

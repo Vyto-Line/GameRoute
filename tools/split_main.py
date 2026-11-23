@@ -115,6 +115,7 @@ def main():
             if sec == k or sec.startswith(k + " "): best = f if best is None or len(k) > 0 else best
         return best
     moved = {}
+    ready = set()
     keep_ranges = []
     for st, en, sec, head in members:
         f = target_of(sec)
@@ -124,10 +125,15 @@ def main():
         if (f is None or kind != "fun" or "override" in mods or "protected" in mods or "super." in body or "@JvmStatic" in body
                 or "open" in mods.split()):
             continue
-        name = re.search(r"\bfun\s+(?:<[^>]*>\s+)?(\w+)", head).group(1)
+        nm = re.search(r"\bfun\s+(?:<[^>]*>\s+)?([\w.]+)", head).group(1)
+        if "." in nm: continue  # an extension inside the class (AlertDialog.Builder.showT): stays
+        name = nm
         newbody = re.sub(r"^(    (?:@[\w.]+(?:\([^)]*\))?\s+)*)((?:private|internal|public)\s+)?(inline\s+)?fun\s+(<[^>]*>\s+)?(\w+)",
                          lambda mm: f"{mm.group(1)}internal {mm.group(3) or ''}fun {mm.group(4) or ''}MainActivity.{mm.group(5)}", body, count=1, flags=re.M)
         newbody = newbody.replace("this@MainActivity", f"this@{name}")
+        newbody = re.sub(r"(?<![.\w])MODE_PRIVATE", "Context.MODE_PRIVATE", newbody)
+        for prop in re.findall(r"::(\w+)\.isInitialized", newbody): ready.add(prop)
+        newbody = re.sub(r"(?<![\w.])::(\w+)\.isInitialized", r"\1Ready", newbody)
         # de-indent one level
         newbody = "\n".join(l[4:] if l.startswith("    ") else l for l in newbody.split("\n"))
         moved.setdefault(f, []).append(newbody)
@@ -144,10 +150,21 @@ def main():
         out_lines[k] = re.sub(r"^private (fun|val|var|class|object)\b", r"internal \1", out_lines[k])
     out = "\n".join(out_lines)
     out = re.sub(r"\n{3,}", "\n\n", out)
+    if ready:
+        props = "\n".join(f"    internal val {p}Ready: Boolean get() = ::{p}.isInitialized" for p in sorted(ready))
+        k = out.index("\n", out.index("class MainActivity"))
+        out = out[:k + 1] + "    // for the MainXxx.kt files (lateinit checks only work inside the class)\n" + props + "\n\n" + out[k + 1:]
+    out = re.sub(r"^(        )private (val|fun|const)", r"\1internal \2", out, flags=re.M)
+    nested = re.findall(r"^    (?:internal |inner |data |enum |abstract |open )*(?:class|interface|object) (\w+)", out, flags=re.M)
+    comp = re.search(r"\n    companion object \{(.*?)\n    \}", out, flags=re.S)
+    compnames = re.findall(r"^        (?:internal |const |@JvmStatic )*(?:val|var|fun) (\w+)", comp.group(1), flags=re.M) if comp else []
     open(SRC, "w").write(out)
     header = s[: s.index("\nclass MainActivity")]
     header = header[: header.rfind("\n/**")] if "\n/**" in header[-2000:] else header
     imports = "\n".join(l for l in header.split("\n") if l.startswith("import ") or l.startswith("package "))
+    imports += "\nimport android.content.Context" if "import android.content.Context\n" not in imports + "\n" else ""
+    imports += "".join(f"\nimport gr.gamemap.MainActivity.{n}" for n in nested)
+    imports += "".join(f"\nimport gr.gamemap.MainActivity.Companion.{n}" for n in compnames)
     for f, bodies in moved.items():
         open(f"app/src/main/java/gr/gamemap/{f}.kt", "w").write(
             f"@file:Suppress(\"unused\")\n\n{imports}\n\n// Part of MainActivity, moved out in the clean-up of 23 Nov 2026 (see tools/split_main.py).\n\n" + "\n\n".join(bodies) + "\n")

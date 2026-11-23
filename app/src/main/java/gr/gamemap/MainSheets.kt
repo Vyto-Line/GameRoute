@@ -48,6 +48,15 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import java.util.concurrent.Executors
 import kotlin.math.abs
+import gr.gamemap.MainActivity.GameDialog
+import gr.gamemap.MainActivity.GameBuilder
+import gr.gamemap.MainActivity.SettingsGroup
+import gr.gamemap.MainActivity.YouRing
+import gr.gamemap.MainActivity.AvatarView
+import gr.gamemap.MainActivity.SheetScroll
+import gr.gamemap.MainActivity.GarageSwatch
+import gr.gamemap.MainActivity.ArrivalFx
+import gr.gamemap.MainActivity.Companion.SEARCH_TOKEN
 
 // Part of MainActivity, moved out in the clean-up of 23 Nov 2026 (see tools/split_main.py).
 
@@ -347,7 +356,7 @@ internal fun MainActivity.settingsState(): Int {
     for (f in dir.list().orEmpty().sorted()) {
         val name = f.removeSuffix(".xml")
         if (name == "friends") continue
-        h = h * 31 + getSharedPreferences(name, MODE_PRIVATE).all.hashCode()
+        h = h * 31 + getSharedPreferences(name, Context.MODE_PRIVATE).all.hashCode()
     }
     h = h * 31 + "${Voice.muted}${Traffic.showLayer}${Perf.mode}${Perf.effects}${Perf.animations}${Perf.smoothness}${Perf.liveFriends}${Perf.saveGpsStopped}${Offline.downloading}".hashCode()
     return h
@@ -813,7 +822,7 @@ internal fun MainActivity.chooseBackup() {
     }.showT()
 }
 
-internal fun MainActivity.prefs() = getSharedPreferences("gamemap", MODE_PRIVATE)
+internal fun MainActivity.prefs() = getSharedPreferences("gamemap", Context.MODE_PRIVATE)
 
 internal fun MainActivity.choosePerf(what: String) {
     val (title, opts, cur) = when (what) {

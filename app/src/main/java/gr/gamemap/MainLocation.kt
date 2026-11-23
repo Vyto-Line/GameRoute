@@ -48,12 +48,21 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import java.util.concurrent.Executors
 import kotlin.math.abs
+import gr.gamemap.MainActivity.GameDialog
+import gr.gamemap.MainActivity.GameBuilder
+import gr.gamemap.MainActivity.SettingsGroup
+import gr.gamemap.MainActivity.YouRing
+import gr.gamemap.MainActivity.AvatarView
+import gr.gamemap.MainActivity.SheetScroll
+import gr.gamemap.MainActivity.GarageSwatch
+import gr.gamemap.MainActivity.ArrivalFx
+import gr.gamemap.MainActivity.Companion.SEARCH_TOKEN
 
 // Part of MainActivity, moved out in the clean-up of 23 Nov 2026 (see tools/split_main.py).
 
 /** The card under Where to? when location is off or GameRoute isn't allowed to use it. */
 internal fun MainActivity.syncLocCard() {
-    if (!::locCard.isInitialized) return
+    if (!locCardReady) return
     val st = LocationStatus.state
     if (st == LocationStatus.State.OK) { locCard.visibility = View.GONE; return }
     val off = st == LocationStatus.State.OFF
@@ -81,10 +90,10 @@ internal fun MainActivity.syncLocCard() {
  * not on a route: one slim bar under Where to? ("2 pharmacies on duty near you"). ✕ hides it till tomorrow.
  */
 internal fun MainActivity.syncDutyCard() {
-    if (!::dutyCard.isInitialized) return
+    if (!dutyCardReady) return
     val now = Duties.now()
     val near = LocationTracker.position
-    val prefs = getSharedPreferences("gamemap", MODE_PRIVATE)
+    val prefs = getSharedPreferences("gamemap", Context.MODE_PRIVATE)
     val today = run { java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("Europe/Athens") }.format(java.util.Date(now - 8 * 3_600_000L)) }
     val list = if (near == null || NavEngine.active || NavEngine.planningOn(false) || Convoy.active || !Duties.usuallyClosed(now) ||
         prefs.getString("dutyBarHidden", "") == today || LocationStatus.state != LocationStatus.State.OK) emptyList()
@@ -116,21 +125,21 @@ internal fun MainActivity.syncDutyCard() {
 
 internal fun MainActivity.poisShownForTest(): List<PoiLayer.Poi> = map.rendererForTest.pois.shownNow()
 
-internal fun MainActivity.dutyCardForTest(): View? = if (::dutyCard.isInitialized && dutyCard.visibility == View.VISIBLE) dutyCard else null
+internal fun MainActivity.dutyCardForTest(): View? = if (dutyCardReady && dutyCard.visibility == View.VISIBLE) dutyCard else null
 
 internal fun MainActivity.fixLocation(off: Boolean) {
     try {
         if (off) startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS))
         else if (shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) ||
-            getSharedPreferences("gamemap", MODE_PRIVATE).getInt("locAsked", 0) == 0) {
-            getSharedPreferences("gamemap", MODE_PRIVATE).edit().putInt("locAsked", 1).apply()
+            getSharedPreferences("gamemap", Context.MODE_PRIVATE).getInt("locAsked", 0) == 0) {
+            getSharedPreferences("gamemap", Context.MODE_PRIVATE).edit().putInt("locAsked", 1).apply()
             permissions.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         } else startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName")))
     } catch (e: Exception) { CrashLog.note("location settings: $e") }
 }
 
 /** For tests. */
-internal fun MainActivity.locCardForTest(): View? = if (::locCard.isInitialized && locCard.visibility == View.VISIBLE) locCard else null
+internal fun MainActivity.locCardForTest(): View? = if (locCardReady && locCard.visibility == View.VISIBLE) locCard else null
 
 /** After a crash: offer to send the saved report (shared like any text; nothing is sent by itself). */
 internal fun MainActivity.offerCrashReport(report: String) {

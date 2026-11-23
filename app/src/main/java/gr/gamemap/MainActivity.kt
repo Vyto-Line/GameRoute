@@ -50,6 +50,11 @@ import kotlin.math.abs
 
 /** Phone screen: the game map with search, quick places, route preview, driving cards and sheets. */
 class MainActivity : ComponentActivity(), SensorEventListener {
+    // for the MainXxx.kt files (lateinit checks only work inside the class)
+    internal val dutyCardReady: Boolean get() = ::dutyCard.isInitialized
+    internal val locCardReady: Boolean get() = ::locCard.isInitialized
+    internal val peopleBadgeReady: Boolean get() = ::peopleBadge.isInitialized
+
 
     internal lateinit var map: GameMapView
     internal lateinit var topArea: LinearLayout
@@ -675,6 +680,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     // ------------------------------------------------------------------ place card (tap / hold)
 
+    /** Shows a dialog with its texts (title, message, buttons, list) in the app's language. */
+    internal fun AlertDialog.Builder.showT(): AlertDialog = show().also { dlg ->
+        dlg.window?.decorView?.let { dv -> L.translateTree(dv); Icons.applyTree(dv); dv.viewTreeObserver.addOnPreDrawListener { L.translateTree(dv); Icons.applyTree(dv); true } }
+    }
+
     // ------------------------------------------------------------------ GameRoute's own pop-ups
 
     /** Pop-ups open now (newest last): the back button closes the newest first. */
@@ -705,7 +715,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val isShowing get() = shade != null
 
         /** The red button: for things that can't be undone. */
-        private fun risky(t: CharSequence): Boolean {
+        internal fun risky(t: CharSequence): Boolean {
             val w = L.t(t.toString()).lowercase()
             return listOf("remove", "delete", "leave", "block", "end", "clear", "αφαίρεση", "διαγραφή", "αποχώρηση", "αποκλεισμός", "τέλος", "καθαρισμός").any { w.startsWith(it) }
         }
@@ -839,8 +849,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** Builds a [GameDialog] with the same calls as Android's AlertDialog.Builder. */
     inner class GameBuilder(@Suppress("UNUSED_PARAMETER") ctx: Context) {
-        private val g = GameDialog()
-        private fun s(t: CharSequence?) = t
+        internal val g = GameDialog()
+        internal fun s(t: CharSequence?) = t
         fun setTitle(t: CharSequence?) = apply { g.title = s(t) }
         fun setMessage(t: CharSequence?) = apply { g.message = s(t) }
         fun setView(v: View?) = apply { g.view = v }
@@ -1347,8 +1357,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** The You button: your level as a ring, with a dot when something's waiting. */
     internal inner class YouRing(ctx: android.content.Context, val big: Boolean = false) : View(ctx) {
-        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        private val icon = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.ic_i_person)?.mutate()
+        internal val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        internal val icon = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.ic_i_person)?.mutate()
         override fun onDraw(c: Canvas) {
             val w = width.toFloat(); val h = height.toFloat()
             val r = minOf(w, h) / 2 - 3 * d; val cx = w / 2; val cy = h / 2
@@ -1397,7 +1407,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** One avatar, drawn (a lock over it when [locked]). */
     internal inner class AvatarView(ctx: android.content.Context, val a: Avatars.Avatar, var color: Int, val locked: Boolean = false, val chosen: Boolean = false) : View(ctx) {
-        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        internal val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         override fun onDraw(c: Canvas) {
             val r = minOf(width, height) / 2f - (if (chosen) 4 * d else 0f)
             Avatars.draw(c, a, color, width / 2f, height / 2f, r)
@@ -1449,7 +1459,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** A small drawing of a Garage item. */
     internal inner class GarageSwatch(ctx: android.content.Context, val item: Xp.Item, val look: Look) : View(ctx) {
-        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        internal val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         override fun onDraw(c: Canvas) {
             val w = width.toFloat(); val h = height.toFloat(); val cx = w / 2; val cy = h / 2
             pt.style = android.graphics.Paint.Style.FILL; pt.color = look.style.land
@@ -1519,11 +1529,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     /** The arrival effect from the Garage, over the arrival card, once (you've stopped). */
     internal inner class ArrivalFx(ctx: android.content.Context, val id: String) : View(ctx) {
-        private val start = android.os.SystemClock.uptimeMillis()
-        private val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        private val rnd = java.util.Random(7)
-        private val parts = Array(if (id == "arrival_lights") 18 else 70) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat()) }
-        private val cols = when (id) {
+        internal val start = android.os.SystemClock.uptimeMillis()
+        internal val pt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        internal val rnd = java.util.Random(7)
+        internal val parts = Array(if (id == "arrival_lights") 18 else 70) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat()) }
+        internal val cols = when (id) {
             "arrival_confetti" -> intArrayOf(Color.rgb(255, 80, 120), Color.rgb(80, 200, 255), Color.rgb(255, 210, 60), Color.rgb(120, 230, 120))
             "arrival_fireworks" -> intArrayOf(Color.rgb(255, 160, 40), Color.rgb(255, 80, 200), Color.rgb(255, 240, 160))
             else -> intArrayOf(accent, Color.WHITE, theme.player)
@@ -1674,7 +1684,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     companion object {
-        private val SEARCH_TOKEN = Any()
+        internal val SEARCH_TOKEN = Any()
     }
 }
 
