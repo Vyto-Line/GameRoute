@@ -1271,11 +1271,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     internal class SettingsGroup(val key: String, val title: String, val summary: String, val icon: Int, val tint: Int)
 
-    ) + (if (BuildConfig.TEST_BUILD) listOf(
-        // test builds only (never in a public release): tools for trying things out
-        SettingsGroup("dev", "Developer", "Test builds only: simulate drives, test friends, XP, celebrations, log", R.drawable.ic_set_adv, Color.rgb(219, 39, 119)),
-    ) else emptyList())
-
     internal var settingsQuery = ""
 
     internal val TALK = arrayOf("Normal", "Fewer", "Turns only")

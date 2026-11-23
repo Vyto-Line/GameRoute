@@ -102,7 +102,8 @@ def main():
             # end: the declaration ends where depth returns to 1 at the start of a line after it
             j = i + 1
             # a one-liner (= expression) may continue on indented lines
-            while j < cls_end and (lvl(j) > 1 or (lines[j].startswith("        ") and not lines[j].strip() == "")):
+            while j < cls_end and (lvl(j) > 1 or (lines[j].startswith("        ") and not lines[j].strip() == "")
+                                   or re.match(r"^    [).+?:]", lines[j])):
                 j += 1
             members.append((st, j, section, ln))
             i = j; continue

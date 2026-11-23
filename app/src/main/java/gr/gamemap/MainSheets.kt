@@ -403,6 +403,10 @@ internal fun MainActivity.settingsGroups() = listOf(
     SettingsGroup("app", "App", "Your progress, Garage, trip history, privacy, about" + if (Updater.ENABLED) ", updates" else "", R.drawable.ic_set_app, Color.rgb(13, 110, 97)),
     SettingsGroup("perf", "Performance", "Smooth or battery, map effects, animations, map smoothness", R.drawable.ic_set_perf, Color.rgb(202, 138, 4)),
     SettingsGroup("advanced", "Advanced", "Units, map links, star ratings and reviews, welcome screens", R.drawable.ic_set_adv, Color.rgb(100, 100, 110)),
+) + (if (BuildConfig.TEST_BUILD) listOf(
+    // test builds only (never in a public release): tools for trying things out
+    SettingsGroup("dev", "Developer", "Test builds only: simulate drives, test friends, XP, celebrations, log", R.drawable.ic_set_adv, Color.rgb(219, 39, 119)),
+) else emptyList())
 
 internal fun MainActivity.renderSettings() {
     // typing in the search box: don't rebuild under the keyboard
