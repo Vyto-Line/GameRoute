@@ -285,11 +285,14 @@ class MapRenderer(private val car: Boolean = false) {
             }
         }
         lastPlayerAt = playerAt
+        prof("arrow", tp0); tp0 = System.nanoTime()
 
         if (!locOff) drawSpeed(c, area, d, theme) else speedRect.setEmpty() // no live speed without location
+        prof("speed", tp0); tp0 = System.nanoTime()
         if (car && hud) drawCarEta(c, area, d, theme)
         if (hud && NavEngine.showRoadName && (NavEngine.active || LocationTracker.speedMps > 2f) && !NavEngine.planningOn(car) && !NavEngine.arrived)
             playerAt?.let { drawCurrentRoad(c, area, d, theme, it.x, it.y, weakNow) } // (map moved away from you: no name)
+        prof("roadname", tp0); tp0 = System.nanoTime()
         carHits.clear()
         // the car's trip card steps aside after 30 s, or as soon as a place is tapped
         val trip = NavEngine.lastTrip
@@ -307,22 +310,26 @@ class MapRenderer(private val car: Boolean = false) {
             val ra = if (area.right < w * 0.7f) Rect(area.left, area.top, w, area.bottom) else area
             drawCarButtons(c, ra, d, theme)
         }
+        prof("buttons", tp0); tp0 = System.nanoTime()
         bannerBottom = area.top.toFloat(); bannerRight = area.left.toFloat()
         if (hud && !NavEngine.planningOn(car) && NavEngine.offer == null && !carTrip) {
             // in the car: smaller, in the very top-left corner
             if (car) drawBanner(c, Rect(area.left, 0, area.right, area.bottom), d * 0.8f, theme, pad = 8 * d)
             else drawBanner(c, area, d, theme)
         }
+        prof("banner", tp0); tp0 = System.nanoTime()
         convoyStrip.setEmpty(); carConvoyBottom = 0f; carConvoyRect.setEmpty(); etaAt.setEmpty()
         // the convoy strip/box only on the convoy's own route (a route of my own looks like any other)
         if (hud && Convoy.active && Convoy.onConvoyRoute && !NavEngine.arrived && !NavEngine.planningOn(car)) {
             if (car) drawCarConvoy(c, area, d, theme) else drawConvoyStrip(c, area, d, theme)
         }
         messageAt.setEmpty(); if (hud && Convoy.active) drawConvoyMessage(c, area, d, theme)
+        prof("convoy", tp0); tp0 = System.nanoTime()
         if (car && hud && carButtons && NavEngine.planningOn(car)) drawCarRoutes(c, fullArea, d, theme)
         if (carTrip) drawCarTrip(c, area, d, theme)
         else if (car && carButtons && selectedPlace != null && !NavEngine.planningOn(car)) drawCarPlace(c, area, d, theme)
         drawJamChip(c, area, d, theme, hud)
+        prof("chips", tp0); tp0 = System.nanoTime()
         if (hud && NavEngine.estimating) drawNoGps(c, area, d, theme)
         else if (hud && NavEngine.noSignal && NavEngine.active && !NavEngine.arrived) drawNoGps(c, area, d, theme, NavEngine.noSignalText())
         if (hud && !NavEngine.arrived) NavEngine.tollAhead?.let { (t, dist) -> drawTollChip(c, area, d, theme, t.price, dist) }
@@ -337,6 +344,7 @@ class MapRenderer(private val car: Boolean = false) {
         if (car && hud && carButtons) InvitePop.current?.let { drawCarInvite(c, area, d, theme, it); animating = true } ?: inviteAt.setEmpty()
         if (car && hud && LocationStatus.state != LocationStatus.State.OK && InvitePop.current == null) drawCarLocationOff(c, area, d, theme)
         drawDiscovery(c, area, d, theme)
+        prof("panels", tp0); tp0 = System.nanoTime()
         if (hud && (view.userBearing != null || !following)) drawCompass(c, area, bearing, d, theme)
         drawAttribution(c, area, d, theme)
         prof("hud", tp0)

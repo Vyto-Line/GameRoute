@@ -29,6 +29,11 @@ class PerfTest {
         val r = Osrm.parseAll(File(data, "route.json").readText())[0]
         r.limits = listOf(Stretch(0.0, r.length, 50))
         NavEngine.debugDrive(Place("Museum", "", r.points.last()), r, 60)
+        // a convoy around you: three friends on the map, a message (the busy frame)
+        Convoy.debugStart(Place("Museum", "", r.points.last()))
+        for ((k, n) in listOf("Giorgos", "Nikos", "Maria").withIndex())
+            Convoy.debugMember(n, r.points[minOf(r.points.size - 1, 8 + k * 6)], 40 + k * 4, System.currentTimeMillis() + 300_000, 1500.0 - k * 200, 2500.0, "driving", 30f * k)
+        Convoy.debugMessage("Maria", "stop")
         val log = StringBuilder()
         fun at(m: Double): Location {
             var i = 0
