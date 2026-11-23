@@ -27,6 +27,7 @@ import gr.gamemap.MapRenderer.ArrowLine
 import gr.gamemap.MapRenderer.TrafficPaths
 import gr.gamemap.MapRenderer.CachedPath
 import gr.gamemap.MapRenderer.EllKey
+import gr.gamemap.MapRenderer.Companion.allocMark
 import gr.gamemap.MapRenderer.Companion.trafficWorker
 import gr.gamemap.MapRenderer.Companion.NAV_PLACES
 import gr.gamemap.MapRenderer.Companion.profile
