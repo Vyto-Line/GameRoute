@@ -19,7 +19,7 @@ class ActivityMethod private constructor(private val m: Method, private val ext:
             "Suggestions", "Sheets", "Convoy", "Friends", "Invite")
 
         fun of(name: String, vararg types: Class<*>?): ActivityMethod {
-            try { return ActivityMethod(ActivityMethod.of(name, *types), false) } catch (_: NoSuchMethodException) {}
+            try { return ActivityMethod(MainActivity::class.java.getDeclaredMethod(name, *types), false) } catch (_: NoSuchMethodException) {}
             val all = arrayOf<Class<*>?>(MainActivity::class.java, *types)
             for (p in parts) {
                 val k = try { Class.forName("gr.gamemap.Main${p}Kt") } catch (_: ClassNotFoundException) { continue }
