@@ -65,6 +65,9 @@ class PerfTest {
             }
             val total = (System.nanoTime() - t0) / frames / 1e6
             MapRenderer.profile = false
+            // the speed pass (23 Nov) halved the garbage (car ~85 → ~40 KB a frame): keep it there
+            val kb = MapRenderer.allocs.values.sum() / frames / 1024
+            if (!lite) org.junit.Assert.assertTrue("${th.name} ${if (car) "car" else "phone"}: $kb KB of garbage a frame", kb < 70)
             log.append("${if (car) "car  " else "phone"}${if (lite) " LITE" else ""} ${th.name.padEnd(16)} ${"%5.1f".format(total)} ms  " +
                 MapRenderer.times.entries.sortedByDescending { it.value }.joinToString { "${it.key} ${"%.1f".format(it.value / frames / 1e6)}" } +
                 "\n      garbage/frame ${MapRenderer.allocs.values.sum() / frames / 1024} KB: " +
