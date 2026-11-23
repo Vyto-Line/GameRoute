@@ -27,6 +27,9 @@ class TurnArrowTest {
         // a city corner at about 29 km/h, and a slower one at 18 (slid sideways after 113, 23 Nov)
         for ((n, v) in listOf(0 to 8f, 1 to 5f)) {
         val start = LatLng(37.9800 + n * 0.01, 23.7300)
+        // a fresh start (not a GPS jump from the end of the first corner)
+        for (f in listOf("last", "lastReal", "fromPos", "toPos", "ctrlPos", "travelFrom", "slowPending"))
+            try { LocationTracker::class.java.getDeclaredField(f).apply { isAccessible = true }.set(null, null) } catch (_: Exception) {}
         // 6 s north, a 90° right turn, 6 s east; one fix a second, GPS bearing lagging by a fix
         val path = ArrayList<Pair<LatLng, Float>>()
         var p = start
