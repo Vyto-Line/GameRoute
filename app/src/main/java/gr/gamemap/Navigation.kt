@@ -218,6 +218,10 @@ object LocationTracker : LocationListener {
      * once the next fix agrees with it. Just after starting, the road match could pick the cross
      * street or the right street facing the wrong way for one fix, and the map swung there and back.
      */
+    /** From here (~12 km/h) the arrow faces the way it really moves. 113 had 30 km/h to calm pulling
+     *  away, but then city corners (taken at 15-30) slid sideways again for a moment (23 Nov). */
+    private const val GLIDE_SPEED = 3.4f
+
     private var slowPending: Float? = null
     private var travelFrom: LatLng? = null
     private var travelBearing = 0f
@@ -253,7 +257,7 @@ object LocationTracker : LocationListener {
         // the arrow slid sideways ("moonwalking"). Small glides keep the road's heading.
         val from = fromPos; val to = toPos
         // (only at a proper speed: pulling away, the glide between two wobbly fixes swung the map)
-        val gliding = from != null && to != null && now - fixAt < 1000 && glideMeters > 3.0 && speed > 8f
+        val gliding = from != null && to != null && now - fixAt < 1000 && glideMeters > 3.0 && speed > GLIDE_SPEED
         // the phone's compass, standing still: only on foot. In the car (Android Auto, or just
         // driven) it points anywhere (metal, the phone mount), and the map swung from it to the
         // road and back as you pulled away; there the way you were driving is kept instead.
@@ -272,7 +276,7 @@ object LocationTracker : LocationListener {
         var step = diff * (1 - exp(-dt / (if (gliding) 70.0 else 260.0))).toFloat()
         // slow (pulling away, creeping in traffic): the map turns at most 40° a second, so one odd
         // reading can't swing it; at speed, turns follow the road as before
-        if (speed < 8f && !gliding) step = step.coerceIn(-0.04f * dt, 0.04f * dt)
+        if (speed < GLIDE_SPEED && !gliding) step = step.coerceIn(-0.04f * dt, 0.04f * dt)
         heading = if (turning) (heading + step + 360f) % 360f else target
         // standing still, a new fix a few cm away isn't worth 30 frames a second
         val moving = toPos != null && ((now - fixAt < 1000 && glideMeters > 0.8) || speed >= 2f)
