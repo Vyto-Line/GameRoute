@@ -218,9 +218,9 @@ object LocationTracker : LocationListener {
      * once the next fix agrees with it. Just after starting, the road match could pick the cross
      * street or the right street facing the wrong way for one fix, and the map swung there and back.
      */
-    /** From here (~12 km/h) the arrow faces the way it really moves. 113 had 30 km/h to calm pulling
+    /** From here (~16 km/h) the arrow faces the way it really moves. 113 had 30 km/h to calm pulling
      *  away, but then city corners (taken at 15-30) slid sideways again for a moment (23 Nov). */
-    private const val GLIDE_SPEED = 3.4f
+    private const val GLIDE_SPEED = 4.5f
 
     private var slowPending: Float? = null
     private var travelFrom: LatLng? = null
