@@ -24,8 +24,9 @@ class TurnArrowTest {
         val out = File(System.getProperty("previewOut") ?: "build/previews").apply { mkdirs() }
         val log = StringBuilder()
         val looper = shadowOf(Looper.getMainLooper())
-        val start = LatLng(37.9800, 23.7300)
-        val v = 8f // m/s, about 29 km/h
+        // a city corner at about 29 km/h, and a slower one at 18 (slid sideways after 113, 23 Nov)
+        for ((n, v) in listOf(0 to 8f, 1 to 5f)) {
+        val start = LatLng(37.9800 + n * 0.01, 23.7300)
         // 6 s north, a 90° right turn, 6 s east; one fix a second, GPS bearing lagging by a fix
         val path = ArrayList<Pair<LatLng, Float>>()
         var p = start
@@ -52,8 +53,10 @@ class TurnArrowTest {
                 prevShown = shown
             }
         }
-        log.append("worst angle between the arrow and its motion: ${"%.0f".format(worst)}° (fix $worstAt)\n")
+        log.append("${(v * 3.6).toInt()} km/h: worst angle between the arrow and its motion: ${"%.0f".format(worst)}° (fix $worstAt)\n")
         File(out, "turn_arrow.txt").writeText(log.toString())
-        assertTrue("the arrow slides sideways (${worst}°)", worst < 40f)
+        assertTrue("the arrow slides sideways at ${(v * 3.6).toInt()} km/h (${worst}°)", worst < 40f)
+        looper.idleFor(java.time.Duration.ofSeconds(5))
+        }
     }
 }
