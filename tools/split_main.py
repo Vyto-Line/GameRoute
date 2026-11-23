@@ -76,13 +76,13 @@ def scan(s):
     return depth
 
 
-def main():
+def main(SRC=SRC, CLS="MainActivity", FILES=FILES, pick=None, tag="Main"):
     s = open(SRC).read()
     lines = s.split("\n")
     offs = [0]
     for ln in lines: offs.append(offs[-1] + len(ln) + 1)
     depth = scan(s)
-    cls_start = next(i for i, ln in enumerate(lines) if ln.startswith("class MainActivity"))
+    cls_start = next(i for i, ln in enumerate(lines) if re.match(rf"^(?:internal )?class {CLS}\b", ln))
     cls_end = next(i for i in range(cls_start + 1, len(lines)) if lines[i] == "}")
     lvl = lambda li: depth[offs[li]]  # depth at the start of the line
     # members: lines inside the class at depth 1 that begin a declaration
@@ -119,6 +119,7 @@ def main():
     keep_ranges = []
     for st, en, sec, head in members:
         f = target_of(sec)
+        if pick: f = pick(sec, head, f)
         m = decl.match(head)
         mods, kind = m.group(1), m.group(2)
         body = "\n".join(lines[st:en])
@@ -129,8 +130,8 @@ def main():
         if "." in nm: continue  # an extension inside the class (AlertDialog.Builder.showT): stays
         name = nm
         newbody = re.sub(r"^(    (?:@[\w.]+(?:\([^)]*\))?\s+)*)((?:private|internal|public)\s+)?(inline\s+)?fun\s+(<[^>]*>\s+)?(\w+)",
-                         lambda mm: f"{mm.group(1)}internal {mm.group(3) or ''}fun {mm.group(4) or ''}MainActivity.{mm.group(5)}", body, count=1, flags=re.M)
-        newbody = newbody.replace("this@MainActivity", f"this@{name}")
+                         lambda mm: f"{mm.group(1)}internal {mm.group(3) or ''}fun {mm.group(4) or ''}{CLS}.{mm.group(5)}", body, count=1, flags=re.M)
+        newbody = newbody.replace(f"this@{CLS}", f"this@{name}")
         newbody = re.sub(r"(?<![.\w])MODE_PRIVATE", "Context.MODE_PRIVATE", newbody)
         for prop in re.findall(r"::(\w+)\.isInitialized", newbody): ready.add(prop)
         newbody = re.sub(r"(?<![\w.])::(\w+)\.isInitialized", r"\1Ready", newbody)
@@ -152,24 +153,37 @@ def main():
     out = re.sub(r"\n{3,}", "\n\n", out)
     if ready:
         props = "\n".join(f"    internal val {p}Ready: Boolean get() = ::{p}.isInitialized" for p in sorted(ready))
-        k = out.index("\n", out.index("class MainActivity"))
+        k = out.index("\n", out.index(f"class {CLS}"))
         out = out[:k + 1] + "    // for the MainXxx.kt files (lateinit checks only work inside the class)\n" + props + "\n\n" + out[k + 1:]
     out = re.sub(r"^(        )private (val|fun|const)", r"\1internal \2", out, flags=re.M)
     nested = re.findall(r"^    (?:internal |inner |data |enum |abstract |open )*(?:class|interface|object) (\w+)", out, flags=re.M)
     comp = re.search(r"\n    companion object \{(.*?)\n    \}", out, flags=re.S)
     compnames = re.findall(r"^        (?:internal |const |@JvmStatic )*(?:val|var|fun) (\w+)", comp.group(1), flags=re.M) if comp else []
     open(SRC, "w").write(out)
-    header = s[: s.index("\nclass MainActivity")]
+    header = s[: re.search(rf"\n(?:internal )?class {CLS}\b", s).start()]
     header = header[: header.rfind("\n/**")] if "\n/**" in header[-2000:] else header
     imports = "\n".join(l for l in header.split("\n") if l.startswith("import ") or l.startswith("package "))
     imports += "\nimport android.content.Context" if "import android.content.Context\n" not in imports + "\n" else ""
-    imports += "".join(f"\nimport gr.gamemap.MainActivity.{n}" for n in nested)
-    imports += "".join(f"\nimport gr.gamemap.MainActivity.Companion.{n}" for n in compnames)
+    imports += "".join(f"\nimport gr.gamemap.{CLS}.{n}" for n in nested)
+    imports += "".join(f"\nimport gr.gamemap.{CLS}.Companion.{n}" for n in compnames)
     for f, bodies in moved.items():
         open(f"app/src/main/java/gr/gamemap/{f}.kt", "w").write(
-            f"@file:Suppress(\"unused\")\n\n{imports}\n\n// Part of MainActivity, moved out in the clean-up of 23 Nov 2026 (see tools/split_main.py).\n\n" + "\n\n".join(bodies) + "\n")
+            f"@file:Suppress(\"unused\")\n\n{imports}\n\n// Part of {CLS}, moved out in the clean-up of 23 Nov 2026 (see tools/split_main.py).\n\n" + "\n\n".join(bodies) + "\n")
         print(f, len(bodies), "functions")
-    print("MainActivity now", out.count("\n"), "lines")
+    print(CLS, "now", out.count("\n"), "lines")
 
 
-main()
+RENDERER = [("tiles", "MapTiles"), ("traffic", "MapTiles"), ("route", "MapRoute"), ("player & frames", "MapPlayer"),
+            ("overlays", "MapEffects"), ("HUD", "MapHud"), ("car buttons drawn on the map", "MapCarButtons"), ("convoy", "MapHud")]
+
+
+def renderer_pick(sec, head, f):
+    if f == "MapHud" and re.search(r"fun\s+drawCar", head): return "MapCarPanels"
+    return f
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "renderer":
+        main("app/src/main/java/gr/gamemap/MapRenderer.kt", "MapRenderer", RENDERER, renderer_pick)
+    else:
+        main()

@@ -505,15 +505,15 @@ object Phrases {
     }
 
     private fun el(dir: String) = when (dir) {
-        "uturn" -> "κάντε αναστροφή"
-        "straight" -> "συνεχίστε ευθεία"
-        "sharp left" -> "στρίψτε απότομα αριστερά"
-        "sharp right" -> "στρίψτε απότομα δεξιά"
-        "slight left" -> "κρατήστε αριστερά"
-        "slight right" -> "κρατήστε δεξιά"
-        "left" -> "στρίψτε αριστερά"
-        "right" -> "στρίψτε δεξιά"
-        else -> "συνεχίστε"
+        "uturn" -> "κάνε αναστροφή"
+        "straight" -> "συνέχισε ευθεία"
+        "sharp left" -> "στρίψε απότομα αριστερά"
+        "sharp right" -> "στρίψε απότομα δεξιά"
+        "slight left" -> "κράτα αριστερά"
+        "slight right" -> "κράτα δεξιά"
+        "left" -> "στρίψε αριστερά"
+        "right" -> "στρίψε δεξιά"
+        else -> "συνέχισε"
     }
 
     private val ordEl = listOf("", "πρώτη", "δεύτερη", "τρίτη", "τέταρτη", "πέμπτη", "έκτη", "έβδομη", "όγδοη")
@@ -526,24 +526,24 @@ object Phrases {
         val name = if (!named) "" else if (g) s.road else Names.latin(s.road)
         val onto = if (name.isBlank()) "" else if (g) " στην $name" else " onto $name"
         val base = when (s.type) {
-            "arrive" -> if (g) "Φτάσατε στον προορισμό σας" else "You have arrived"
-            "waypoint" -> if (g) "Φτάνετε στη στάση σας" else "You're reaching your stop"
-            "depart" -> if (g) "Ξεκινήστε$onto" else "Head out$onto"
+            "arrive" -> if (g) "Έφτασες στον προορισμό σου" else "You have arrived"
+            "waypoint" -> if (g) "Φτάνεις στη στάση σου" else "You're reaching your stop"
+            "depart" -> if (g) "Ξεκίνα$onto" else "Head out$onto"
             "roundabout", "rotary" ->
                 if (s.exit in 1..8) {
-                    if (g) "Στον κυκλικό κόμβο, πάρτε την ${ordEl[s.exit]} έξοδο$onto"
+                    if (g) "Στον κυκλικό κόμβο, πάρε την ${ordEl[s.exit]} έξοδο$onto"
                     else "At the roundabout, take the ${ordEn[s.exit]} exit$onto"
-                } else if (g) "Μπείτε στον κυκλικό κόμβο" else "Enter the roundabout"
-            "exit roundabout", "exit rotary" -> if (g) "Βγείτε από τον κυκλικό κόμβο$onto" else "Exit the roundabout$onto"
+                } else if (g) "Μπες στον κυκλικό κόμβο" else "Enter the roundabout"
+            "exit roundabout", "exit rotary" -> if (g) "Βγες από τον κυκλικό κόμβο$onto" else "Exit the roundabout$onto"
             "fork" -> {
                 val side = if (s.direction.contains("left")) (if (g) "αριστερά" else "left") else (if (g) "δεξιά" else "right")
-                if (g) "Στη διχάλα, κρατήστε $side$onto" else "At the fork, keep $side$onto"
+                if (g) "Στη διχάλα, κράτα $side$onto" else "At the fork, keep $side$onto"
             }
-            "merge" -> if (g) "Συγχωνευθείτε$onto" else "Merge$onto"
-            "on ramp" -> if (g) "Πάρτε τη ράμπα$onto" else "Take the ramp$onto"
-            "off ramp" -> if (g) "Πάρτε την έξοδο$onto" else "Take the exit$onto"
+            "merge" -> if (g) "Μπες στην κυκλοφορία$onto" else "Merge$onto"
+            "on ramp" -> if (g) "Πάρε τη ράμπα$onto" else "Take the ramp$onto"
+            "off ramp" -> if (g) "Πάρε την έξοδο$onto" else "Take the exit$onto"
             "end of road" -> if (g) "Στο τέλος του δρόμου, ${el(s.direction)}$onto" else "At the end of the road, ${en(s.direction)}$onto"
-            "continue", "new name" -> if (g) "Συνεχίστε$onto" else "Continue$onto"
+            "continue", "new name" -> if (g) "Συνέχισε$onto" else "Continue$onto"
             else -> if (g) el(s.direction) + onto else en(s.direction) + onto
         }
         return base.replaceFirstChar { it.uppercase() }

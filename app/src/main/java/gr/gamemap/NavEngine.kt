@@ -729,7 +729,7 @@ object NavEngine {
         if (Geo.distance(pos, s.pos) < 40) {
             stops.remove(s)
             saveResume()
-            Voice.say(if (Voice.lang == Phrases.GREEK) "Φτάσατε στη στάση: ${s.name}" else "Stop reached: ${s.name}")
+            Voice.say(if (Voice.lang == Phrases.GREEK) "Έφτασες στη στάση: ${s.name}" else "Stop reached: ${s.name}")
             changed.fire()
         }
     }

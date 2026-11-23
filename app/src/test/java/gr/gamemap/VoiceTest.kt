@@ -20,7 +20,7 @@ class VoiceTest {
             "At the roundabout, take the second exit onto Ευαγγελιστρίας", "Turn right onto Π. Κοκκότα"))
             out.append(s).append("  →  ").append(Voice.spoken(s)).append('\n')
         Voice.lang = Phrases.GREEK
-        out.append(Voice.spoken("Στρίψτε δεξιά στην Λεωφ. Κηφισίας")).append('\n')
+        out.append(Voice.spoken("Στρίψε δεξιά στην Λεωφ. Κηφισίας")).append('\n')
         System.getProperty("previewOut")?.let { File(it).apply { mkdirs() }.resolve("voice.txt").writeText(out.toString()) }
     }
 }
