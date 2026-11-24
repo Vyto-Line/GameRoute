@@ -145,9 +145,9 @@ internal fun MapRenderer.icon(c: Canvas, id: String, cx: Float, cy: Float, s: Fl
 }
 
 internal fun MapRenderer.drawCarButtons(c: Canvas, a: Rect, d: Float, t: Theme) {
-    val size = 48 * d
-    val gap = 10 * d
-    val x = a.right - 14 * d - size
+    var size = 48 * d
+    var gap = 10 * d
+    var x = a.right - 14 * d - size
     val white = Color.WHITE
     val ink = glassInk(t)
     fun btn(id: String, y: Float, iconId: String = id, filled: Boolean = false) {
@@ -174,8 +174,20 @@ internal fun MapRenderer.drawCarButtons(c: Canvas, a: Rect, d: Float, t: Theme) 
     // the top ones move to a second column beside the first
     val nTop = if (NavEngine.active) 3 else 2
     val nBottom = 2 + (if (!view.following || view.userBearing != null || view.zoomedAway || (NavEngine.active && NavEngine.route.size > 1)) 1 else 0)
-    val fits = y + (nTop + nBottom) * (size + gap) <= a.bottom - 14 * d + gap
+    // not enough room (24 Nov, a car photo: the two columns were staggered): first closer and a
+    // little smaller (down to 40), and only then a tidy second column, row for row with the bottom ones
+    val n = nTop + nBottom
+    val avail = a.bottom - 14 * d - y
+    var fits = n * (size + gap) - gap <= avail
+    if (!fits) {
+        gap = 6 * d
+        size = ((avail - (n - 1) * gap) / n).coerceAtMost(48 * d)
+        fits = size >= 40 * d
+        if (!fits) { size = 44 * d; gap = 8 * d }
+    }
+    x = a.right - 14 * d - size
     val topX = if (fits) x else x - size - gap
+    if (!fits) y = a.bottom - 14 * d - nTop * (size + gap) + gap
     fun btnTop(id: String, yy: Float, iconId: String = id) {
         val r = RectF(topX, yy, topX + size, yy + size)
         glassButton(c, r, d, t, null)
